@@ -1,23 +1,10 @@
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
+"use client";
 
-// Lazy initialization to avoid build-time errors in Vercel
-// The client is created on first use, not at module load time
-let _supabase: SupabaseClient | null = null;
+import { createBrowserClient } from "@supabase/ssr";
 
-export const supabase = new Proxy({} as SupabaseClient, {
-  get(_target, prop) {
-    if (!_supabase) {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-      if (!supabaseUrl || !supabaseKey) {
-        throw new Error(
-          "Missing Supabase environment variables. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY."
-        );
-      }
-
-      _supabase = createClient(supabaseUrl, supabaseKey);
-    }
-    return (_supabase as unknown as Record<string, unknown>)[prop as string];
-  },
-});
+// Create a singleton Supabase client for the browser
+// Using @supabase/ssr ensures proper handling in Next.js client components
+export const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
