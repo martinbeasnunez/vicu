@@ -15,14 +15,33 @@ interface Message {
   content: string;
 }
 
-type ChatPhase = "conversation" | "analyzing" | "ready" | "creating" | "error";
+// Chat phase now includes "readback" for pilot-style confirmation before creating
+type ChatPhase = "conversation" | "analyzing" | "readback" | "ready" | "creating" | "error";
 
-// Fallback prompts (rarely used - AI generates specific ones now)
-const FALLBACK_PROMPTS = [
-  "Cuéntame más sobre esto. ¿Qué es lo que quieres lograr exactamente?",
-  "¿Para cuándo te gustaría ver resultados?",
-  "¿Cuál sería el resultado mínimo que te haría sentir que valió la pena?",
-];
+// Slot filling system - track which key info pieces we have gathered
+// Maximum 5 slots to avoid overwhelming the user
+interface SlotState {
+  objetivo_principal: "empty" | "filled" | "skipped";
+  plazo_tiempo: "empty" | "filled" | "skipped";
+  contexto_relevante: "empty" | "filled" | "skipped";
+  restricciones: "empty" | "filled" | "skipped";
+  resultado_minimo: "empty" | "filled" | "skipped";
+}
+
+const INITIAL_SLOTS: SlotState = {
+  objetivo_principal: "empty",
+  plazo_tiempo: "empty",
+  contexto_relevante: "empty",
+  restricciones: "empty",
+  resultado_minimo: "empty",
+};
+
+// Helper to count filled/skipped slots
+const countCompletedSlots = (slots: SlotState): number => {
+  return Object.values(slots).filter(v => v !== "empty").length;
+};
+
+const TOTAL_SLOTS = 5;
 
 const LOADING_MESSAGES = [
   { main: "Pensando en tu experimento...", sub: "Analizando el contexto" },
@@ -55,13 +74,15 @@ export default function VicuPage() {
   const [clarificationIndex, setClarificationIndex] = useState(0);
   const [turnCount, setTurnCount] = useState(0);
   const [askedQuestions, setAskedQuestions] = useState<Set<string>>(new Set()); // Track all asked questions to prevent loops
+  const [slots, setSlots] = useState<SlotState>(INITIAL_SLOTS); // Slot filling state
+  const [readbackConfirmed, setReadbackConfirmed] = useState(false); // Whether user confirmed readback
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, phase]);
 
   useEffect(() => {
-    if (phase === "conversation" || phase === "ready") {
+    if (phase === "conversation" || phase === "readback" || phase === "ready") {
       inputRef.current?.focus();
     }
   }, [phase]);
@@ -134,6 +155,89 @@ export default function VicuPage() {
     return vicuMessages.length > 0 ? vicuMessages[vicuMessages.length - 1].content : "";
   };
 
+  // Update slots based on AI analysis - determines which info we have gathered
+  const updateSlotsFromAnalysis = (result: VicuAnalysis, userMessage: string) => {
+    const lowerMsg = userMessage.toLowerCase();
+    const isNoSeResponse = lowerMsg.includes("no sé") || lowerMsg.includes("no se") ||
+                           lowerMsg.includes("no tengo idea") || lowerMsg.includes("no estoy seguro") ||
+                           lowerMsg.includes("ni idea") || lowerMsg.includes("no lo sé");
+
+    setSlots(prev => {
+      const newSlots = { ...prev };
+
+      // objetivo_principal - filled if we have summary and desired_action
+      if (result.summary && result.summary.length > 10 && result.desired_action) {
+        newSlots.objetivo_principal = "filled";
+      } else if (isNoSeResponse && prev.objetivo_principal === "empty") {
+        // Don't skip objetivo_principal on first no-sé, it's essential
+      }
+
+      // plazo_tiempo - filled if we have deadline or suggested_deadline
+      if (result.deadline_date || result.suggested_deadline) {
+        newSlots.plazo_tiempo = "filled";
+      } else if (isNoSeResponse && prev.plazo_tiempo === "empty" && prev.objetivo_principal !== "empty") {
+        newSlots.plazo_tiempo = "skipped";
+      }
+
+      // contexto_relevante - filled if we have context_bullets or target_audience
+      if ((result.context_bullets && result.context_bullets.length > 0) || result.target_audience) {
+        newSlots.contexto_relevante = "filled";
+      } else if (isNoSeResponse && prev.contexto_relevante === "empty" && prev.objetivo_principal !== "empty") {
+        newSlots.contexto_relevante = "skipped";
+      }
+
+      // restricciones - filled if we have main_pain or detected limitations
+      if (result.main_pain && result.main_pain.length > 5) {
+        newSlots.restricciones = "filled";
+      } else if (isNoSeResponse && prev.restricciones === "empty" && prev.objetivo_principal !== "empty") {
+        newSlots.restricciones = "skipped";
+      }
+
+      // resultado_minimo - filled if we have success_metric
+      if (result.success_metric && result.success_metric.length > 3) {
+        newSlots.resultado_minimo = "filled";
+      } else if (isNoSeResponse && prev.resultado_minimo === "empty" && prev.objetivo_principal !== "empty") {
+        newSlots.resultado_minimo = "skipped";
+      }
+
+      return newSlots;
+    });
+  };
+
+  // Generate readback message (pilot-style confirmation)
+  const generateReadbackMessage = (result: VicuAnalysis): string => {
+    const parts: string[] = [];
+
+    parts.push("📋 **Voy a repetir lo que entendí para asegurarme de que todo está bien:**\n");
+
+    if (result.summary) {
+      parts.push(`**Objetivo:** ${result.summary}`);
+    }
+
+    if (result.context_bullets && result.context_bullets.length > 0) {
+      parts.push(`\n**Contexto clave:**`);
+      result.context_bullets.forEach(bullet => {
+        parts.push(`• ${bullet}`);
+      });
+    }
+
+    if (result.main_pain) {
+      parts.push(`\n**Desafío/Restricción:** ${result.main_pain}`);
+    }
+
+    if (result.success_metric) {
+      parts.push(`\n**Resultado mínimo que valdría la pena:** ${result.success_metric}`);
+    }
+
+    if (result.suggested_deadline || result.deadline_date) {
+      parts.push(`\n**Horizonte de tiempo:** ${result.suggested_deadline || result.deadline_date}`);
+    }
+
+    parts.push("\n\n¿Está todo correcto? Si algo no cuadra, cuéntamelo para ajustarlo.");
+
+    return parts.join("\n");
+  };
+
   const handleSendMessage = async () => {
     if (!inputValue.trim() || isAnalyzing) return;
 
@@ -149,7 +253,26 @@ export default function VicuPage() {
       { id: Date.now().toString(), role: "user" as const, content: userMessage },
     ];
 
-    // After 5 turns, force confidence check and potentially end the conversation
+    // If in readback phase, user is providing corrections
+    if (phase === "readback") {
+      setIsAnalyzing(true);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Re-analyze with the correction
+      const result = await analyzeConversation(updatedMessages);
+
+      if (result) {
+        updateSlotsFromAnalysis(result, userMessage);
+        // Generate new readback with corrections
+        const readbackMsg = generateReadbackMessage(result);
+        setTimeout(() => {
+          addMessage("vicu", readbackMsg);
+        }, 300);
+      }
+      return;
+    }
+
+    // Maximum 5 questions before moving to readback
     const maxTurns = 5;
 
     if (newTurnCount >= 1) {
@@ -159,14 +282,22 @@ export default function VicuPage() {
       const result = await analyzeConversation(updatedMessages);
 
       if (result) {
-        // Force ready state after max turns if we have minimal context
-        if (newTurnCount >= maxTurns && result.confidence >= 0.4) {
-          setPhase("ready");
+        // Update slot state based on analysis
+        updateSlotsFromAnalysis(result, userMessage);
+
+        // Check if we should move to readback phase
+        const completedSlots = countCompletedSlots(slots);
+        const shouldDoReadback =
+          (result.confidence >= 0.5 && completedSlots >= 3) ||
+          (newTurnCount >= maxTurns && result.confidence >= 0.4) ||
+          (result.confidence >= 0.6);
+
+        if (shouldDoReadback) {
+          // Move to readback phase - show summary for confirmation
+          setPhase("readback");
+          const readbackMsg = generateReadbackMessage(result);
           setTimeout(() => {
-            addMessage(
-              "vicu",
-              "Creo que tengo suficiente contexto. Revisa el resumen y si se ve bien, ¡creemos tu proyecto!"
-            );
+            addMessage("vicu", readbackMsg);
           }, 300);
           return;
         }
@@ -193,13 +324,11 @@ export default function VicuPage() {
                   setAskedQuestions(prev => new Set([...prev, normalizeQuestion(altQuestion)]));
                 }, 300);
               } else if (result.confidence >= 0.5) {
-                // Enough context, proceed
-                setPhase("ready");
+                // Enough context, proceed to readback
+                setPhase("readback");
+                const readbackMsg = generateReadbackMessage(result);
                 setTimeout(() => {
-                  addMessage(
-                    "vicu",
-                    "Perfecto, creo que ya tengo lo necesario. Revisa el resumen abajo y si todo se ve bien, ¡créalo!"
-                  );
+                  addMessage("vicu", readbackMsg);
                 }, 300);
               }
             } else {
@@ -209,58 +338,26 @@ export default function VicuPage() {
               }, 300);
             }
           } else {
-            // All questions already asked - if we have decent confidence, proceed
-            if (result.confidence >= 0.5) {
-              setPhase("ready");
-              setTimeout(() => {
-                addMessage(
-                  "vicu",
-                  "Entiendo. Con esta información ya puedo ayudarte. Revisa el resumen abajo y si todo se ve bien, ¡créalo!"
-                );
-              }, 300);
-            } else {
-              // Low confidence and no new questions - ask a generic summary question
-              const summaryPrompt = "Para asegurarme de entender bien: ¿podrías resumirme en una frase qué quieres lograr y para cuándo?";
-              if (!isQuestionAlreadyAsked(summaryPrompt)) {
-                setTimeout(() => {
-                  addMessage("vicu", summaryPrompt);
-                  setAskedQuestions(prev => new Set([...prev, normalizeQuestion(summaryPrompt)]));
-                }, 300);
-              } else {
-                // Even the summary was asked - just proceed
-                setPhase("ready");
-                setTimeout(() => {
-                  addMessage(
-                    "vicu",
-                    "Con lo que me has contado, ya puedo armar tu proyecto. Revisa el resumen abajo."
-                  );
-                }, 300);
-              }
-            }
+            // All questions already asked - move to readback
+            setPhase("readback");
+            const readbackMsg = generateReadbackMessage(result);
+            setTimeout(() => {
+              addMessage("vicu", readbackMsg);
+            }, 300);
           }
         }
-        // AI has enough context - show brief and ready to create
-        else if (result.confidence >= 0.6) {
-          setPhase("ready");
+        // AI has enough context - move to readback
+        else if (result.confidence >= 0.5) {
+          setPhase("readback");
+          const readbackMsg = generateReadbackMessage(result);
           setTimeout(() => {
-            addMessage(
-              "vicu",
-              "Perfecto, ya tengo una idea clara de tu proyecto. Revisa el resumen abajo y si todo se ve bien, ¡créalo!"
-            );
+            addMessage("vicu", readbackMsg);
           }, 300);
         }
-        // Low confidence but no clarifying questions - summarize and proceed
+        // Low confidence but no clarifying questions
         else {
-          // Instead of using the same fallback prompts, try to proceed
-          if (newTurnCount >= 3) {
-            setPhase("ready");
-            setTimeout(() => {
-              addMessage(
-                "vicu",
-                "Basándome en lo que me contaste, preparé un resumen. Revísalo abajo y ajústalo si hace falta."
-              );
-            }, 300);
-          } else {
+          // Ask a contextual question to gather more info
+          if (newTurnCount < 3) {
             const contextualPrompt = "¿Hay algo más que deba saber sobre este proyecto? Por ejemplo, plazos, recursos disponibles, o qué sería un resultado mínimo exitoso.";
             if (!isQuestionAlreadyAsked(contextualPrompt)) {
               setTimeout(() => {
@@ -268,14 +365,20 @@ export default function VicuPage() {
                 setAskedQuestions(prev => new Set([...prev, normalizeQuestion(contextualPrompt)]));
               }, 300);
             } else {
-              setPhase("ready");
+              // Move to readback anyway
+              setPhase("readback");
+              const readbackMsg = generateReadbackMessage(result);
               setTimeout(() => {
-                addMessage(
-                  "vicu",
-                  "Con lo que me has contado, ya puedo armar tu proyecto. Revisa el resumen abajo."
-                );
+                addMessage("vicu", readbackMsg);
               }, 300);
             }
+          } else {
+            // After 3 turns, move to readback
+            setPhase("readback");
+            const readbackMsg = generateReadbackMessage(result);
+            setTimeout(() => {
+              addMessage("vicu", readbackMsg);
+            }, 300);
           }
         }
       } else {
@@ -287,17 +390,24 @@ export default function VicuPage() {
             setAskedQuestions(prev => new Set([...prev, normalizeQuestion(fallbackPrompt)]));
           }, 300);
         } else {
-          // Even fallback was used - just proceed with what we have
-          setPhase("ready");
+          // Even fallback was used - try to analyze again and proceed
+          setPhase("readback");
           setTimeout(() => {
             addMessage(
               "vicu",
-              "Vamos a trabajar con lo que tenemos. Revisa el resumen abajo y ajústalo si hace falta."
+              "📋 **Voy a repetir lo que entendí:**\n\nParece que quieres trabajar en un proyecto personal. ¿Podrías confirmarme qué es exactamente lo que buscas lograr?"
             );
           }, 300);
         }
       }
     }
+  };
+
+  // Handler for readback confirmation
+  const handleConfirmReadback = () => {
+    setReadbackConfirmed(true);
+    setPhase("ready");
+    addMessage("vicu", "¡Perfecto! Todo listo. Revisa el resumen final abajo y crea tu proyecto.");
   };
 
   const createExperiment = async () => {
@@ -432,19 +542,25 @@ export default function VicuPage() {
     }
   };
 
+  // Calculate progress based on slot state (more accurate than analysis fields)
   const getProgressSteps = () => {
-    if (!analysis) return 0;
-    let steps = 0;
-    if (analysis.target_audience) steps++;
-    if (analysis.main_pain || analysis.promise) steps++;
-    if (analysis.desired_action) steps++;
-    if (analysis.success_metric) steps++;
-    if (analysis.surface_type) steps++;
-    return steps;
+    return countCompletedSlots(slots);
   };
 
-  const totalSteps = 5;
   const currentProgress = getProgressSteps();
+
+  // Get progress label for the UI
+  const getProgressLabel = (): string => {
+    if (phase === "readback") return "Confirmando objetivo";
+    if (phase === "ready") return "Listo para crear";
+    if (phase === "creating") return "Creando proyecto...";
+    if (currentProgress === 0) return "Cuéntame tu idea";
+    if (currentProgress === 1) return "Entendiendo el objetivo";
+    if (currentProgress === 2) return "Recogiendo contexto";
+    if (currentProgress === 3) return "Definiendo alcance";
+    if (currentProgress === 4) return "Últimos detalles";
+    return "Casi listo";
+  };
 
   return (
     <div className="flex flex-col h-screen h-[100dvh] safe-area-top">
@@ -479,22 +595,35 @@ export default function VicuPage() {
             </Link>
           </div>
           <div className="card-premium px-3 sm:px-5 py-3 sm:py-4">
-            <p className="text-slate-400 text-xs sm:text-sm mb-3 sm:mb-4">
-              Cuéntame tu idea y diseño el plan por ti.
-            </p>
-            {/* Progress steps */}
+            {/* Progress header with label */}
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-slate-300 text-sm font-medium">
+                {getProgressLabel()}
+              </p>
+              <span className="text-xs text-slate-500 font-medium">
+                {phase === "readback" || phase === "ready" ? "✓" : `${currentProgress}/${TOTAL_SLOTS}`}
+              </span>
+            </div>
+            {/* Progress bar */}
             <div className="flex items-center gap-1.5 sm:gap-2">
-              {Array.from({ length: totalSteps }).map((_, i) => (
+              {Array.from({ length: TOTAL_SLOTS }).map((_, i) => (
                 <div
                   key={i}
-                  className={`h-1 sm:h-1.5 flex-1 rounded-full transition-all duration-500 ${
-                    i < currentProgress
-                      ? "bg-gradient-to-r from-indigo-500 to-indigo-400"
-                      : "bg-white/10"
+                  className={`h-1.5 sm:h-2 flex-1 rounded-full transition-all duration-500 ${
+                    phase === "readback" || phase === "ready"
+                      ? "bg-gradient-to-r from-emerald-500 to-emerald-400"
+                      : i < currentProgress
+                        ? "bg-gradient-to-r from-indigo-500 to-indigo-400"
+                        : "bg-white/10"
                   }`}
                 />
               ))}
             </div>
+            {phase === "conversation" && currentProgress === 0 && (
+              <p className="text-slate-500 text-xs mt-2">
+                Máximo 5 preguntas para entender bien tu objetivo
+              </p>
+            )}
           </div>
         </div>
       </header>
@@ -546,6 +675,37 @@ export default function VicuPage() {
                       <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* Readback state - Show confirmation buttons */}
+              {phase === "readback" && !isAnalyzing && analysis && (
+                <div className="pt-4 animate-fade-in-up">
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <button
+                      onClick={handleConfirmReadback}
+                      className="flex-1 px-6 py-3.5 rounded-xl bg-emerald-500 text-white font-medium hover:bg-emerald-400 transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Confirmar y crear objetivo
+                    </button>
+                    <button
+                      onClick={() => {
+                        inputRef.current?.focus();
+                      }}
+                      className="flex-1 px-6 py-3.5 rounded-xl border border-white/20 text-slate-300 font-medium hover:bg-white/5 transition-all duration-200 flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                      Editar antes de crear
+                    </button>
+                  </div>
+                  <p className="text-center text-slate-500 text-xs mt-3">
+                    Si algo no está bien, escribe tu corrección abajo
+                  </p>
                 </div>
               )}
 
@@ -671,7 +831,7 @@ export default function VicuPage() {
       </main>
 
       {/* Input area */}
-      {(phase === "conversation" || phase === "ready") && !isAnalyzing && (
+      {(phase === "conversation" || phase === "readback" || phase === "ready") && !isAnalyzing && (
         <footer className="flex-shrink-0 pb-4 sm:pb-6 safe-area-bottom">
           <div className="max-w-3xl mx-auto px-3 sm:px-4">
             <div className="card-glass rounded-full px-2 py-1.5 sm:py-2 flex items-center gap-2">
@@ -681,7 +841,11 @@ export default function VicuPage() {
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={
-                  phase === "ready" ? "¿Algo más?" : "Escribe tu idea..."
+                  phase === "ready"
+                    ? "¿Algo más?"
+                    : phase === "readback"
+                      ? "Escribe tu corrección aquí..."
+                      : "Escribe tu idea..."
                 }
                 rows={1}
                 className="flex-1 px-3 sm:px-4 py-2 bg-transparent text-slate-50 resize-none text-sm focus:outline-none placeholder-slate-500"
@@ -689,7 +853,7 @@ export default function VicuPage() {
               />
               <button
                 onClick={phase === "ready" ? createExperiment : handleSendMessage}
-                disabled={phase === "conversation" && !inputValue.trim()}
+                disabled={(phase === "conversation" || phase === "readback") && !inputValue.trim()}
                 className="p-2.5 sm:p-2.5 rounded-full bg-indigo-500 text-white hover:bg-indigo-400 transition-all duration-200 disabled:opacity-30 disabled:hover:bg-indigo-500 touch-target"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

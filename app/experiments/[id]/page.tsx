@@ -245,6 +245,9 @@ export default function ExperimentPage() {
   const [objectiveInput, setObjectiveInput] = useState("");
   const [isSavingObjective, setIsSavingObjective] = useState(false);
 
+  // Objetivo collapsed state - collapsed by default
+  const [isObjectiveExpanded, setIsObjectiveExpanded] = useState(false);
+
   // Plan colapsable state
   const [isPlanExpanded, setIsPlanExpanded] = useState(false);
 
@@ -1397,17 +1400,32 @@ export default function ExperimentPage() {
               </div>
             </div>
 
-            {/* Objetivo del proyecto - Editable */}
+            {/* Objetivo del proyecto - Collapsible by default */}
             <div className="card-premium px-5 py-4">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider">Objetivo</h3>
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => !isEditingObjective && setIsObjectiveExpanded(!isObjectiveExpanded)}
+                  className="flex items-center gap-2 text-left flex-1 min-w-0"
+                >
+                  <svg
+                    className={`w-4 h-4 text-slate-500 transition-transform duration-200 flex-shrink-0 ${isObjectiveExpanded ? "rotate-90" : ""}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                  <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider">Objetivo</h3>
+                </button>
                 {!isEditingObjective && (
                   <button
                     onClick={() => {
                       setObjectiveInput(experiment.description || "");
                       setIsEditingObjective(true);
+                      setIsObjectiveExpanded(true);
                     }}
-                    className="text-slate-500 hover:text-indigo-400 transition-colors"
+                    className="text-slate-500 hover:text-indigo-400 transition-colors flex-shrink-0"
+                    title="Editar objetivo"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -1415,39 +1433,57 @@ export default function ExperimentPage() {
                   </button>
                 )}
               </div>
-              {isEditingObjective ? (
-                <div className="space-y-3">
-                  <textarea
-                    value={objectiveInput}
-                    onChange={(e) => setObjectiveInput(e.target.value)}
-                    placeholder="¿Por qué es importante este proyecto para ti?"
-                    className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-slate-50 focus:outline-none focus:border-indigo-500/50 resize-none"
-                    rows={3}
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setIsEditingObjective(false)}
-                      className="px-4 py-2 rounded-lg border border-white/10 text-slate-400 text-sm hover:bg-white/5 transition-all"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      onClick={handleSaveObjective}
-                      disabled={isSavingObjective}
-                      className="px-4 py-2 rounded-lg bg-indigo-500 text-white text-sm font-medium hover:bg-indigo-400 transition-all disabled:opacity-50"
-                    >
-                      {isSavingObjective ? "Guardando..." : "Guardar"}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-slate-300 leading-relaxed">
-                  {experiment.description || (
-                    <span className="text-slate-500 italic">
-                      Agrega en una frase por qué este proyecto es importante para ti.
-                    </span>
-                  )}
+
+              {/* Collapsed preview - show first ~80 chars */}
+              {!isObjectiveExpanded && !isEditingObjective && experiment.description && (
+                <p className="text-slate-400 text-sm mt-2 line-clamp-1">
+                  {experiment.description.length > 80
+                    ? experiment.description.slice(0, 80) + "..."
+                    : experiment.description}
                 </p>
+              )}
+
+              {/* Expanded view */}
+              {(isObjectiveExpanded || isEditingObjective) && (
+                <div className="mt-3">
+                  {isEditingObjective ? (
+                    <div className="space-y-3">
+                      <textarea
+                        value={objectiveInput}
+                        onChange={(e) => setObjectiveInput(e.target.value)}
+                        placeholder="¿Por qué es importante este proyecto para ti?"
+                        className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-slate-50 focus:outline-none focus:border-indigo-500/50 resize-none"
+                        rows={3}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            setIsEditingObjective(false);
+                            setIsObjectiveExpanded(false);
+                          }}
+                          className="px-4 py-2 rounded-lg border border-white/10 text-slate-400 text-sm hover:bg-white/5 transition-all"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          onClick={handleSaveObjective}
+                          disabled={isSavingObjective}
+                          className="px-4 py-2 rounded-lg bg-indigo-500 text-white text-sm font-medium hover:bg-indigo-400 transition-all disabled:opacity-50"
+                        >
+                          {isSavingObjective ? "Guardando..." : "Guardar"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-slate-300 leading-relaxed">
+                      {experiment.description || (
+                        <span className="text-slate-500 italic">
+                          Agrega en una frase por qué este proyecto es importante para ti.
+                        </span>
+                      )}
+                    </p>
+                  )}
+                </div>
               )}
             </div>
 
@@ -1471,6 +1507,62 @@ export default function ExperimentPage() {
                 )}
               </div>
             )}
+
+            {/* Primeros pasos sugeridos - Shows first 3 pending steps */}
+            {(() => {
+              const pendingCheckins = checkins.filter(c => c.status === "pending").slice(0, 3);
+              if (pendingCheckins.length === 0) return null;
+              return (
+                <div className="card-premium px-5 py-4 border-indigo-500/20">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center">
+                      <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-sm font-medium text-slate-300">Primeros pasos sugeridos</h3>
+                  </div>
+                  <div className="space-y-3">
+                    {pendingCheckins.map((step) => (
+                      <div
+                        key={step.id}
+                        className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/5 hover:border-indigo-500/30 transition-all cursor-pointer"
+                        onClick={() => openStepDetail(step)}
+                      >
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleMarkStepDone(step.id);
+                          }}
+                          disabled={isMarkingProgress}
+                          className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-500/20 hover:bg-indigo-500/30 flex items-center justify-center border-2 border-transparent hover:border-indigo-500/50 transition-all disabled:opacity-50"
+                          title="Marcar como completado"
+                        >
+                          <svg className="w-3 h-3 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-200">{step.step_title || "Paso pendiente"}</p>
+                          {step.step_description && (
+                            <p className="text-xs text-slate-500 mt-1 line-clamp-2">{step.step_description}</p>
+                          )}
+                          {step.effort && (
+                            <span className={`inline-block mt-2 px-2 py-0.5 rounded-full text-xs ${
+                              step.effort === "muy_pequeno" ? "bg-emerald-500/20 text-emerald-400" :
+                              step.effort === "pequeno" ? "bg-amber-500/20 text-amber-400" :
+                              "bg-orange-500/20 text-orange-400"
+                            }`}>
+                              {step.effort === "muy_pequeno" ? "~5 min" : step.effort === "pequeno" ? "~20 min" : "~1 hora"}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Vicu Recommendation Card - Now placed after Progreso del plan */}
             {totalSteps > 0 && completedSteps === totalSteps ? (

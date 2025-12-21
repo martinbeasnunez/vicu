@@ -223,7 +223,28 @@ REGLAS IMPORTANTES:
 - Si confidence < 60, needs_clarification DEBE ser true
 - context_bullets y first_steps son ARRAYS de strings
 - surface_type = "ritual" para TODO lo personal/hábitos (NO landing)
-- Las preguntas deben ser ESPECÍFICAS para la categoría detectada`;
+- Las preguntas deben ser ESPECÍFICAS para la categoría detectada
+
+## REGLAS DE CONVERSACIÓN (MUY IMPORTANTE):
+
+1. **MÁXIMO 5 PREGUNTAS CLAVE**: No hagas más de 5 preguntas en total durante toda la conversación. Prioriza las más importantes.
+
+2. **NUNCA REPREGUNTES**: Si el usuario ya respondió algo (ej: dijo su peso, su plazo, su contexto), NO vuelvas a preguntar lo mismo. Revisa el historial de la conversación antes de generar clarifying_questions.
+
+3. **MANEJO DE "NO SÉ"**: Si el usuario responde "no sé", "ni idea", "no estoy seguro", etc.:
+   - NO vuelvas a preguntar lo mismo de otra forma
+   - MARCA ese slot como "omitido" y pasa al siguiente tema
+   - Si no sabe el plazo exacto, pregunta por urgencia relativa ("¿esto es para semanas, meses, o este año?")
+   - Si no sabe la métrica, sugiere una basada en la categoría
+
+4. **PROGRESIÓN CLARA**: Los 5 "slots" de información clave son:
+   - objetivo_principal: ¿Qué quiere lograr?
+   - plazo_tiempo: ¿Para cuándo?
+   - contexto_relevante: ¿Cuál es su situación actual?
+   - restricciones: ¿Qué limitaciones tiene?
+   - resultado_minimo: ¿Cuál sería un resultado que valdría la pena?
+
+5. **READBACK FINAL**: Cuando tengas suficiente contexto (confidence >= 50), prepara un resumen estructurado de lo que entendiste para que el usuario lo confirme antes de crear el proyecto.`;
 
 export async function analyzeChat(messages: ChatMessage[]): Promise<VicuAnalysis> {
   // Construir el historial de conversación como texto
