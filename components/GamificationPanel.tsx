@@ -29,27 +29,28 @@ export default function GamificationPanel({ stats, loading, compact = false }: G
 
   if (compact) {
     return (
-      <div className="flex items-center gap-4 px-4 py-3 rounded-xl bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/20">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-4 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/20">
         {/* Level */}
         <div className="flex items-center gap-2">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
-            <span className="text-white font-bold text-sm">{stats.level}</span>
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+            <span className="text-white font-bold text-xs sm:text-sm">{stats.level}</span>
           </div>
-          <div>
+          <div className="hidden sm:block">
             <p className="text-xs text-slate-400">{levelName}</p>
             <p className="text-sm font-medium text-slate-200">{stats.xp} XP</p>
           </div>
+          <span className="sm:hidden text-xs font-medium text-slate-200">{stats.xp} XP</span>
         </div>
 
         {/* Streak */}
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-orange-500/10 border border-orange-500/20">
-          <span className="text-lg">🔥</span>
-          <span className="font-semibold text-orange-400">{stats.streak_days}</span>
+        <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full bg-orange-500/10 border border-orange-500/20">
+          <span className="text-base sm:text-lg">🔥</span>
+          <span className="font-semibold text-sm sm:text-base text-orange-400">{stats.streak_days}</span>
         </div>
 
         {/* Daily goal */}
-        <div className="flex items-center gap-2">
-          <div className="w-20 h-2 bg-white/10 rounded-full overflow-hidden">
+        <div className="flex items-center gap-2 ml-auto sm:ml-0">
+          <div className="w-16 sm:w-20 h-1.5 sm:h-2 bg-white/10 rounded-full overflow-hidden">
             <div
               className={`h-full rounded-full transition-all ${dailyGoalMet ? "bg-emerald-500" : "bg-indigo-500"}`}
               style={{ width: `${dailyProgress}%` }}
@@ -239,17 +240,17 @@ interface BadgeUnlockProps {
 export function BadgeUnlockAnimation({ badge, onComplete }: BadgeUnlockProps) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
       onClick={onComplete}
     >
-      <div className="p-8 rounded-3xl bg-slate-900 border border-amber-500/30 shadow-2xl shadow-amber-500/20 text-center animate-scale-in">
-        <div className="text-6xl mb-4 animate-bounce">{badge.icon}</div>
+      <div className="w-full max-w-sm p-6 sm:p-8 rounded-3xl bg-slate-900 border border-amber-500/30 shadow-2xl shadow-amber-500/20 text-center animate-scale-in">
+        <div className="text-5xl sm:text-6xl mb-4 animate-bounce">{badge.icon}</div>
         <p className="text-xs text-amber-400 uppercase tracking-wider mb-1">Nuevo logro desbloqueado</p>
-        <h3 className="text-2xl font-bold text-slate-50 mb-2">{badge.name}</h3>
-        <p className="text-slate-400">{badge.description}</p>
+        <h3 className="text-xl sm:text-2xl font-bold text-slate-50 mb-2">{badge.name}</h3>
+        <p className="text-sm sm:text-base text-slate-400">{badge.description}</p>
         <button
           onClick={onComplete}
-          className="mt-6 px-6 py-2 rounded-full bg-amber-500 text-slate-900 font-medium hover:bg-amber-400 transition-colors"
+          className="mt-6 px-6 py-3 rounded-full bg-amber-500 text-slate-900 font-medium hover:bg-amber-400 transition-colors touch-target"
         >
           ¡Genial!
         </button>
@@ -269,19 +270,19 @@ export function LevelUpAnimation({ newLevel, onComplete }: LevelUpProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
       onClick={onComplete}
     >
-      <div className="p-8 rounded-3xl bg-gradient-to-br from-indigo-900 to-purple-900 border border-indigo-500/30 shadow-2xl shadow-indigo-500/20 text-center animate-scale-in">
-        <div className="w-24 h-24 mx-auto mb-4 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/50 animate-pulse">
-          <span className="text-4xl font-bold text-white">{newLevel}</span>
+      <div className="w-full max-w-sm p-6 sm:p-8 rounded-3xl bg-gradient-to-br from-indigo-900 to-purple-900 border border-indigo-500/30 shadow-2xl shadow-indigo-500/20 text-center animate-scale-in">
+        <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-4 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/50 animate-pulse">
+          <span className="text-3xl sm:text-4xl font-bold text-white">{newLevel}</span>
         </div>
         <p className="text-xs text-indigo-300 uppercase tracking-wider mb-1">¡Subiste de nivel!</p>
-        <h3 className="text-3xl font-bold text-white mb-2">Nivel {newLevel}</h3>
-        <p className="text-indigo-200 text-lg">{levelName}</p>
+        <h3 className="text-2xl sm:text-3xl font-bold text-white mb-2">Nivel {newLevel}</h3>
+        <p className="text-indigo-200 text-base sm:text-lg">{levelName}</p>
         <button
           onClick={onComplete}
-          className="mt-6 px-8 py-3 rounded-full bg-white text-indigo-900 font-bold hover:bg-indigo-100 transition-colors"
+          className="mt-6 px-8 py-3 rounded-full bg-white text-indigo-900 font-bold hover:bg-indigo-100 transition-colors touch-target"
         >
           ¡Vamos!
         </button>

@@ -447,47 +447,47 @@ export default function VicuPage() {
   const currentProgress = getProgressSteps();
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex flex-col h-screen h-[100dvh] safe-area-top">
       {/* Header */}
       <header className="flex-shrink-0">
-        <div className="max-w-3xl mx-auto px-4 pt-6 pb-4">
+        <div className="max-w-3xl mx-auto px-3 sm:px-4 pt-4 sm:pt-6 pb-3 sm:pb-4">
           {/* Logo + Title + Nav in same row */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3 min-w-0">
-              <Link href="/experiments" className="flex-shrink-0">
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <Link href="/hoy" className="flex-shrink-0">
                 <Image
                   src="/vicu-logo.png"
                   alt="Vicu"
                   width={32}
                   height={32}
-                  className="h-8 w-8"
+                  className="h-7 w-7 sm:h-8 sm:w-8"
                 />
               </Link>
-              <h1 className="text-lg md:text-xl font-semibold text-slate-50 tracking-tight truncate">
-                Nuevo experimento
+              <h1 className="text-base sm:text-lg md:text-xl font-semibold text-slate-50 tracking-tight truncate">
+                Nuevo objetivo
               </h1>
             </div>
             <Link
-              href="/experiments"
-              className="flex-shrink-0 text-sm text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1"
+              href="/hoy"
+              className="flex-shrink-0 text-xs sm:text-sm text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1 touch-target"
             >
-              <span className="hidden sm:inline">Mis experimentos</span>
-              <span className="sm:hidden">Ver</span>
+              <span className="hidden sm:inline">Mis objetivos</span>
+              <span className="sm:hidden">Hoy</span>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </Link>
           </div>
-          <div className="card-premium px-5 py-4">
-            <p className="text-slate-400 text-sm mb-4">
+          <div className="card-premium px-3 sm:px-5 py-3 sm:py-4">
+            <p className="text-slate-400 text-xs sm:text-sm mb-3 sm:mb-4">
               Cuéntame tu idea y diseño el plan por ti.
             </p>
             {/* Progress steps */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
               {Array.from({ length: totalSteps }).map((_, i) => (
                 <div
                   key={i}
-                  className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${
+                  className={`h-1 sm:h-1.5 flex-1 rounded-full transition-all duration-500 ${
                     i < currentProgress
                       ? "bg-gradient-to-r from-indigo-500 to-indigo-400"
                       : "bg-white/10"
@@ -500,11 +500,11 @@ export default function VicuPage() {
       </header>
 
       {/* Chat area */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto px-4 py-6">
+      <main className="flex-1 overflow-y-auto scroll-smooth">
+        <div className="max-w-3xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
           {/* Chat card */}
-          <div className="card-premium rounded-3xl px-4 py-5 md:px-6 md:py-6">
-            <div className="flex flex-col gap-4">
+          <div className="card-premium rounded-2xl sm:rounded-3xl px-3 sm:px-4 md:px-6 py-4 sm:py-5 md:py-6">
+            <div className="flex flex-col gap-3 sm:gap-4">
               {messages.map((message) => (
                 <div
                   key={message.id}
@@ -513,15 +513,15 @@ export default function VicuPage() {
                   }`}
                 >
                   {message.role === "vicu" && (
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center mr-3 shadow-lg shadow-indigo-500/25">
-                      <span className="text-white text-sm font-bold">v</span>
+                    <div className="flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center mr-2 sm:mr-3 shadow-lg shadow-indigo-500/25">
+                      <span className="text-white text-xs sm:text-sm font-bold">v</span>
                     </div>
                   )}
                   <div
-                    className={`max-w-[80%] ${
+                    className={`max-w-[85%] sm:max-w-[80%] ${
                       message.role === "user"
-                        ? "bg-indigo-500 text-white rounded-2xl rounded-br-md px-4 py-3"
-                        : "bg-slate-900/70 border border-white/10 rounded-2xl rounded-bl-md px-4 py-3"
+                        ? "bg-indigo-500 text-white rounded-2xl rounded-br-md px-3 sm:px-4 py-2.5 sm:py-3"
+                        : "bg-slate-900/70 border border-white/10 rounded-2xl rounded-bl-md px-3 sm:px-4 py-2.5 sm:py-3"
                     }`}
                   >
                     <p className={`whitespace-pre-wrap text-sm leading-relaxed ${
@@ -672,24 +672,25 @@ export default function VicuPage() {
 
       {/* Input area */}
       {(phase === "conversation" || phase === "ready") && !isAnalyzing && (
-        <footer className="flex-shrink-0 pb-6">
-          <div className="max-w-3xl mx-auto px-4">
-            <div className="card-glass rounded-full px-2 py-2 flex items-center gap-2">
+        <footer className="flex-shrink-0 pb-4 sm:pb-6 safe-area-bottom">
+          <div className="max-w-3xl mx-auto px-3 sm:px-4">
+            <div className="card-glass rounded-full px-2 py-1.5 sm:py-2 flex items-center gap-2">
               <textarea
                 ref={inputRef}
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={
-                  phase === "ready" ? "¿Algo más que agregar?" : "Escribe aquí tu idea..."
+                  phase === "ready" ? "¿Algo más?" : "Escribe tu idea..."
                 }
                 rows={1}
-                className="flex-1 px-4 py-2 bg-transparent text-slate-50 resize-none text-sm focus:outline-none placeholder-slate-500"
+                className="flex-1 px-3 sm:px-4 py-2 bg-transparent text-slate-50 resize-none text-sm focus:outline-none placeholder-slate-500"
+                style={{ fontSize: "16px" }} // Prevent iOS zoom
               />
               <button
                 onClick={phase === "ready" ? createExperiment : handleSendMessage}
                 disabled={phase === "conversation" && !inputValue.trim()}
-                className="p-2.5 rounded-full bg-indigo-500 text-white hover:bg-indigo-400 transition-all duration-200 disabled:opacity-30 disabled:hover:bg-indigo-500"
+                className="p-2.5 sm:p-2.5 rounded-full bg-indigo-500 text-white hover:bg-indigo-400 transition-all duration-200 disabled:opacity-30 disabled:hover:bg-indigo-500 touch-target"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />

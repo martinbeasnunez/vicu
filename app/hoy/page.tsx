@@ -707,15 +707,15 @@ export default function HoyPage() {
         </div>
       )}
 
-      <main className="max-w-3xl mx-auto px-4 py-8 md:py-10 flex flex-col gap-6">
+      <main className="max-w-3xl mx-auto px-3 sm:px-4 py-6 sm:py-8 md:py-10 flex flex-col gap-4 sm:gap-6 safe-area-top safe-area-bottom">
         {/* Header with navigation */}
-        <header className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Image src="/vicu-logo.png" alt="Vicu" width={32} height={32} className="h-8 w-8" />
-            <div>
-              <h1 className="text-2xl md:text-3xl font-semibold text-slate-50 tracking-tight">Hoy con Vicu</h1>
-              <p className="text-sm text-slate-400 mt-1">
-                Revisa qué proyectos quieres mover hoy. Vicu se encarga de que no los sueltes.
+        <header className="flex items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <Image src="/vicu-logo.png" alt="Vicu" width={32} height={32} className="h-7 w-7 sm:h-8 sm:w-8 flex-shrink-0" />
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold text-slate-50 tracking-tight">Hoy con Vicu</h1>
+              <p className="text-xs sm:text-sm text-slate-400 mt-0.5 sm:mt-1 line-clamp-2 sm:line-clamp-none">
+                Revisa qué proyectos quieres mover hoy.
               </p>
             </div>
           </div>
@@ -726,46 +726,46 @@ export default function HoyPage() {
 
         {/* Push Notification Reminder Toggle */}
         {pushSupported ? (
-          <div className="card-glass px-4 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+          <div className="card-glass px-3 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex-shrink-0 flex items-center justify-center ${
                 pushSubscribed ? "bg-emerald-500/20" : pushPermission === "denied" ? "bg-red-500/20" : "bg-indigo-500/20"
               }`}>
-                <svg className={`w-4 h-4 ${
+                <svg className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${
                   pushSubscribed ? "text-emerald-400" : pushPermission === "denied" ? "text-red-400" : "text-indigo-400"
                 }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                 </svg>
               </div>
-              <div>
-                <p className="text-sm font-medium text-slate-200">Recordatorios de Vicu</p>
-                <p className="text-xs text-slate-500">
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm font-medium text-slate-200">Recordatorios</p>
+                <p className="text-[10px] sm:text-xs text-slate-500 truncate sm:whitespace-normal">
                   {pushSubscribed
-                    ? "Vicu te avisará cada día para que no sueltes tus objetivos"
+                    ? "Activos"
                     : pushPermission === "denied"
-                    ? "Las notificaciones están bloqueadas. Actívalas desde la configuración de tu navegador."
-                    : "Recibe recordatorios para no soltar tus objetivos"}
+                    ? "Bloqueados"
+                    : "Recibe recordatorios"}
                 </p>
               </div>
             </div>
             {pushSubscribed ? (
-              <span className="px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">
+              <span className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 whitespace-nowrap flex-shrink-0">
                 Activado
               </span>
             ) : pushPermission === "denied" ? (
-              <span className="px-3 py-1.5 rounded-full text-xs font-medium bg-red-500/20 text-red-400 border border-red-500/30 whitespace-nowrap">
+              <span className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-medium bg-red-500/20 text-red-400 border border-red-500/30 whitespace-nowrap flex-shrink-0">
                 Bloqueado
               </span>
             ) : (
               <button
                 onClick={handleActivatePush}
                 disabled={isSubscribing}
-                className="px-3 py-1.5 rounded-full text-xs font-medium bg-indigo-500 text-white hover:bg-indigo-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                className="px-3 py-2 sm:py-1.5 rounded-full text-xs font-medium bg-indigo-500 text-white hover:bg-indigo-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0 touch-target"
               >
                 {isSubscribing ? (
                   <span className="flex items-center gap-1.5">
                     <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Activando...
+                    <span className="hidden sm:inline">Activando...</span>
                   </span>
                 ) : (
                   "Activar"
@@ -775,29 +775,29 @@ export default function HoyPage() {
           </div>
         ) : (
           /* Browser doesn't support push notifications - show minimal message */
-          <div className="card-glass px-4 py-3 flex items-center gap-3 opacity-60">
-            <div className="w-8 h-8 rounded-full bg-slate-500/20 flex items-center justify-center">
-              <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="card-glass px-3 sm:px-4 py-2.5 sm:py-3 flex items-center gap-2 sm:gap-3 opacity-60">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-slate-500/20 flex items-center justify-center flex-shrink-0">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
             </div>
             <div>
-              <p className="text-sm font-medium text-slate-400">Recordatorios de Vicu</p>
-              <p className="text-xs text-slate-600">No disponible en este navegador</p>
+              <p className="text-xs sm:text-sm font-medium text-slate-400">Recordatorios</p>
+              <p className="text-[10px] sm:text-xs text-slate-600">No disponible</p>
             </div>
           </div>
         )}
 
         {/* Navigation - Vicu now uses /hoy as main home, projects list hidden from nav */}
-        <nav className="flex items-center justify-end border-b border-slate-800 pb-3">
+        <nav className="flex items-center justify-end border-b border-slate-800 pb-2 sm:pb-3">
           <Link
             href="/vicu"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-500 text-white text-sm font-medium hover:bg-indigo-400 transition-all"
+            className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2 rounded-full bg-indigo-500 text-white text-xs sm:text-sm font-medium hover:bg-indigo-400 transition-all touch-target"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            <span className="hidden sm:inline">Nuevo objetivo</span>
+            <span>Nuevo</span>
           </Link>
         </nav>
 
