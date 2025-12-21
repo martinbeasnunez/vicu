@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-// Use service role key for server-side operations if available
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+// Lazy initialization to avoid build-time errors in Vercel
+let _supabase: SupabaseClient | null = null;
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    _supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+  }
+  return _supabase;
+}
 
 export interface WebPushSubscription {
   endpoint: string;
@@ -27,7 +33,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Upsert subscription (insert or update if endpoint exists)
-    const { data, error } = await supabase
+    const { data, error } = await getSupabase()
       .from("web_push_subscriptions")
       .upsert(
         {
@@ -77,7 +83,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const { error } = await supabase
+    const { error } = await getSupabase()
       .from("web_push_subscriptions")
       .delete()
       .eq("endpoint", endpoint);

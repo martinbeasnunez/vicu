@@ -1,8 +1,18 @@
 import OpenAI from "openai";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Lazy initialization to avoid build-time errors in Vercel
+let _openai: OpenAI | null = null;
+
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      throw new Error("Missing OPENAI_API_KEY environment variable.");
+    }
+    _openai = new OpenAI({ apiKey });
+  }
+  return _openai;
+}
 
 export type ExperimentContext = "personal" | "business" | "team" | "mixed";
 
@@ -225,7 +235,7 @@ export async function analyzeChat(messages: ChatMessage[]): Promise<VicuAnalysis
   const todayDate = new Date().toISOString().split("T")[0];
   const promptWithDate = ANALYSIS_SYSTEM_PROMPT.replace("{{TODAY_DATE}}", todayDate);
 
-  const completion = await openai.chat.completions.create({
+  const completion = await getOpenAI().chat.completions.create({
     model: "gpt-4.1-mini",
     messages: [
       {

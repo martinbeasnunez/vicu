@@ -1,15 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Lazy initialization to avoid build-time errors in Vercel
+let _openai: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return _openai;
+}
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+let _supabase: SupabaseClient | null = null;
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    _supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+  }
+  return _supabase;
+}
 
 export type CurrentState = "not_started" | "stuck" | "going_well";
 export type EffortLevel = "muy_pequeno" | "pequeno" | "medio";
@@ -54,7 +65,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch experiment data
-    const { data: experiment, error: expError } = await supabase
+    const { data: experiment, error: expError } = await getSupabase()
       .from("experiments")
       .select("*")
       .eq("id", experiment_id)
@@ -68,7 +79,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch existing actions for context
-    const { data: actions } = await supabase
+    const { data: actions } = await getSupabase()
       .from("actions")
       .select("title, content, action_type, is_done")
       .eq("experiment_id", experiment_id)
@@ -174,7 +185,7 @@ Propón algo con un ENFOQUE DIFERENTE. No repitas esta misma acción ni idea sim
 
 ¿Cuál es el siguiente micro-paso que debería hacer HOY?`;
 
-    const completion = await openai.chat.completions.create({
+    const completion = await getOpenAI().chat.completions.create({
       model: "gpt-4.1-mini",
       messages: [
         { role: "system", content: systemPrompt },

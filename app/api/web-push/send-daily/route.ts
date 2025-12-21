@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import webpush from "web-push";
 
-// Use service role key for server-side operations
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+// Lazy initialization to avoid build-time errors in Vercel
+let _supabase: SupabaseClient | null = null;
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    _supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+  }
+  return _supabase;
+}
 
 // VAPID keys for web push
 // Generate your own keys with: npx web-push generate-vapid-keys
@@ -38,7 +44,7 @@ export async function POST() {
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 
     // Get all push subscriptions
-    const { data: subscriptions, error: subError } = await supabase
+    const { data: subscriptions, error: subError } = await getSupabase()
       .from("web_push_subscriptions")
       .select("*");
 
@@ -63,7 +69,7 @@ export async function POST() {
     today.setHours(0, 0, 0, 0);
     const todayISOString = today.toISOString();
 
-    const { data: experiments, error: expError } = await supabase
+    const { data: experiments, error: expError } = await getSupabase()
       .from("experiments")
       .select("id, title, status, last_checkin_at")
       .is("deleted_at", null)
@@ -115,7 +121,7 @@ export async function POST() {
           // If subscription is expired or invalid, delete it
           if (webPushError.statusCode === 410 || webPushError.statusCode === 404) {
             console.log("Removing expired subscription:", sub.endpoint);
-            await supabase
+            await getSupabase()
               .from("web_push_subscriptions")
               .delete()
               .eq("id", sub.id);
@@ -148,7 +154,7 @@ export async function POST() {
 export async function GET() {
   const hasVapidKeys = !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
 
-  const { count, error } = await supabase
+  const { count, error } = await getSupabase()
     .from("web_push_subscriptions")
     .select("*", { count: "exact", head: true });
 

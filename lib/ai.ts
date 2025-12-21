@@ -2,9 +2,19 @@ import OpenAI from "openai";
 import { LandingCopy } from "./experiment-store";
 import { ExperimentType, SurfaceType } from "./experiment-helpers";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Lazy initialization to avoid build-time errors in Vercel
+let _openai: OpenAI | null = null;
+
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      throw new Error("Missing OPENAI_API_KEY environment variable.");
+    }
+    _openai = new OpenAI({ apiKey });
+  }
+  return _openai;
+}
 
 export interface AICopyResponse {
   title: string;
@@ -45,7 +55,7 @@ export async function generateExternalCopyFromAI(
     userPrompt += `\nAcción deseada: ${brief.main_cta}`;
   }
 
-  const completion = await openai.chat.completions.create({
+  const completion = await getOpenAI().chat.completions.create({
     model: "gpt-4.1-mini",
     messages: [
       {
@@ -328,7 +338,7 @@ Descripción: ${brief.description}`;
     systemPrompt = ATTACK_PLAN_PROMPTS[experimentType] + "\n\n" + SURFACE_PROMPT_MODIFIERS[surfaceType];
   }
 
-  const completion = await openai.chat.completions.create({
+  const completion = await getOpenAI().chat.completions.create({
     model: "gpt-4.1-mini",
     messages: [
       {
@@ -380,7 +390,7 @@ ${existingActions.map((a, i) => `${i + 1}. ${a.title}`).join("\n")}`;
     userPrompt += `\nPromesa: ${brief.main_promise}`;
   }
 
-  const completion = await openai.chat.completions.create({
+  const completion = await getOpenAI().chat.completions.create({
     model: "gpt-4.1-mini",
     messages: [
       {

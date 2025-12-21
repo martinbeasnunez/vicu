@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import webpush from "web-push";
 
 // Test endpoint for sending a push notification (development only)
@@ -16,10 +16,17 @@ import webpush from "web-push";
 // 2. Run: curl -X POST http://localhost:3000/api/web-push/test
 // 3. You should receive a test notification
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+// Lazy initialization to avoid build-time errors in Vercel
+let _supabase: SupabaseClient | null = null;
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    _supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+  }
+  return _supabase;
+}
 
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
@@ -54,7 +61,7 @@ export async function POST() {
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 
     // Get all subscriptions
-    const { data: subscriptions, error: subError } = await supabase
+    const { data: subscriptions, error: subError } = await getSupabase()
       .from("web_push_subscriptions")
       .select("*");
 
@@ -97,7 +104,7 @@ export async function POST() {
           // Clean up invalid subscriptions
           if (webPushError.statusCode === 410 || webPushError.statusCode === 404) {
             console.log("Removing expired subscription:", sub.endpoint);
-            await supabase
+            await getSupabase()
               .from("web_push_subscriptions")
               .delete()
               .eq("id", sub.id);
@@ -138,7 +145,7 @@ export async function GET() {
   const hasPublicVapidKey = !!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   const isDevelopment = process.env.NODE_ENV === "development";
 
-  const { count, error } = await supabase
+  const { count, error } = await getSupabase()
     .from("web_push_subscriptions")
     .select("*", { count: "exact", head: true });
 
