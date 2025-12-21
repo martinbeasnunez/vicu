@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { supabaseServer } from "@/lib/supabase-server";
 import { computeDefaultRhythm, type SurfaceType } from "@/lib/experiment-helpers";
 
 // Helper para generar un título corto a partir de la descripción (fallback)
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
     decision_cadence_days: defaultRhythm.decision_cadence_days,
   };
 
-  let { data: experiment, error } = await supabase
+  let { data: experiment, error } = await supabaseServer
     .from("experiments")
     .insert(insertPayload)
     .select()
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
   )) {
     console.warn("Rhythm fields not found in DB, retrying without them. Original error:", error.message);
     const { action_cadence, metrics_cadence, decision_cadence_days, ...payloadWithoutRhythm } = insertPayload;
-    const retryResult = await supabase
+    const retryResult = await supabaseServer
       .from("experiments")
       .insert(payloadWithoutRhythm)
       .select()

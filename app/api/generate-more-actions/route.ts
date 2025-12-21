@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { supabaseServer } from "@/lib/supabase-server";
 import { generateMoreActionsForChannel, ExperimentBrief, ActionItem } from "@/lib/ai";
 
 export async function POST(request: NextRequest) {
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
 
   try {
     // 1. Fetch experiment data
-    const { data: experiment, error: experimentError } = await supabase
+    const { data: experiment, error: experimentError } = await supabaseServer
       .from("experiments")
       .select("*")
       .eq("id", experiment_id)
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Fetch existing actions for this channel
-    const { data: existingActions, error: actionsError } = await supabase
+    const { data: existingActions, error: actionsError } = await supabaseServer
       .from("experiment_actions")
       .select("action_type, title, content")
       .eq("experiment_id", experiment_id)
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
     );
 
     // 5. Get current max order for this experiment
-    const { data: maxOrderResult } = await supabase
+    const { data: maxOrderResult } = await supabaseServer
       .from("experiment_actions")
       .select("suggested_order")
       .eq("experiment_id", experiment_id)
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
       suggested_order: maxOrder + index + 1,
     }));
 
-    const { data: insertedActions, error: insertError } = await supabase
+    const { data: insertedActions, error: insertError } = await supabaseServer
       .from("experiment_actions")
       .insert(actionsToInsert)
       .select();

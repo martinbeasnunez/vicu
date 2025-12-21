@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { supabaseServer } from "@/lib/supabase-server";
 
 export async function POST(request: NextRequest) {
   const data = await request.json();
 
-  const { error } = await supabase.from("events").insert({
+  const { error } = await supabaseServer.from("events").insert({
     type: data.type,
     experiment_id: data.experiment_id || null,
   });

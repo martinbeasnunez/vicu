@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { supabaseServer } from "@/lib/supabase-server";
 import { calculateSuggestedDueDates } from "@/lib/ai";
 
 export async function PUT(
@@ -19,7 +19,7 @@ export async function PUT(
 
   try {
     // 1. Update the experiment deadline
-    const { error: updateError } = await supabase
+    const { error: updateError } = await supabaseServer
       .from("experiments")
       .update({
         deadline,
@@ -32,7 +32,7 @@ export async function PUT(
     }
 
     // 2. Get all actions for this experiment (only pending ones need date recalculation)
-    const { data: actions, error: fetchError } = await supabase
+    const { data: actions, error: fetchError } = await supabaseServer
       .from("experiment_actions")
       .select("id, status, suggested_order")
       .eq("experiment_id", id)
@@ -55,7 +55,7 @@ export async function PUT(
     const updates = actions.map((action, index) => {
       // Keep done actions' dates as they were (or update them too, your choice)
       // Here we update all to maintain consistency
-      return supabase
+      return supabaseServer
         .from("experiment_actions")
         .update({ suggested_due_date: newDates[index] })
         .eq("id", action.id);

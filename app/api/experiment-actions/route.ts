@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { supabaseServer } from "@/lib/supabase-server";
 import { generateAttackPlanForExperiment, addDueDatesToAttackPlan, ExperimentBrief } from "@/lib/ai";
 
 export async function POST(request: NextRequest) {
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Insertar acciones en Supabase
-    const { data: insertedActions, error } = await supabase
+    const { data: insertedActions, error } = await supabaseServer
       .from("experiment_actions")
       .insert(actionsToInsert)
       .select();

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { supabaseServer } from "@/lib/supabase-server";
 
 export async function POST(request: NextRequest) {
   const data = await request.json();
 
-  const { error: leadError } = await supabase.from("leads").insert({
+  const { error: leadError } = await supabaseServer.from("leads").insert({
     name: data.nombre,
     email: data.email,
     message: data.mensaje,
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: leadError.message }, { status: 500 });
   }
 
-  const { error: eventError } = await supabase.from("events").insert({
+  const { error: eventError } = await supabaseServer.from("events").insert({
     type: "form_submit",
     experiment_id: data.experiment_id || null,
   });
