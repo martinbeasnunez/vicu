@@ -544,3 +544,125 @@ export function addDueDatesToAttackPlan(
 
   return attackPlan;
 }
+
+// ============================================
+// INITIAL STEPS GENERATION
+// ============================================
+
+export interface InitialStep {
+  title: string;
+  description: string;
+  effort: "muy_pequeno" | "pequeno" | "medio";
+}
+
+/**
+ * Generates 2-3 initial steps for a newly created objective based on its category and context.
+ * These steps help the user get started with their goal.
+ */
+export async function generateInitialSteps(
+  objective: {
+    title: string;
+    description: string;
+    detected_category?: string | null;
+    first_steps?: string[] | null;
+    experiment_type?: string | null;
+    surface_type?: string | null;
+  }
+): Promise<InitialStep[]> {
+  // If we already have first_steps from the analysis, use those
+  if (objective.first_steps && objective.first_steps.length > 0) {
+    return objective.first_steps.slice(0, 3).map((step, index) => ({
+      title: step,
+      description: "",
+      effort: index === 0 ? "muy_pequeno" : "pequeno",
+    }));
+  }
+
+  // Otherwise, generate contextual steps using AI
+  const systemPrompt = `Eres Vicu, un asistente que ayuda a las personas a cumplir sus objetivos.
+
+Tu tarea es generar 2-3 pasos iniciales MUY CONCRETOS y PEQUEÑOS para un objetivo recién creado.
+
+REGLAS IMPORTANTES:
+1. Los pasos deben ser ACCIONES ESPECÍFICAS, no genéricos
+2. El primer paso debe poder hacerse en menos de 5 minutos
+3. Cada paso debe ser verificable (se puede decir "sí, lo hice" o "no")
+4. Usa verbos de acción: "Escribe", "Define", "Busca", "Contacta"
+5. NO uses pasos como "Piensa en...", "Considera...", "Reflexiona..."
+
+Responde SOLO con JSON válido (sin markdown):
+{
+  "steps": [
+    {"title": "Acción corta", "description": "Detalle opcional", "effort": "muy_pequeno"},
+    {"title": "Segunda acción", "description": "Detalle", "effort": "pequeno"},
+    {"title": "Tercera acción", "description": "Detalle", "effort": "pequeno"}
+  ]
+}
+
+effort puede ser: "muy_pequeno" (~5 min), "pequeno" (~20 min), "medio" (~1 hora)`;
+
+  const userPrompt = `Objetivo: ${objective.title}
+Descripción: ${objective.description}
+Categoría: ${objective.detected_category || "otro"}
+Tipo: ${objective.experiment_type || "otro"}`;
+
+  try {
+    const completion = await getOpenAI().chat.completions.create({
+      model: "gpt-4.1-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      temperature: 0.5,
+    });
+
+    const content = completion.choices[0]?.message?.content;
+    if (!content) {
+      return getDefaultSteps(objective.detected_category);
+    }
+
+    const parsed = JSON.parse(content);
+    return parsed.steps.slice(0, 3);
+  } catch (error) {
+    console.error("Error generating initial steps:", error);
+    return getDefaultSteps(objective.detected_category);
+  }
+}
+
+/**
+ * Returns default initial steps based on category when AI generation fails.
+ */
+function getDefaultSteps(category?: string | null): InitialStep[] {
+  switch (category) {
+    case "health":
+      return [
+        { title: "Define tu métrica principal (peso, días de ejercicio, etc.)", description: "", effort: "muy_pequeno" },
+        { title: "Elige una acción mínima que puedas hacer hoy", description: "", effort: "muy_pequeno" },
+        { title: "Programa un recordatorio para mañana", description: "", effort: "muy_pequeno" },
+      ];
+    case "business":
+      return [
+        { title: "Escribe en una frase a quién le vendes", description: "", effort: "muy_pequeno" },
+        { title: "Haz una lista de 5 personas que podrían ser clientes", description: "", effort: "pequeno" },
+        { title: "Contacta a la primera persona de la lista", description: "", effort: "pequeno" },
+      ];
+    case "learning":
+      return [
+        { title: "Define qué significa 'éxito' en este aprendizaje", description: "", effort: "muy_pequeno" },
+        { title: "Encuentra un recurso gratuito para empezar", description: "", effort: "pequeno" },
+        { title: "Dedica 15 minutos a explorar ese recurso", description: "", effort: "pequeno" },
+      ];
+    case "habits":
+      return [
+        { title: "Elige el momento exacto del día para tu hábito", description: "", effort: "muy_pequeno" },
+        { title: "Prepara lo que necesitas para hacerlo mañana", description: "", effort: "muy_pequeno" },
+        { title: "Hazlo una vez hoy, aunque sea en versión mínima", description: "", effort: "pequeno" },
+      ];
+    default:
+      return [
+        { title: "Escribe el resultado que quieres lograr en una frase", description: "", effort: "muy_pequeno" },
+        { title: "Identifica la primera acción concreta que puedes hacer", description: "", effort: "muy_pequeno" },
+        { title: "Ejecuta esa primera acción hoy", description: "", effort: "pequeno" },
+      ];
+  }
+}

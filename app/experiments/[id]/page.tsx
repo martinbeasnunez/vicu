@@ -1735,6 +1735,128 @@ export default function ExperimentPage() {
               </div>
             )}
 
+            {/* Pasos del objetivo - Unified list of pending and completed steps */}
+            {checkins.length > 0 && (
+              <div className="mt-8">
+                <div className="mb-4">
+                  <h2 className="text-lg font-semibold text-slate-50">Pasos del objetivo</h2>
+                  <p className="text-sm text-slate-400 mt-1">
+                    Lo que viene y lo que ya hiciste
+                  </p>
+                </div>
+                <div className="space-y-3">
+                  {/* Sort: pending first, then done (by created_at desc) */}
+                  {[...checkins]
+                    .sort((a, b) => {
+                      // Pending items first
+                      if (a.status === "pending" && b.status !== "pending") return -1;
+                      if (a.status !== "pending" && b.status === "pending") return 1;
+                      // Within same status, sort by created_at (newest first for done, oldest first for pending)
+                      const dateA = new Date(a.created_at).getTime();
+                      const dateB = new Date(b.created_at).getTime();
+                      if (a.status === "pending") return dateA - dateB; // Oldest pending first
+                      return dateB - dateA; // Newest done first
+                    })
+                    .map((checkin) => {
+                    const isPending = checkin.status === "pending";
+                    const hasContent = !!checkin.user_content;
+                    return (
+                      <div
+                        key={checkin.id}
+                        className={`card-premium px-4 py-3 cursor-pointer hover:border-white/20 transition-all group/card ${isPending ? "border-indigo-500/20" : ""}`}
+                        onClick={() => openStepDetail(checkin)}
+                      >
+                        <div className="flex items-start gap-3">
+                          {/* Toggle checkbox - clickable for both pending and done */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (isPending) {
+                                handleMarkStepDone(checkin.id);
+                              } else {
+                                handleToggleStepPending(checkin.id);
+                              }
+                            }}
+                            disabled={isMarkingProgress}
+                            className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mt-0.5 transition-all disabled:opacity-50 ${
+                              isPending
+                                ? "bg-indigo-500/20 hover:bg-indigo-500/30 border-2 border-transparent hover:border-indigo-500/50"
+                                : "bg-emerald-500/20 hover:bg-emerald-500/10 border-2 border-transparent hover:border-amber-500/50"
+                            }`}
+                            title={isPending ? "Marcar como completado" : "Desmarcar como pendiente"}
+                          >
+                            <svg className={`w-4 h-4 transition-colors ${isPending ? "text-indigo-400" : "text-emerald-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </button>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              {checkin.step_title ? (
+                                <p className="font-medium text-slate-100 truncate">{checkin.step_title}</p>
+                              ) : (
+                                <p className="font-medium text-slate-100">Avance registrado</p>
+                              )}
+                              {isPending && (
+                                <span className="px-2 py-0.5 rounded-full text-xs bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+                                  Pendiente
+                                </span>
+                              )}
+                              {hasContent && (
+                                <span className="px-2 py-0.5 rounded-full text-xs bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+                                  Con notas
+                                </span>
+                              )}
+                            </div>
+                            {checkin.step_description && (
+                              <p className="text-sm text-slate-400 mt-0.5 line-clamp-2">{checkin.step_description}</p>
+                            )}
+                            <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
+                              <span>{new Date(checkin.created_at).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}</span>
+                              {checkin.effort && (
+                                <span className={`px-2 py-0.5 rounded-full ${
+                                  checkin.effort === "muy_pequeno" ? "bg-emerald-500/20 text-emerald-400" :
+                                  checkin.effort === "pequeno" ? "bg-amber-500/20 text-amber-400" :
+                                  "bg-orange-500/20 text-orange-400"
+                                }`}>
+                                  {checkin.effort === "muy_pequeno" ? "~5 min" : checkin.effort === "pequeno" ? "~20 min" : "~1 hora"}
+                                </span>
+                              )}
+                              {checkin.user_state && (
+                                <span className="text-slate-500">
+                                  {checkin.user_state === "not_started" ? "Empezando" :
+                                   checkin.user_state === "stuck" ? "Destrabando" : "Avanzando"}
+                                </span>
+                              )}
+                              {/* Visual cue that card is clickable */}
+                              <span className="ml-auto text-slate-600 group-hover/card:text-slate-400">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                              </span>
+                            </div>
+                          </div>
+                          {/* Delete button - appears on hover */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setStepToDelete(checkin);
+                            }}
+                            className="flex-shrink-0 p-2 rounded-lg text-slate-600 opacity-0 group-hover/card:opacity-100 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                            title="Eliminar paso"
+                            aria-label="Eliminar paso"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* HOY CON ESTE PROYECTO - Bloque principal con copy dinámico según estado */}
             <div className="card-accent px-5 py-5 border-indigo-500/30">
               <div className="flex items-center gap-3 mb-4">
@@ -1978,130 +2100,6 @@ export default function ExperimentPage() {
               </div>
             )}
 
-            {/* Messages Bank - Hidden from UI (surface_type logic removed) */}
-
-
-            {/* Pasos del objetivo - Unified list of pending and completed steps */}
-            {checkins.length > 0 && (
-              <div className="mt-8">
-                <div className="mb-4">
-                  <h2 className="text-lg font-semibold text-slate-50">Pasos del objetivo</h2>
-                  <p className="text-sm text-slate-400 mt-1">
-                    Lo que viene y lo que ya hiciste
-                  </p>
-                </div>
-                <div className="space-y-3">
-                  {/* Sort: pending first, then done (by created_at desc) */}
-                  {[...checkins]
-                    .sort((a, b) => {
-                      // Pending items first
-                      if (a.status === "pending" && b.status !== "pending") return -1;
-                      if (a.status !== "pending" && b.status === "pending") return 1;
-                      // Within same status, sort by created_at (newest first for done, oldest first for pending)
-                      const dateA = new Date(a.created_at).getTime();
-                      const dateB = new Date(b.created_at).getTime();
-                      if (a.status === "pending") return dateA - dateB; // Oldest pending first
-                      return dateB - dateA; // Newest done first
-                    })
-                    .map((checkin) => {
-                    const isPending = checkin.status === "pending";
-                    const hasContent = !!checkin.user_content;
-                    return (
-                      <div
-                        key={checkin.id}
-                        className={`card-premium px-4 py-3 cursor-pointer hover:border-white/20 transition-all group/card ${isPending ? "border-indigo-500/20" : ""}`}
-                        onClick={() => openStepDetail(checkin)}
-                      >
-                        <div className="flex items-start gap-3">
-                          {/* Toggle checkbox - clickable for both pending and done */}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (isPending) {
-                                handleMarkStepDone(checkin.id);
-                              } else {
-                                handleToggleStepPending(checkin.id);
-                              }
-                            }}
-                            disabled={isMarkingProgress}
-                            className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mt-0.5 transition-all disabled:opacity-50 ${
-                              isPending
-                                ? "bg-indigo-500/20 hover:bg-indigo-500/30 border-2 border-transparent hover:border-indigo-500/50"
-                                : "bg-emerald-500/20 hover:bg-emerald-500/10 border-2 border-transparent hover:border-amber-500/50"
-                            }`}
-                            title={isPending ? "Marcar como completado" : "Desmarcar como pendiente"}
-                          >
-                            <svg className={`w-4 h-4 transition-colors ${isPending ? "text-indigo-400" : "text-emerald-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          </button>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              {checkin.step_title ? (
-                                <p className="font-medium text-slate-100 truncate">{checkin.step_title}</p>
-                              ) : (
-                                <p className="font-medium text-slate-100">Avance registrado</p>
-                              )}
-                              {isPending && (
-                                <span className="px-2 py-0.5 rounded-full text-xs bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
-                                  Pendiente
-                                </span>
-                              )}
-                              {hasContent && (
-                                <span className="px-2 py-0.5 rounded-full text-xs bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
-                                  Con notas
-                                </span>
-                              )}
-                            </div>
-                            {checkin.step_description && (
-                              <p className="text-sm text-slate-400 mt-0.5 line-clamp-2">{checkin.step_description}</p>
-                            )}
-                            <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
-                              <span>{new Date(checkin.created_at).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}</span>
-                              {checkin.effort && (
-                                <span className={`px-2 py-0.5 rounded-full ${
-                                  checkin.effort === "muy_pequeno" ? "bg-emerald-500/20 text-emerald-400" :
-                                  checkin.effort === "pequeno" ? "bg-amber-500/20 text-amber-400" :
-                                  "bg-orange-500/20 text-orange-400"
-                                }`}>
-                                  {checkin.effort === "muy_pequeno" ? "~5 min" : checkin.effort === "pequeno" ? "~20 min" : "~1 hora"}
-                                </span>
-                              )}
-                              {checkin.user_state && (
-                                <span className="text-slate-500">
-                                  {checkin.user_state === "not_started" ? "Empezando" :
-                                   checkin.user_state === "stuck" ? "Destrabando" : "Avanzando"}
-                                </span>
-                              )}
-                              {/* Visual cue that card is clickable */}
-                              <span className="ml-auto text-slate-600 group-hover/card:text-slate-400">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                </svg>
-                              </span>
-                            </div>
-                          </div>
-                          {/* Delete button - appears on hover */}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setStepToDelete(checkin);
-                            }}
-                            className="flex-shrink-0 p-2 rounded-lg text-slate-600 opacity-0 group-hover/card:opacity-100 hover:text-red-400 hover:bg-red-500/10 transition-all"
-                            title="Eliminar paso"
-                            aria-label="Eliminar paso"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Right Column (1/3) - Hidden on mobile */}
