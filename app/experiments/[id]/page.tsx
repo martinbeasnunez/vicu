@@ -59,6 +59,14 @@ const EFFORT_LABELS: Record<EffortLevel, { text: string; color: string }> = {
   medio: { text: "~1 hora", color: "text-orange-400" },
 };
 
+// Phase type for project breakdown
+interface ObjectivePhase {
+  id: string;
+  name: string;
+  description: string;
+  exit_criteria: string;
+}
+
 interface Experiment {
   id: string;
   title: string;
@@ -82,6 +90,8 @@ interface Experiment {
   last_checkin_at: string | null;
   checkins_count: number;
   streak_days: number;
+  // Project phases
+  phases: ObjectivePhase[] | null;
 }
 
 interface ExperimentStats {
@@ -1508,61 +1518,80 @@ export default function ExperimentPage() {
               </div>
             )}
 
-            {/* Primeros pasos sugeridos - Shows first 3 pending steps */}
-            {(() => {
-              const pendingCheckins = checkins.filter(c => c.status === "pending").slice(0, 3);
-              if (pendingCheckins.length === 0) return null;
-              return (
-                <div className="card-premium px-5 py-4 border-indigo-500/20">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center">
-                      <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
-                    </div>
-                    <h3 className="text-sm font-medium text-slate-300">Primeros pasos sugeridos</h3>
-                  </div>
-                  <div className="space-y-3">
-                    {pendingCheckins.map((step) => (
+            {/* Fases del proyecto - Shows macro phases */}
+            {experiment.phases && experiment.phases.length > 0 && (
+              <div className="card-premium px-5 py-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider">Fases del proyecto</h3>
+                  <span className="text-xs text-slate-500">
+                    Fase actual: <span className="text-indigo-400">{
+                      experiment.status === "testing" ? experiment.phases[0]?.name :
+                      experiment.status === "scale" ? experiment.phases[1]?.name || experiment.phases[0]?.name :
+                      experiment.status === "iterate" ? experiment.phases[2]?.name || experiment.phases[1]?.name :
+                      experiment.phases[experiment.phases.length - 1]?.name
+                    }</span>
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 overflow-x-auto pb-2">
+                  {experiment.phases.map((phase, index) => {
+                    // Determine if this phase is current, completed, or pending
+                    const isCurrentPhase =
+                      (experiment.status === "testing" && index === 0) ||
+                      (experiment.status === "scale" && index === 1) ||
+                      (experiment.status === "iterate" && index === 2) ||
+                      (experiment.status === "kill" || experiment.status === "paused");
+                    const isCompleted =
+                      (experiment.status === "scale" && index === 0) ||
+                      (experiment.status === "iterate" && index <= 1) ||
+                      ((experiment.status === "kill" || experiment.status === "paused") && experiment.phases && index < experiment.phases.length - 1);
+
+                    return (
                       <div
-                        key={step.id}
-                        className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/5 hover:border-indigo-500/30 transition-all cursor-pointer"
-                        onClick={() => openStepDetail(step)}
+                        key={phase.id}
+                        className={`flex-shrink-0 px-4 py-2 rounded-xl border transition-all ${
+                          isCurrentPhase
+                            ? "bg-indigo-500/20 border-indigo-500/40 text-indigo-300"
+                            : isCompleted
+                              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                              : "bg-white/5 border-white/10 text-slate-400"
+                        }`}
+                        title={`${phase.description}\n\nCriterio de salida: ${phase.exit_criteria}`}
                       >
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleMarkStepDone(step.id);
-                          }}
-                          disabled={isMarkingProgress}
-                          className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-500/20 hover:bg-indigo-500/30 flex items-center justify-center border-2 border-transparent hover:border-indigo-500/50 transition-all disabled:opacity-50"
-                          title="Marcar como completado"
-                        >
-                          <svg className="w-3 h-3 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        </button>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-slate-200">{step.step_title || "Paso pendiente"}</p>
-                          {step.step_description && (
-                            <p className="text-xs text-slate-500 mt-1 line-clamp-2">{step.step_description}</p>
+                        <div className="flex items-center gap-2">
+                          {isCompleted && (
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
                           )}
-                          {step.effort && (
-                            <span className={`inline-block mt-2 px-2 py-0.5 rounded-full text-xs ${
-                              step.effort === "muy_pequeno" ? "bg-emerald-500/20 text-emerald-400" :
-                              step.effort === "pequeno" ? "bg-amber-500/20 text-amber-400" :
-                              "bg-orange-500/20 text-orange-400"
-                            }`}>
-                              {step.effort === "muy_pequeno" ? "~5 min" : step.effort === "pequeno" ? "~20 min" : "~1 hora"}
-                            </span>
+                          {isCurrentPhase && !isCompleted && (
+                            <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
                           )}
+                          <span className="text-sm font-medium whitespace-nowrap">{phase.name}</span>
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })}
                 </div>
-              );
-            })()}
+                {/* Show current phase details */}
+                {(() => {
+                  const currentPhaseIndex =
+                    experiment.status === "testing" ? 0 :
+                    experiment.status === "scale" ? 1 :
+                    experiment.status === "iterate" ? 2 :
+                    experiment.phases.length - 1;
+                  const currentPhase = experiment.phases[currentPhaseIndex];
+                  if (!currentPhase) return null;
+                  return (
+                    <div className="mt-3 p-3 rounded-xl bg-white/[0.02] border border-white/5">
+                      <p className="text-sm text-slate-300 leading-relaxed">{currentPhase.description}</p>
+                      <p className="text-xs text-slate-500 mt-2">
+                        <span className="text-slate-400">Para avanzar:</span> {currentPhase.exit_criteria}
+                      </p>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
 
             {/* Vicu Recommendation Card - Now placed after Progreso del plan */}
             {totalSteps > 0 && completedSteps === totalSteps ? (
@@ -1952,17 +1981,29 @@ export default function ExperimentPage() {
             {/* Messages Bank - Hidden from UI (surface_type logic removed) */}
 
 
-            {/* Historial de avances (Check-ins) */}
+            {/* Pasos del objetivo - Unified list of pending and completed steps */}
             {checkins.length > 0 && (
               <div className="mt-8">
                 <div className="mb-4">
-                  <h2 className="text-lg font-semibold text-slate-50">Historial de avances</h2>
+                  <h2 className="text-lg font-semibold text-slate-50">Pasos del objetivo</h2>
                   <p className="text-sm text-slate-400 mt-1">
-                    Tus últimos pasos en este proyecto
+                    Lo que viene y lo que ya hiciste
                   </p>
                 </div>
                 <div className="space-y-3">
-                  {checkins.map((checkin) => {
+                  {/* Sort: pending first, then done (by created_at desc) */}
+                  {[...checkins]
+                    .sort((a, b) => {
+                      // Pending items first
+                      if (a.status === "pending" && b.status !== "pending") return -1;
+                      if (a.status !== "pending" && b.status === "pending") return 1;
+                      // Within same status, sort by created_at (newest first for done, oldest first for pending)
+                      const dateA = new Date(a.created_at).getTime();
+                      const dateB = new Date(b.created_at).getTime();
+                      if (a.status === "pending") return dateA - dateB; // Oldest pending first
+                      return dateB - dateA; // Newest done first
+                    })
+                    .map((checkin) => {
                     const isPending = checkin.status === "pending";
                     const hasContent = !!checkin.user_content;
                     return (

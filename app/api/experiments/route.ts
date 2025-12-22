@@ -27,6 +27,8 @@ export async function POST(request: NextRequest) {
     raw_idea,
     deadline,
     deadline_source,
+    // Project phases
+    phases,
   } = data;
 
   if (!description) {
@@ -46,7 +48,7 @@ export async function POST(request: NextRequest) {
     experiment_type: experiment_type || null,
   });
 
-  // Build insert payload - rhythm fields are optional until migration is run
+  // Build insert payload - rhythm and phases fields are optional until migration is run
   const insertPayload: Record<string, unknown> = {
     title,
     description,
@@ -64,6 +66,8 @@ export async function POST(request: NextRequest) {
     raw_idea: raw_idea || null,
     deadline: deadline || null,
     deadline_source: deadline_source || "ai_suggested",
+    // Project phases - stored as JSONB, will be ignored if column doesn't exist
+    phases: phases && phases.length > 0 ? phases : null,
     // Rhythm fields - will be ignored if columns don't exist yet
     action_cadence: defaultRhythm.action_cadence,
     metrics_cadence: defaultRhythm.metrics_cadence,
@@ -76,20 +80,21 @@ export async function POST(request: NextRequest) {
     .select()
     .single();
 
-  // If rhythm fields don't exist yet, retry without them
+  // If rhythm or phases fields don't exist yet, retry without them
   // Supabase error messages vary: "column ... does not exist", "undefined column", etc.
   if (error && (
     error.message.includes("cadence") ||
+    error.message.includes("phases") ||
     error.message.includes("does not exist") ||
     error.message.includes("undefined column") ||
     error.code === "PGRST204" ||
     error.code === "42703"
   )) {
-    console.warn("Rhythm fields not found in DB, retrying without them. Original error:", error.message);
-    const { action_cadence, metrics_cadence, decision_cadence_days, ...payloadWithoutRhythm } = insertPayload;
+    console.warn("Optional fields not found in DB, retrying without them. Original error:", error.message);
+    const { action_cadence, metrics_cadence, decision_cadence_days, phases: _phases, ...payloadWithoutOptional } = insertPayload;
     const retryResult = await supabaseServer
       .from("experiments")
-      .insert(payloadWithoutRhythm)
+      .insert(payloadWithoutOptional)
       .select()
       .single();
     experiment = retryResult.data;

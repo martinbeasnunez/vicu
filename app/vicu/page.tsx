@@ -233,6 +233,14 @@ export default function VicuPage() {
       parts.push(`\n**Horizonte de tiempo:** ${result.suggested_deadline || result.deadline_date}`);
     }
 
+    // Show phases if available
+    if (result.phases && result.phases.length > 0) {
+      parts.push(`\n**Mapa de fases:**`);
+      result.phases.forEach((phase, index) => {
+        parts.push(`${index + 1}. **${phase.name}**: ${phase.description}`);
+      });
+    }
+
     parts.push("\n\n¿Está todo correcto? Si algo no cuadra, cuéntamelo para ajustarlo.");
 
     return parts.join("\n");
@@ -462,6 +470,8 @@ export default function VicuPage() {
           first_steps: analysis.first_steps || [],
           detected_category: analysis.detected_category || null,
           detected_subject: analysis.detected_subject || null,
+          // Project phases for macro breakdown
+          phases: analysis.phases || [],
         }),
       });
 

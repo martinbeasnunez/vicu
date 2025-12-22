@@ -28,6 +28,14 @@ export interface ChatMessage {
 export type ProjectCategory = "health" | "business" | "career" | "learning" | "habits" | "personal_admin" | "creative" | "team" | "other";
 export type ProjectSubject = "yo" | "otra_persona" | "equipo" | "clientes";
 
+// Phases for project breakdown
+export interface ObjectivePhase {
+  id: string;
+  name: string;
+  description: string;
+  exit_criteria: string;
+}
+
 export interface VicuAnalysis {
   summary: string;
   generated_title: string;
@@ -49,6 +57,8 @@ export interface VicuAnalysis {
   first_steps?: string[];
   detected_category?: ProjectCategory;
   detected_subject?: ProjectSubject;
+  // Project phases for macro breakdown
+  phases?: ObjectivePhase[];
 }
 
 const ANALYSIS_SYSTEM_PROMPT = `Eres Vicu, una IA de SEGUIMIENTO que ayuda a las personas a CUMPLIR sus metas y proyectos.
@@ -189,6 +199,20 @@ Cuando confidence >= 60, genera estos campos:
 
 **first_steps**: Array de 3-5 strings con primeros pasos tentativos (NO un plan rígido)
 
+**phases**: Array de 3-4 fases macro del proyecto. Cada fase debe tener:
+- "id": identificador único (ej: "phase_1", "phase_2")
+- "name": nombre corto de la fase (ej: "Arrancando", "En marcha", "Ajustando", "Cerrado")
+- "description": descripción breve de qué se hace en esta fase (1 oración)
+- "exit_criteria": criterio claro para saber cuándo se terminó esta fase
+
+Ejemplos de fases según categoría:
+- HEALTH: "Preparación" → "Primeras 2 semanas" → "Consolidación" → "Mantenimiento"
+- BUSINESS: "Validar idea" → "Primeros clientes" → "Optimizar" → "Escalar"
+- LEARNING: "Fundamentos" → "Práctica activa" → "Proyecto aplicado" → "Dominio"
+- HABITS: "Experimentar" → "Instalar rutina" → "Automatizar" → "Mantener"
+
+Los first_steps deben corresponder a la PRIMERA fase.
+
 **suggested_deadline**: Descripción en palabras ("2 semanas", "fin de mes")
 
 **deadline_date**: YYYY-MM-DD o null. Fecha de hoy: {{TODAY_DATE}}
@@ -209,6 +233,11 @@ Responde SOLO con JSON válido (sin markdown):
   "success_metric": "Cómo medir éxito",
   "context_bullets": ["Bullet 1", "Bullet 2", "Bullet 3"],
   "first_steps": ["Paso 1", "Paso 2", "Paso 3"],
+  "phases": [
+    {"id": "phase_1", "name": "Nombre fase 1", "description": "Qué se hace", "exit_criteria": "Cuándo termina"},
+    {"id": "phase_2", "name": "Nombre fase 2", "description": "Qué se hace", "exit_criteria": "Cuándo termina"},
+    {"id": "phase_3", "name": "Nombre fase 3", "description": "Qué se hace", "exit_criteria": "Cuándo termina"}
+  ],
   "suggested_deadline": "2 semanas",
   "deadline_date": "YYYY-MM-DD o null",
   "needs_clarification": true/false,
@@ -221,9 +250,11 @@ Responde SOLO con JSON válido (sin markdown):
 REGLAS IMPORTANTES:
 - confidence es un NÚMERO de 0 a 100
 - Si confidence < 60, needs_clarification DEBE ser true
-- context_bullets y first_steps son ARRAYS de strings
+- context_bullets, first_steps y phases son ARRAYS
+- phases SIEMPRE debe tener 3-4 elementos cuando confidence >= 60
 - surface_type = "ritual" para TODO lo personal/hábitos (NO landing)
 - Las preguntas deben ser ESPECÍFICAS para la categoría detectada
+- Los first_steps deben corresponder a la primera fase del proyecto
 
 ## REGLAS DE CONVERSACIÓN (MUY IMPORTANTE):
 
