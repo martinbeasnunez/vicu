@@ -197,6 +197,54 @@ function getTodayCopyForStatus(status: ExperimentStatus): { title: string; descr
   }
 }
 
+// Helper to build next step suggestion based on stage and optional next focus
+function buildNextStepFromStage(status: ExperimentStatus, nextFocus?: string | null): {
+  title: string;
+  description: string;
+  estimatedMinutes: number;
+} {
+  const base = nextFocus?.trim() || "";
+
+  switch (status) {
+    case "testing": // Arrancando
+      return {
+        title: "Da el primer paso para arrancar este objetivo",
+        description: base || "Define una primera acción concreta para comenzar hoy.",
+        estimatedMinutes: 10,
+      };
+    case "scale": // En marcha
+      return {
+        title: "Mantén el ritmo de este objetivo",
+        description: base || "Elige una acción sencilla para avanzar hoy sin perder el hábito.",
+        estimatedMinutes: 15,
+      };
+    case "iterate": // Ajustando
+      return {
+        title: "Ajusta el plan con base en lo que ya probaste",
+        description: base || "Revisa qué funcionó y qué no, y define un pequeño ajuste para hoy.",
+        estimatedMinutes: 20,
+      };
+    case "paused":
+      return {
+        title: "Retoma cuando estés listo",
+        description: base || "Este objetivo está en pausa. Cuando quieras volver, empieza con algo pequeño.",
+        estimatedMinutes: 5,
+      };
+    case "kill":
+      return {
+        title: "Objetivo cerrado",
+        description: base || "Este objetivo ya terminó. Crea uno nuevo si quieres empezar algo diferente.",
+        estimatedMinutes: 0,
+      };
+    default:
+      return {
+        title: "Define tu siguiente paso",
+        description: base || "Elige una acción pequeña y concreta para seguir avanzando.",
+        estimatedMinutes: 10,
+      };
+  }
+}
+
 export default function ExperimentPage() {
   const params = useParams();
   const router = useRouter();
@@ -277,6 +325,8 @@ export default function ExperimentPage() {
   // Vicu recommendation state
   const [vicuRecommendation, setVicuRecommendation] = useState<VicuRecommendationData | null>(null);
   const [isLoadingRecommendation, setIsLoadingRecommendation] = useState(false);
+  const [hasAcceptedRecommendation, setHasAcceptedRecommendation] = useState(false);
+  const [acceptedStatus, setAcceptedStatus] = useState<ExperimentStatus | null>(null);
 
   // Mover proyecto modal state (kept for compatibility)
   const [moverModal, setMoverModal] = useState<MoverModalState>({
@@ -977,7 +1027,7 @@ export default function ExperimentPage() {
 
   // Handler to accept Vicu recommendation and update status
   const handleAcceptRecommendation = async () => {
-    if (!experiment || !vicuRecommendation || isStatusUpdating) return;
+    if (!experiment || !vicuRecommendation || isStatusUpdating || hasAcceptedRecommendation) return;
 
     const newStatus = mapRecommendationToStatus(vicuRecommendation.action);
 
@@ -991,7 +1041,30 @@ export default function ExperimentPage() {
       if (error) throw error;
 
       setExperiment((prev) => prev ? { ...prev, status: newStatus } : null);
+      setHasAcceptedRecommendation(true);
+      setAcceptedStatus(newStatus);
       setToast(`Estado cambiado a ${STATUS_LABELS[newStatus]}`);
+
+      // Generate new steps for the new stage if we have a next focus
+      if (vicuRecommendation.suggested_next_focus) {
+        try {
+          await fetch("/api/generate-initial-steps", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              experiment_id: experiment.id,
+              title: experiment.title,
+              description: vicuRecommendation.suggested_next_focus,
+              experiment_type: experiment.experiment_type,
+              surface_type: experiment.surface_type,
+            }),
+          });
+          // Refresh checkins to show new steps
+          await fetchCheckins();
+        } catch (err) {
+          console.error("Error generating stage steps:", err);
+        }
+      }
     } catch {
       setToast("Error al actualizar estado");
     } finally {
@@ -1652,15 +1725,26 @@ export default function ExperimentPage() {
                   {/* Accept recommendation button */}
                   <button
                     onClick={handleAcceptRecommendation}
-                    disabled={isStatusUpdating}
-                    className={`w-full px-4 py-3 rounded-xl font-medium transition-all disabled:opacity-50 flex items-center justify-center gap-2 ${
-                      vicuRecommendation.action === "escalar" ? "bg-emerald-500 hover:bg-emerald-400 text-white" :
-                      vicuRecommendation.action === "iterar" ? "bg-amber-500 hover:bg-amber-400 text-white" :
-                      vicuRecommendation.action === "pausar" ? "bg-slate-500 hover:bg-slate-400 text-white" :
-                      "bg-red-500 hover:bg-red-400 text-white"
+                    disabled={isStatusUpdating || hasAcceptedRecommendation}
+                    className={`w-full px-4 py-3 rounded-xl font-medium transition-all flex items-center justify-center gap-2 ${
+                      hasAcceptedRecommendation
+                        ? "bg-emerald-600 text-white cursor-default"
+                        : isStatusUpdating
+                          ? "opacity-70 cursor-wait"
+                          : vicuRecommendation.action === "escalar" ? "bg-emerald-500 hover:bg-emerald-400 text-white active:scale-[0.98]" :
+                            vicuRecommendation.action === "iterar" ? "bg-amber-500 hover:bg-amber-400 text-white active:scale-[0.98]" :
+                            vicuRecommendation.action === "pausar" ? "bg-slate-500 hover:bg-slate-400 text-white active:scale-[0.98]" :
+                            "bg-red-500 hover:bg-red-400 text-white active:scale-[0.98]"
                     }`}
                   >
-                    {isStatusUpdating ? (
+                    {hasAcceptedRecommendation ? (
+                      <>
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span>Estado cambiado a {acceptedStatus ? STATUS_LABELS[acceptedStatus] : ""}</span>
+                      </>
+                    ) : isStatusUpdating ? (
                       <>
                         <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                         <span>Actualizando...</span>
@@ -1778,15 +1862,27 @@ export default function ExperimentPage() {
                               }
                             }}
                             disabled={isMarkingProgress}
-                            className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mt-0.5 transition-all disabled:opacity-50 ${
+                            role="checkbox"
+                            aria-checked={!isPending}
+                            aria-label={isPending ? "Marcar como completado" : "Desmarcar como pendiente"}
+                            className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center mt-0.5 cursor-pointer transition-all duration-200 active:scale-90 disabled:opacity-50 disabled:cursor-wait ${
                               isPending
-                                ? "bg-indigo-500/20 hover:bg-indigo-500/30 border-2 border-transparent hover:border-indigo-500/50"
-                                : "bg-emerald-500/20 hover:bg-emerald-500/10 border-2 border-transparent hover:border-amber-500/50"
+                                ? "bg-transparent border-2 border-slate-500 hover:border-indigo-400 hover:bg-indigo-500/10"
+                                : "bg-emerald-500 border-2 border-emerald-400 hover:bg-emerald-400"
                             }`}
                             title={isPending ? "Marcar como completado" : "Desmarcar como pendiente"}
                           >
-                            <svg className={`w-4 h-4 transition-colors ${isPending ? "text-indigo-400" : "text-emerald-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            <svg
+                              className={`w-4 h-4 transition-all duration-200 ${
+                                isPending
+                                  ? "text-slate-500 opacity-0 group-hover/card:opacity-50"
+                                  : "text-white"
+                              }`}
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                             </svg>
                           </button>
                           <div className="flex-1 min-w-0">
