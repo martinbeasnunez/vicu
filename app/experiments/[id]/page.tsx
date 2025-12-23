@@ -20,7 +20,7 @@ import {
 import AttackPlanSection from "@/components/AttackPlanSection";
 import MessagesBankModal from "@/components/MessagesBankModal";
 import type { CurrentState, EffortLevel, NextStepResponse } from "@/app/api/next-step/route";
-import type { VicuRecommendationData } from "@/app/api/generate-recommendation/route";
+import type { VicuRecommendationData, ExperimentStage } from "@/app/api/generate-recommendation/route";
 
 // Modal state types for "Mover proyecto"
 interface MoverModalState {
@@ -127,6 +127,7 @@ interface ExperimentCheckin {
   day_date: string;
   created_at: string;
   user_content: string | null;
+  for_stage: ExperimentStage | null;
 }
 
 // Status badge colors for dark theme
@@ -245,6 +246,65 @@ function buildNextStepFromStage(status: ExperimentStatus, nextFocus?: string | n
   }
 }
 
+// Stage labels for recommendation history
+const STAGE_LABELS: Record<ExperimentStage, string> = {
+  testing: "Arrancando",
+  scale: "En marcha",
+  iterate: "Ajustando",
+  kill: "Cerrado",
+  paused: "En pausa",
+};
+
+// State machine: determines next stage transition based on current stage and progress
+interface StageTransition {
+  nextStage: ExperimentStage;
+  label: string;
+  emoji: string;
+  buttonColor: string;
+}
+
+function getRecommendationAction(
+  currentStage: ExperimentStage,
+  stageProgress: { isComplete: boolean }
+): StageTransition | null {
+  // No transitions for closed or paused objectives
+  if (currentStage === "kill" || currentStage === "paused") {
+    return null;
+  }
+
+  // Only show transition when plan is complete
+  if (!stageProgress.isComplete) {
+    return null;
+  }
+
+  // State machine transitions
+  switch (currentStage) {
+    case "testing": // Arrancando -> En marcha
+      return {
+        nextStage: "scale",
+        label: "Aceptar: Cambiar a En marcha",
+        emoji: "🚀",
+        buttonColor: "bg-emerald-500 hover:bg-emerald-400",
+      };
+    case "scale": // En marcha -> Ajustando
+      return {
+        nextStage: "iterate",
+        label: "Aceptar: Cambiar a Ajustando",
+        emoji: "🔄",
+        buttonColor: "bg-amber-500 hover:bg-amber-400",
+      };
+    case "iterate": // Ajustando -> Cerrado
+      return {
+        nextStage: "kill",
+        label: "Aceptar: Cambiar a Cerrado",
+        emoji: "✓",
+        buttonColor: "bg-slate-500 hover:bg-slate-400",
+      };
+    default:
+      return null;
+  }
+}
+
 // Fallback description for steps without one
 const DESCRIPTION_FALLBACK = "Describe brevemente qué harás en este paso para acercarte a tu objetivo.";
 
@@ -340,9 +400,12 @@ export default function ExperimentPage() {
 
   // Vicu recommendation state
   const [vicuRecommendation, setVicuRecommendation] = useState<VicuRecommendationData | null>(null);
+  const [vicuRecommendationHistory, setVicuRecommendationHistory] = useState<VicuRecommendationData[]>([]);
   const [isLoadingRecommendation, setIsLoadingRecommendation] = useState(false);
   const [hasAcceptedRecommendation, setHasAcceptedRecommendation] = useState(false);
   const [acceptedStatus, setAcceptedStatus] = useState<ExperimentStatus | null>(null);
+  const [lastRecommendationStage, setLastRecommendationStage] = useState<ExperimentStage | null>(null);
+  const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
 
   // Mover proyecto modal state (kept for compatibility)
   const [moverModal, setMoverModal] = useState<MoverModalState>({
@@ -356,9 +419,17 @@ export default function ExperimentPage() {
   const doneActions = actions.filter((a) => a.status === "done").length;
 
   // Checkins-based progress (for "Progreso del plan")
-  const totalSteps = checkins.length;
-  const completedSteps = checkins.filter((c) => c.status === "done").length;
-  const pendingSteps = checkins.filter((c) => c.status === "pending").length;
+  // Filter by current stage if available, otherwise show all
+  const currentStage = experiment?.status as ExperimentStage | undefined;
+  const currentStageCheckins = useMemo(() => {
+    if (!currentStage) return checkins;
+    // Include steps that either match current stage or have no stage (legacy steps)
+    return checkins.filter((c) => !c.for_stage || c.for_stage === currentStage);
+  }, [checkins, currentStage]);
+
+  const totalSteps = currentStageCheckins.length;
+  const completedSteps = currentStageCheckins.filter((c) => c.status === "done").length;
+  const pendingSteps = currentStageCheckins.filter((c) => c.status === "pending").length;
 
   const recommendation = useMemo(() => {
     return calculateRecommendation(
@@ -1001,7 +1072,7 @@ export default function ExperimentPage() {
   };
 
   // Handler to generate Vicu recommendation
-  const handleGenerateRecommendation = async () => {
+  const handleGenerateRecommendation = async (forceNew = false, previousNextFocus?: string) => {
     if (!experiment || isLoadingRecommendation) return;
     setIsLoadingRecommendation(true);
 
@@ -1009,12 +1080,22 @@ export default function ExperimentPage() {
       const res = await fetch("/api/generate-recommendation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ experiment_id: experiment.id }),
+        body: JSON.stringify({
+          experiment_id: experiment.id,
+          force_new: forceNew,
+          previous_next_focus: previousNextFocus,
+        }),
       });
 
       const data = await res.json();
       if (data.success && data.recommendation) {
         setVicuRecommendation(data.recommendation);
+        setLastRecommendationStage(experiment.status as ExperimentStage);
+        // Reset accepted state for new recommendations
+        if (forceNew) {
+          setHasAcceptedRecommendation(false);
+          setAcceptedStatus(null);
+        }
         setToast("Recomendación generada");
       } else {
         setToast("Error al generar recomendación");
@@ -1043,11 +1124,12 @@ export default function ExperimentPage() {
     }
   };
 
-  // Handler to accept Vicu recommendation and update status
-  const handleAcceptRecommendation = async () => {
-    if (!experiment || !vicuRecommendation || isStatusUpdating || hasAcceptedRecommendation) return;
+  // Handler to accept stage transition using state machine
+  const handleAcceptStageTransition = async (transition: StageTransition) => {
+    if (!experiment || isStatusUpdating || hasAcceptedRecommendation) return;
 
-    const newStatus = mapRecommendationToStatus(vicuRecommendation.action);
+    const newStatus = transition.nextStage;
+    const previousNextFocus = vicuRecommendation?.suggested_next_focus;
 
     setIsStatusUpdating(true);
     try {
@@ -1058,13 +1140,19 @@ export default function ExperimentPage() {
 
       if (error) throw error;
 
-      setExperiment((prev) => prev ? { ...prev, status: newStatus } : null);
-      setHasAcceptedRecommendation(true);
-      setAcceptedStatus(newStatus);
+      // Move current recommendation to history before clearing
+      if (vicuRecommendation) {
+        setVicuRecommendationHistory((prev) => [...prev, vicuRecommendation]);
+      }
+
+      // Update local experiment state FIRST so recommendation API uses new stage
+      const updatedExperiment = { ...experiment, status: newStatus };
+      setExperiment(updatedExperiment);
       setToast(`Estado cambiado a ${STATUS_LABELS[newStatus]}`);
 
-      // Generate new steps for the new stage if we have a next focus
-      if (vicuRecommendation.suggested_next_focus) {
+      // Generate new steps for the new stage (except for "cerrado")
+      if (newStatus !== "kill") {
+        const stepsDescription = previousNextFocus || `Pasos para la etapa ${STAGE_LABELS[newStatus]}`;
         try {
           await fetch("/api/generate-initial-steps", {
             method: "POST",
@@ -1072,9 +1160,10 @@ export default function ExperimentPage() {
             body: JSON.stringify({
               experiment_id: experiment.id,
               title: experiment.title,
-              description: vicuRecommendation.suggested_next_focus,
+              description: stepsDescription,
               experiment_type: experiment.experiment_type,
               surface_type: experiment.surface_type,
+              for_stage: newStatus,
             }),
           });
           // Refresh checkins to show new steps
@@ -1082,12 +1171,64 @@ export default function ExperimentPage() {
         } catch (err) {
           console.error("Error generating stage steps:", err);
         }
+
+        // Generate NEW recommendation for the new stage
+        setIsLoadingRecommendation(true);
+        try {
+          const res = await fetch("/api/generate-recommendation", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              experiment_id: experiment.id,
+              force_new: true,
+              previous_next_focus: previousNextFocus,
+            }),
+          });
+
+          const data = await res.json();
+          if (data.success && data.recommendation) {
+            setVicuRecommendation(data.recommendation);
+            setLastRecommendationStage(newStatus as ExperimentStage);
+            // Reset accepted state for new recommendation - ready for next cycle
+            setHasAcceptedRecommendation(false);
+            setAcceptedStatus(null);
+          } else {
+            // If recommendation fails, still clear state for fresh start
+            setVicuRecommendation(null);
+            setHasAcceptedRecommendation(false);
+            setAcceptedStatus(null);
+          }
+        } catch (err) {
+          console.error("Error generating stage recommendation:", err);
+          setVicuRecommendation(null);
+          setHasAcceptedRecommendation(false);
+          setAcceptedStatus(null);
+        } finally {
+          setIsLoadingRecommendation(false);
+        }
+      } else {
+        // For "kill" stage, just mark as accepted without generating new recommendation
+        setHasAcceptedRecommendation(true);
+        setAcceptedStatus(newStatus);
+        setVicuRecommendation(null);
       }
     } catch {
       setToast("Error al actualizar estado");
     } finally {
       setIsStatusUpdating(false);
       setTimeout(() => setToast(null), 3000);
+    }
+  };
+
+  // Legacy handler for AI-based recommendations (deprecated, kept for compatibility)
+  const handleAcceptRecommendation = async () => {
+    if (!experiment || !vicuRecommendation || isStatusUpdating || hasAcceptedRecommendation) return;
+
+    const currentStage = experiment.status as ExperimentStage;
+    const transition = getRecommendationAction(currentStage, { isComplete: true });
+
+    if (transition) {
+      await handleAcceptStageTransition(transition);
     }
   };
 
@@ -1228,6 +1369,15 @@ export default function ExperimentPage() {
       // Load existing vicu recommendation if present
       if (expData.vicu_recommendation) {
         setVicuRecommendation(expData.vicu_recommendation as VicuRecommendationData);
+        // Track the stage this recommendation was generated for
+        const rec = expData.vicu_recommendation as VicuRecommendationData;
+        if (rec.for_stage) {
+          setLastRecommendationStage(rec.for_stage);
+        }
+      }
+      // Load recommendation history if present
+      if (expData.vicu_recommendation_history && Array.isArray(expData.vicu_recommendation_history)) {
+        setVicuRecommendationHistory(expData.vicu_recommendation_history as VicuRecommendationData[]);
       }
       const { count: visitsCount } = await supabase.from("events").select("*", { count: "exact", head: true }).eq("experiment_id", id).eq("type", "visit");
       const { count: leadsCount } = await supabase.from("events").select("*", { count: "exact", head: true }).eq("experiment_id", id).eq("type", "form_submit");
@@ -1247,6 +1397,30 @@ export default function ExperimentPage() {
       return () => clearInterval(interval);
     }
   }, [loading, actions.length, actionsError, fetchActions]);
+
+  // Auto-trigger new recommendation when stage changes AND all steps of the stage are completed
+  // This effect watches for: stage change + plan completion + recommendation not yet generated for this stage
+  useEffect(() => {
+    if (!experiment || loading || isLoadingRecommendation) return;
+
+    const currentStage = experiment.status as ExperimentStage;
+    const allStepsCompleted = totalSteps > 0 && completedSteps === totalSteps;
+
+    // Check if we need a new recommendation:
+    // 1. All steps are completed
+    // 2. Either no recommendation exists, OR the existing recommendation is for a different stage
+    const needsNewRecommendation =
+      allStepsCompleted &&
+      (!vicuRecommendation ||
+        (vicuRecommendation.for_stage && vicuRecommendation.for_stage !== currentStage));
+
+    // Only auto-generate if we haven't already generated for this stage
+    if (needsNewRecommendation && lastRecommendationStage !== currentStage) {
+      // Get the previous recommendation's next focus to use as context
+      const previousNextFocus = vicuRecommendation?.suggested_next_focus;
+      handleGenerateRecommendation(true, previousNextFocus);
+    }
+  }, [experiment?.status, totalSteps, completedSteps, loading]);
 
   const handleCopyContent = async (actionId: string, content: string) => {
     await navigator.clipboard.writeText(content);
@@ -1744,156 +1918,249 @@ export default function ExperimentPage() {
               </div>
             )}
 
-            {/* Vicu Recommendation Card - Now placed after Progreso del plan */}
-            {totalSteps > 0 && completedSteps === totalSteps ? (
-              vicuRecommendation ? (
-                <div className="card-premium px-5 py-5 border-indigo-500/20">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
-                      <span className="text-white text-lg font-bold">v</span>
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-slate-50">Recomendación de Vicu</h3>
-                      <p className="text-sm text-slate-400">Basada en tu progreso</p>
-                    </div>
-                  </div>
+            {/* Vicu Recommendation Card - State Machine based */}
+            {(() => {
+              const currentStage = experiment.status as ExperimentStage;
+              const stageProgress = { isComplete: totalSteps > 0 && completedSteps === totalSteps };
+              const stageTransition = getRecommendationAction(currentStage, stageProgress);
 
-                  {/* Action badge */}
-                  <div className="mb-4">
-                    <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${
-                      vicuRecommendation.action === "escalar" ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" :
-                      vicuRecommendation.action === "iterar" ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" :
-                      vicuRecommendation.action === "pausar" ? "bg-slate-500/20 text-slate-400 border border-slate-500/30" :
-                      "bg-red-500/20 text-red-400 border border-red-500/30"
-                    }`}>
-                      {vicuRecommendation.action === "escalar" && "🚀 Cambiar a En marcha"}
-                      {vicuRecommendation.action === "iterar" && "🔄 Cambiar a Ajustando"}
-                      {vicuRecommendation.action === "pausar" && "⏸️ Cambiar a En pausa"}
-                      {vicuRecommendation.action === "cerrar" && "✓ Cambiar a Cerrado"}
-                    </span>
-                  </div>
-
-                  {/* Title and summary */}
-                  <h4 className="text-base font-medium text-slate-100 mb-2">{vicuRecommendation.title}</h4>
-                  <p className="text-sm text-slate-300 leading-relaxed mb-4">{vicuRecommendation.summary}</p>
-
-                  {/* Reasons */}
-                  {vicuRecommendation.reasons && vicuRecommendation.reasons.length > 0 && (
-                    <div className="mb-4 p-3 rounded-xl bg-white/[0.02] border border-white/5">
-                      <p className="text-xs text-slate-500 uppercase tracking-wider mb-2 font-medium">Por qué</p>
-                      <ul className="space-y-1.5">
-                        {vicuRecommendation.reasons.map((reason, i) => (
-                          <li key={i} className="text-sm text-slate-400 flex items-start gap-2">
-                            <span className="text-indigo-400 mt-1">•</span>
-                            {reason}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Next focus */}
-                  {vicuRecommendation.suggested_next_focus && (
-                    <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 mb-4">
-                      <p className="text-xs text-indigo-400 uppercase tracking-wider mb-1 font-medium">Siguiente enfoque</p>
-                      <p className="text-sm text-slate-200">{vicuRecommendation.suggested_next_focus}</p>
-                    </div>
-                  )}
-
-                  {/* Accept recommendation button */}
-                  <button
-                    onClick={handleAcceptRecommendation}
-                    disabled={isStatusUpdating || hasAcceptedRecommendation}
-                    className={`w-full px-4 py-3 rounded-xl font-medium transition-all flex items-center justify-center gap-2 ${
-                      hasAcceptedRecommendation
-                        ? "bg-emerald-600 text-white cursor-default"
-                        : isStatusUpdating
-                          ? "opacity-70 cursor-wait"
-                          : vicuRecommendation.action === "escalar" ? "bg-emerald-500 hover:bg-emerald-400 text-white active:scale-[0.98]" :
-                            vicuRecommendation.action === "iterar" ? "bg-amber-500 hover:bg-amber-400 text-white active:scale-[0.98]" :
-                            vicuRecommendation.action === "pausar" ? "bg-slate-500 hover:bg-slate-400 text-white active:scale-[0.98]" :
-                            "bg-red-500 hover:bg-red-400 text-white active:scale-[0.98]"
-                    }`}
-                  >
-                    {hasAcceptedRecommendation ? (
-                      <>
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              // Closed state: show summary only
+              if (currentStage === "kill") {
+                return (
+                  <div className="card-premium px-5 py-5 border-slate-500/20">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-500 to-slate-600 flex items-center justify-center shadow-lg shadow-slate-500/25">
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
-                        <span>Estado cambiado a {acceptedStatus ? STATUS_LABELS[acceptedStatus] : ""}</span>
-                      </>
-                    ) : isStatusUpdating ? (
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-slate-300">Objetivo cerrado</h3>
+                        <p className="text-sm text-slate-500">Has completado este objetivo</p>
+                      </div>
+                    </div>
+                    <p className="text-sm text-slate-400">
+                      Este objetivo ya está cerrado. Puedes revisar tu historial de recomendaciones abajo o crear un nuevo objetivo.
+                    </p>
+                  </div>
+                );
+              }
+
+              // Paused state: show paused message
+              if (currentStage === "paused") {
+                return (
+                  <div className="card-premium px-5 py-5 border-slate-500/20">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-500 to-slate-600 flex items-center justify-center shadow-lg shadow-slate-500/25">
+                        <span className="text-white text-lg">⏸️</span>
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-slate-300">Objetivo en pausa</h3>
+                        <p className="text-sm text-slate-500">Retómalo cuando estés listo</p>
+                      </div>
+                    </div>
+                    <p className="text-sm text-slate-400">
+                      Este objetivo está pausado. Cuando quieras retomarlo, cambia su estado manualmente.
+                    </p>
+                  </div>
+                );
+              }
+
+              // Plan complete + transition available: show transition card
+              if (stageTransition) {
+                return (
+                  <div className="card-premium px-5 py-5 border-indigo-500/20">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+                        <span className="text-white text-lg font-bold">v</span>
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-slate-50">Recomendación de Vicu</h3>
+                        <p className="text-sm text-slate-400">Basada en tu progreso</p>
+                      </div>
+                    </div>
+
+                    {/* Success banner if just accepted */}
+                    {hasAcceptedRecommendation && acceptedStatus && (
+                      <div className="mb-4 p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/30">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span className="text-sm font-medium text-emerald-400">
+                            Estado cambiado a {STATUS_LABELS[acceptedStatus]}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Stage transition badge */}
+                    <div className="mb-4">
+                      <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${
+                        stageTransition.nextStage === "scale" ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" :
+                        stageTransition.nextStage === "iterate" ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" :
+                        "bg-slate-500/20 text-slate-400 border border-slate-500/30"
+                      }`}>
+                        {stageTransition.emoji} {stageTransition.label.replace("Aceptar: ", "")}
+                      </span>
+                    </div>
+
+                    {/* Completion message */}
+                    <h4 className="text-base font-medium text-slate-100 mb-2">
+                      ¡Plan de {STAGE_LABELS[currentStage]} completado!
+                    </h4>
+                    <p className="text-sm text-slate-300 leading-relaxed mb-4">
+                      Has completado {completedSteps} de {totalSteps} pasos de esta etapa.
+                      {stageTransition.nextStage === "kill"
+                        ? " Es hora de cerrar este objetivo y celebrar el logro."
+                        : ` Es hora de avanzar a la siguiente fase: ${STAGE_LABELS[stageTransition.nextStage]}.`
+                      }
+                    </p>
+
+                    {/* AI recommendation details if available */}
+                    {vicuRecommendation && (
                       <>
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        <span>Actualizando...</span>
+                        {vicuRecommendation.reasons && vicuRecommendation.reasons.length > 0 && (
+                          <div className="mb-4 p-3 rounded-xl bg-white/[0.02] border border-white/5">
+                            <p className="text-xs text-slate-500 uppercase tracking-wider mb-2 font-medium">Por qué</p>
+                            <ul className="space-y-1.5">
+                              {vicuRecommendation.reasons.map((reason, i) => (
+                                <li key={i} className="text-sm text-slate-400 flex items-start gap-2">
+                                  <span className="text-indigo-400 mt-1">•</span>
+                                  {reason}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {vicuRecommendation.suggested_next_focus && stageTransition.nextStage !== "kill" && (
+                          <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 mb-4">
+                            <p className="text-xs text-indigo-400 uppercase tracking-wider mb-1 font-medium">Siguiente enfoque</p>
+                            <p className="text-sm text-slate-200">{vicuRecommendation.suggested_next_focus}</p>
+                          </div>
+                        )}
                       </>
-                    ) : (
-                      <>
-                        {vicuRecommendation.action === "escalar" && "🚀"}
-                        {vicuRecommendation.action === "iterar" && "🔄"}
-                        {vicuRecommendation.action === "pausar" && "⏸️"}
-                        {vicuRecommendation.action === "cerrar" && "✓"}
-                        <span>
-                          Aceptar: Cambiar a {
-                            vicuRecommendation.action === "escalar" ? "En marcha" :
-                            vicuRecommendation.action === "iterar" ? "Ajustando" :
-                            vicuRecommendation.action === "pausar" ? "En pausa" :
-                            "Cerrado"
-                          }
+                    )}
+
+                    {/* Accept transition button */}
+                    {!hasAcceptedRecommendation && (
+                      <button
+                        onClick={() => handleAcceptStageTransition(stageTransition)}
+                        disabled={isStatusUpdating || isLoadingRecommendation}
+                        className={`w-full px-4 py-3 rounded-xl font-medium transition-all flex items-center justify-center gap-2 text-white active:scale-[0.98] ${
+                          isStatusUpdating || isLoadingRecommendation ? "opacity-70 cursor-wait" : stageTransition.buttonColor
+                        }`}
+                      >
+                        {isStatusUpdating || isLoadingRecommendation ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            <span>{isLoadingRecommendation ? "Pensando..." : "Actualizando..."}</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>{stageTransition.emoji}</span>
+                            <span>{stageTransition.label}</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                );
+              }
+
+              // Plan in progress: show minimal progress indicator
+              if (completedSteps >= 2 && totalSteps > 0) {
+                return (
+                  <div className="card-premium px-4 py-3 border-white/5">
+                    <div className="flex items-center gap-3">
+                      <div className="w-5 h-5 rounded-full bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center flex-shrink-0">
+                        <span className="text-white text-[10px] font-bold">v</span>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${recommendation.color.bg} ${recommendation.color.text}`}>
+                          {recommendation.tagLabel}
                         </span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              ) : (
-                <div className="card-premium px-5 py-5 border-emerald-500/20">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/25">
-                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-emerald-400">¡Plan completado!</h3>
-                      <p className="text-sm text-slate-400">Completaste todos los pasos</p>
+                        <p className="text-sm text-slate-300">{recommendation.title}</p>
+                      </div>
                     </div>
                   </div>
-                  <p className="text-sm text-slate-300 mb-4">
-                    Has completado {completedSteps} de {totalSteps} pasos. Genera una recomendación de Vicu para saber qué hacer a continuación.
-                  </p>
-                  <button
-                    onClick={handleGenerateRecommendation}
-                    disabled={isLoadingRecommendation}
-                    className="w-full px-4 py-3 rounded-xl bg-indigo-500 text-white font-medium hover:bg-indigo-400 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                );
+              }
+
+              // Default: no card shown
+              return null;
+            })()}
+
+            {/* Recommendation History - Collapsible section */}
+            {vicuRecommendationHistory.length > 0 && (
+              <div className="mt-4">
+                <button
+                  onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
+                  className="flex items-center gap-2 text-sm text-slate-400 hover:text-slate-300 transition-colors"
+                >
+                  <svg
+                    className={`w-4 h-4 transition-transform ${isHistoryExpanded ? "rotate-90" : ""}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
                   >
-                    {isLoadingRecommendation ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        <span>Generando recomendación...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-lg">✨</span>
-                        <span>Generar recomendación de Vicu</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              )
-            ) : completedSteps >= 2 && (
-              /* Minimal recommendation while plan is in progress */
-              <div className="card-premium px-4 py-3 border-white/5">
-                <div className="flex items-center gap-3">
-                  <div className="w-5 h-5 rounded-full bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center flex-shrink-0">
-                    <span className="text-white text-[10px] font-bold">v</span>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                  <span>Recomendaciones anteriores ({vicuRecommendationHistory.length})</span>
+                </button>
+
+                {isHistoryExpanded && (
+                  <div className="mt-3 space-y-3">
+                    {[...vicuRecommendationHistory].reverse().map((rec, index) => (
+                      <div
+                        key={`${rec.generated_at}-${index}`}
+                        className="card-glass px-4 py-3 opacity-70"
+                      >
+                        <div className="flex items-center gap-2 mb-2">
+                          {/* Stage badge */}
+                          {rec.for_stage && (
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                              rec.for_stage === "testing" ? "bg-blue-500/20 text-blue-400" :
+                              rec.for_stage === "scale" ? "bg-emerald-500/20 text-emerald-400" :
+                              rec.for_stage === "iterate" ? "bg-amber-500/20 text-amber-400" :
+                              rec.for_stage === "paused" ? "bg-slate-500/20 text-slate-400" :
+                              "bg-red-500/20 text-red-400"
+                            }`}>
+                              {STAGE_LABELS[rec.for_stage]}
+                            </span>
+                          )}
+                          {/* Action badge */}
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            rec.action === "escalar" ? "bg-emerald-500/10 text-emerald-400/80" :
+                            rec.action === "iterar" ? "bg-amber-500/10 text-amber-400/80" :
+                            rec.action === "pausar" ? "bg-slate-500/10 text-slate-400/80" :
+                            "bg-red-500/10 text-red-400/80"
+                          }`}>
+                            {rec.action === "escalar" && "Escalar"}
+                            {rec.action === "iterar" && "Iterar"}
+                            {rec.action === "pausar" && "Pausar"}
+                            {rec.action === "cerrar" && "Cerrar"}
+                          </span>
+                          {/* Date */}
+                          <span className="text-xs text-slate-500 ml-auto">
+                            {new Date(rec.generated_at).toLocaleDateString("es-ES", {
+                              day: "numeric",
+                              month: "short",
+                            })}
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-300 font-medium">{rec.title}</p>
+                        <p className="text-xs text-slate-400 mt-1 line-clamp-2">{rec.summary}</p>
+                        {rec.suggested_next_focus && (
+                          <p className="text-xs text-indigo-400/70 mt-2 italic">
+                            Enfoque: {rec.suggested_next_focus}
+                          </p>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${recommendation.color.bg} ${recommendation.color.text}`}>
-                      {recommendation.tagLabel}
-                    </span>
-                    <p className="text-sm text-slate-300">{recommendation.title}</p>
-                  </div>
-                </div>
+                )}
               </div>
             )}
 
@@ -1970,11 +2237,6 @@ export default function ExperimentPage() {
                               ) : (
                                 <p className="font-medium text-slate-100">Avance registrado</p>
                               )}
-                              {isPending && (
-                                <span className="px-2 py-0.5 rounded-full text-xs bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
-                                  Pendiente
-                                </span>
-                              )}
                               {hasContent && (
                                 <span className="px-2 py-0.5 rounded-full text-xs bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
                                   Con notas
@@ -1984,21 +2246,33 @@ export default function ExperimentPage() {
                             {checkin.step_description && (
                               <p className="text-sm text-slate-400 mt-0.5 line-clamp-2">{checkin.step_description}</p>
                             )}
-                            <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
+                            <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-slate-500">
                               <span>{new Date(checkin.created_at).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}</span>
+                              {/* Pill de FASE del objetivo */}
+                              <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                                (checkin.for_stage || experiment.status) === "testing" ? "bg-blue-500/20 text-blue-400" :
+                                (checkin.for_stage || experiment.status) === "scale" ? "bg-emerald-500/20 text-emerald-400" :
+                                (checkin.for_stage || experiment.status) === "iterate" ? "bg-amber-500/20 text-amber-400" :
+                                (checkin.for_stage || experiment.status) === "paused" ? "bg-slate-500/20 text-slate-400" :
+                                "bg-red-500/20 text-red-400"
+                              }`}>
+                                {STAGE_LABELS[(checkin.for_stage || experiment.status) as ExperimentStage] || "Arrancando"}
+                              </span>
+                              {/* Pill de ESTADO del paso */}
+                              <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                                isPending
+                                  ? "bg-indigo-500/20 text-indigo-400"
+                                  : "bg-emerald-500/20 text-emerald-400"
+                              }`}>
+                                {isPending ? "Pendiente" : "Completado"}
+                              </span>
                               {checkin.effort && (
-                                <span className={`px-2 py-0.5 rounded-full ${
-                                  checkin.effort === "muy_pequeno" ? "bg-emerald-500/20 text-emerald-400" :
-                                  checkin.effort === "pequeno" ? "bg-amber-500/20 text-amber-400" :
-                                  "bg-orange-500/20 text-orange-400"
+                                <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                                  checkin.effort === "muy_pequeno" ? "bg-slate-500/20 text-slate-400" :
+                                  checkin.effort === "pequeno" ? "bg-slate-500/20 text-slate-400" :
+                                  "bg-slate-500/20 text-slate-400"
                                 }`}>
                                   {checkin.effort === "muy_pequeno" ? "~5 min" : checkin.effort === "pequeno" ? "~20 min" : "~1 hora"}
-                                </span>
-                              )}
-                              {checkin.user_state && (
-                                <span className="text-slate-500">
-                                  {checkin.user_state === "not_started" ? "Empezando" :
-                                   checkin.user_state === "stuck" ? "Destrabando" : "Avanzando"}
                                 </span>
                               )}
                               {/* Visual cue that card is clickable */}
@@ -2032,6 +2306,8 @@ export default function ExperimentPage() {
             )}
 
             {/* HOY CON ESTE PROYECTO - Bloque principal con copy dinámico según estado */}
+            {/* Hide this block when objective is closed */}
+            {experiment.status !== "kill" && (
             <div className="card-accent px-5 py-5 border-indigo-500/30">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
@@ -2192,6 +2468,7 @@ export default function ExperimentPage() {
                 </div>
               )}
             </div>
+            )}
 
             {/* Mobile-only Metrics - HIDDEN for now (not functional) */}
             {/*

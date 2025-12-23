@@ -18,7 +18,7 @@ function ensureDescription(description: string | null | undefined, title: string
 
 export async function POST(request: NextRequest) {
   const data = await request.json();
-  const { experiment_id, title, description, detected_category, first_steps, experiment_type, surface_type } = data;
+  const { experiment_id, title, description, detected_category, first_steps, experiment_type, surface_type, for_stage } = data;
 
   if (!experiment_id) {
     return NextResponse.json(
@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
       effort: step.effort,
       user_state: "not_started",
       day_date: new Date().toISOString().split("T")[0],
+      for_stage: for_stage || "testing", // Default to testing if not specified
     }));
 
     const { data: insertedCheckins, error: insertError } = await supabaseServer

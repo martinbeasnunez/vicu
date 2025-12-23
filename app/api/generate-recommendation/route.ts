@@ -23,6 +23,7 @@ function getSupabase(): SupabaseClient {
 }
 
 export type VicuRecommendationAction = "escalar" | "iterar" | "pausar" | "cerrar";
+export type ExperimentStage = "testing" | "scale" | "iterate" | "kill" | "paused";
 
 export interface VicuRecommendationData {
   action: VicuRecommendationAction;
@@ -31,10 +32,13 @@ export interface VicuRecommendationData {
   reasons: string[];
   suggested_next_focus: string;
   generated_at: string;
+  for_stage: ExperimentStage; // The stage this recommendation was generated for
 }
 
 export interface GenerateRecommendationRequest {
   experiment_id: string;
+  force_new?: boolean; // If true, generate a new recommendation even if one exists
+  previous_next_focus?: string; // The "Siguiente enfoque" from the previous recommendation
 }
 
 export interface GenerateRecommendationResponse {
@@ -53,7 +57,7 @@ const ACTION_LABELS: Record<VicuRecommendationAction, string> = {
 export async function POST(request: NextRequest) {
   try {
     const body: GenerateRecommendationRequest = await request.json();
-    const { experiment_id } = body;
+    const { experiment_id, force_new, previous_next_focus } = body;
 
     if (!experiment_id) {
       return NextResponse.json(
@@ -76,12 +80,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // If recommendation already exists, return it
-    if (experiment.vicu_recommendation) {
-      return NextResponse.json({
-        success: true,
-        recommendation: experiment.vicu_recommendation as VicuRecommendationData,
-      });
+    const currentStage: ExperimentStage = experiment.status || "testing";
+
+    // If recommendation already exists and we're not forcing a new one, return it
+    // BUT only if the recommendation was for the current stage
+    if (experiment.vicu_recommendation && !force_new) {
+      const existingRec = experiment.vicu_recommendation as VicuRecommendationData;
+      // If the recommendation has for_stage and it matches current, return it
+      // If it doesn't have for_stage (old format), also return it for backwards compatibility
+      if (!existingRec.for_stage || existingRec.for_stage === currentStage) {
+        return NextResponse.json({
+          success: true,
+          recommendation: existingRec,
+        });
+      }
+      // Otherwise, the recommendation is for a different stage - generate new one
     }
 
     // Fetch checkins (steps) for context
@@ -134,6 +147,16 @@ DESCRIPCIÓN/OBJETIVO: ${experiment.description || "Sin descripción"}`;
       projectContext += `\nAUTOEVALUACIÓN DEL USUARIO: ${selfResultLabels[experiment.self_result] || experiment.self_result}`;
     }
 
+    // Add current stage context
+    const stageLabels: Record<ExperimentStage, string> = {
+      testing: "Arrancando",
+      scale: "En marcha",
+      iterate: "Ajustando",
+      kill: "Cerrado",
+      paused: "En pausa",
+    };
+    projectContext += `\n\nETAPA ACTUAL: ${stageLabels[currentStage]} (${currentStage})`;
+
     // Add steps context
     projectContext += `\n\nPROGRESO DEL PLAN:
 - Total de pasos: ${totalSteps}
@@ -158,6 +181,12 @@ DESCRIPCIÓN/OBJETIVO: ${experiment.description || "Sin descripción"}`;
       pendingSteps.forEach((step, i) => {
         projectContext += `\n${i + 1}. ${step.step_title || "Paso sin título"}`;
       });
+    }
+
+    // If we have a previous recommendation's next focus, include it as context
+    if (previous_next_focus) {
+      projectContext += `\n\nENFOQUE DE LA ETAPA ANTERIOR (usa esto como base para la nueva recomendación):
+"${previous_next_focus}"`;
     }
 
     const systemPrompt = `Eres Vicu, un estratega de growth que ayuda a emprendedores y personas a tomar decisiones inteligentes sobre sus proyectos y objetivos.
@@ -216,17 +245,32 @@ ${projectContext}
       );
     }
 
-    const parsed = JSON.parse(content) as Omit<VicuRecommendationData, "generated_at">;
+    const parsed = JSON.parse(content) as Omit<VicuRecommendationData, "generated_at" | "for_stage">;
 
     const recommendation: VicuRecommendationData = {
       ...parsed,
       generated_at: new Date().toISOString(),
+      for_stage: currentStage,
     };
 
-    // Save to database
+    // Build recommendation history - add previous recommendation to history if exists
+    let newHistory: VicuRecommendationData[] = [];
+    const existingHistory = experiment.vicu_recommendation_history as VicuRecommendationData[] | null;
+    if (existingHistory && Array.isArray(existingHistory)) {
+      newHistory = [...existingHistory];
+    }
+    // If there's a current recommendation, move it to history
+    if (experiment.vicu_recommendation) {
+      newHistory.push(experiment.vicu_recommendation as VicuRecommendationData);
+    }
+
+    // Save to database - update current recommendation and history
     const { error: updateError } = await getSupabase()
       .from("experiments")
-      .update({ vicu_recommendation: recommendation })
+      .update({
+        vicu_recommendation: recommendation,
+        vicu_recommendation_history: newHistory,
+      })
       .eq("id", experiment_id);
 
     if (updateError) {
