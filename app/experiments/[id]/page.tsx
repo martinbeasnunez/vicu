@@ -245,6 +245,19 @@ function buildNextStepFromStage(status: ExperimentStatus, nextFocus?: string | n
   }
 }
 
+// Fallback description for steps without one
+const DESCRIPTION_FALLBACK = "Describe brevemente qué harás en este paso para acercarte a tu objetivo.";
+
+function ensureStepDescription(description: string | null | undefined, title?: string | null): string {
+  if (description && description.trim().length > 0) {
+    return description.trim();
+  }
+  if (title && title.trim().length > 0) {
+    return `Acción: ${title.trim()}`;
+  }
+  return DESCRIPTION_FALLBACK;
+}
+
 export default function ExperimentPage() {
   const params = useParams();
   const router = useRouter();
@@ -308,6 +321,9 @@ export default function ExperimentPage() {
 
   // Plan colapsable state
   const [isPlanExpanded, setIsPlanExpanded] = useState(false);
+
+  // Brief collapsable state (inside Objetivo)
+  const [isBriefExpanded, setIsBriefExpanded] = useState(false);
 
   // Messages bank modal state
   const [isMessagesBankOpen, setIsMessagesBankOpen] = useState(false);
@@ -454,13 +470,15 @@ export default function ExperimentPage() {
         }
       }
 
-      // Insert check-in record
+      // Insert check-in record (ensure description is never empty)
       const checkinRecord = {
         experiment_id: experiment.id,
         status: "done",
         user_state: checkinData?.userState || null,
         step_title: checkinData?.stepTitle || null,
-        step_description: checkinData?.stepDescription || null,
+        step_description: checkinData?.stepDescription
+          ? ensureStepDescription(checkinData.stepDescription, checkinData.stepTitle)
+          : null,
         effort: checkinData?.effort || null,
         source: "move_project",
         day_date: dayDate,
@@ -691,7 +709,7 @@ export default function ExperimentPage() {
         status: "pending",
         user_state: inlineSelectedState || null,
         step_title: inlineNextStep.next_step_title,
-        step_description: inlineNextStep.next_step_description,
+        step_description: ensureStepDescription(inlineNextStep.next_step_description, inlineNextStep.next_step_title),
         effort: inlineNextStep.effort,
         source: "move_project",
         day_date: dayDate,
@@ -1483,7 +1501,7 @@ export default function ExperimentPage() {
               </div>
             </div>
 
-            {/* Objetivo del proyecto - Collapsible by default */}
+            {/* Objetivo del proyecto - Collapsible by default, now includes Brief */}
             <div className="card-premium px-5 py-4">
               <div className="flex items-center justify-between">
                 <button
@@ -1528,7 +1546,7 @@ export default function ExperimentPage() {
 
               {/* Expanded view */}
               {(isObjectiveExpanded || isEditingObjective) && (
-                <div className="mt-3">
+                <div className="mt-3 space-y-4">
                   {isEditingObjective ? (
                     <div className="space-y-3">
                       <textarea
@@ -1565,6 +1583,66 @@ export default function ExperimentPage() {
                         </span>
                       )}
                     </p>
+                  )}
+
+                  {/* Brief del objetivo - Accordion inside Objetivo */}
+                  {!isEditingObjective && (experiment.target_audience || experiment.main_pain || experiment.main_promise || experiment.main_cta) && (
+                    <div className="mt-4 pt-4 border-t border-slate-700/50">
+                      <button
+                        onClick={() => setIsBriefExpanded(!isBriefExpanded)}
+                        className="flex items-center justify-between w-full text-left group"
+                      >
+                        <div className="flex items-center gap-2">
+                          <svg
+                            className={`w-3.5 h-3.5 text-slate-500 transition-transform duration-200 ${isBriefExpanded ? "rotate-90" : ""}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                          <span className="text-sm font-medium text-slate-400">Brief del objetivo</span>
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditModal();
+                          }}
+                          className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          Editar
+                        </button>
+                      </button>
+
+                      {isBriefExpanded && (
+                        <dl className="mt-3 space-y-2.5 text-sm pl-5">
+                          {experiment.target_audience && (
+                            <div className="flex gap-2">
+                              <dt className="text-slate-500 flex-shrink-0 w-20">Audiencia</dt>
+                              <dd className="text-slate-300">{experiment.target_audience}</dd>
+                            </div>
+                          )}
+                          {experiment.main_pain && (
+                            <div className="flex gap-2">
+                              <dt className="text-slate-500 flex-shrink-0 w-20">Dolor</dt>
+                              <dd className="text-slate-300">{experiment.main_pain}</dd>
+                            </div>
+                          )}
+                          {experiment.main_promise && (
+                            <div className="flex gap-2">
+                              <dt className="text-slate-500 flex-shrink-0 w-20">Promesa</dt>
+                              <dd className="text-slate-300">{experiment.main_promise}</dd>
+                            </div>
+                          )}
+                          {experiment.main_cta && (
+                            <div className="flex gap-2">
+                              <dt className="text-slate-500 flex-shrink-0 w-20">Acción</dt>
+                              <dd className="text-slate-300">{experiment.main_cta}</dd>
+                            </div>
+                          )}
+                        </dl>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
@@ -2263,40 +2341,7 @@ export default function ExperimentPage() {
               )}
             </div>
 
-            {/* Brief Card */}
-            <div className="card-premium px-5 py-4">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider">Brief</h3>
-                <button onClick={openEditModal} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Editar</button>
-              </div>
-              <dl className="space-y-3 text-sm">
-                {experiment.target_audience && (
-                  <div>
-                    <dt className="text-slate-500">Audiencia</dt>
-                    <dd className="text-slate-200 mt-0.5">{experiment.target_audience}</dd>
-                  </div>
-                )}
-                {experiment.main_pain && (
-                  <div>
-                    <dt className="text-slate-500">Dolor</dt>
-                    <dd className="text-slate-200 mt-0.5">{experiment.main_pain}</dd>
-                  </div>
-                )}
-                {experiment.main_promise && (
-                  <div>
-                    <dt className="text-slate-500">Promesa</dt>
-                    <dd className="text-slate-200 mt-0.5">{experiment.main_promise}</dd>
-                  </div>
-                )}
-                {experiment.main_cta && (
-                  <div>
-                    <dt className="text-slate-500">Acción</dt>
-                    <dd className="text-slate-200 mt-0.5">{experiment.main_cta}</dd>
-                  </div>
-                )}
-              </dl>
-            </div>
-
+            {/* Brief Card - MOVED to inside Objetivo block above */}
             {/* Ver Landing button - Hidden from UI (surface_type logic removed) */}
           </div>
         </div>
@@ -2540,77 +2585,97 @@ export default function ExperimentPage() {
         actionsError={actionsError}
       />
 
-      {/* Step Detail Modal */}
+      {/* Step Detail Modal - Improved design with better hierarchy and spacing */}
       {selectedStep && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           {/* Backdrop */}
           <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
             onClick={closeStepDetail}
           />
 
-          {/* Modal */}
-          <div className="relative bg-slate-800 rounded-2xl w-full max-w-lg max-h-[85vh] overflow-hidden shadow-2xl border border-slate-700/50 flex flex-col">
-            {/* Header */}
-            <div className="p-5 border-b border-slate-700/50">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      selectedStep.status === "done"
-                        ? "bg-emerald-500/20 text-emerald-400"
-                        : "bg-amber-500/20 text-amber-400"
-                    }`}>
-                      {selectedStep.status === "done" ? "Completado" : "Pendiente"}
-                    </span>
-                  </div>
-                  <h3 className="text-lg font-semibold text-white">
-                    {selectedStep.step_title}
-                  </h3>
-                </div>
-                <button
-                  onClick={closeStepDetail}
-                  className="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-colors"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
+          {/* Modal - Increased max-width and padding for more air */}
+          <div className="relative bg-slate-800 rounded-2xl w-full max-w-xl max-h-[90vh] overflow-hidden shadow-2xl border border-slate-700/50 flex flex-col">
+            {/* Header with close button only */}
+            <div className="absolute top-4 right-4 z-10">
+              <button
+                onClick={closeStepDetail}
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
 
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              {/* Step Description */}
+            {/* Content with generous padding */}
+            <div className="flex-1 overflow-y-auto p-8 space-y-6">
+              {/* 1. Status Badge at top */}
+              <div className="flex items-center gap-2">
+                <span className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-full font-medium ${
+                  selectedStep.status === "done"
+                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                    : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                }`}>
+                  {selectedStep.status === "done" ? (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Completado
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Pendiente
+                    </>
+                  )}
+                </span>
+              </div>
+
+              {/* Completed step message */}
+              {selectedStep.status === "done" && (
+                <p className="text-sm text-emerald-400/80 -mt-2">
+                  Este paso ya cuenta para tu progreso.
+                </p>
+              )}
+
+              {/* 2. Title - Strong H2 */}
+              <h2 className="text-2xl font-bold text-white leading-tight pr-10">
+                {selectedStep.step_title || "Paso del objetivo"}
+              </h2>
+
+              {/* 3. Description Block */}
               {selectedStep.step_description && (
-                <div className="bg-slate-700/30 rounded-xl p-4">
-                  <p className="text-sm text-slate-400 mb-1">Descripción</p>
-                  <p className="text-slate-200">{selectedStep.step_description}</p>
+                <div className="bg-slate-700/30 rounded-xl p-5 border border-slate-600/30">
+                  <p className="text-slate-200 leading-relaxed">{selectedStep.step_description}</p>
                 </div>
               )}
 
-              {/* User Content Textarea */}
-              <div>
-                <label className="block text-sm text-slate-400 mb-2">
+              {/* 4. Notes/Draft Section */}
+              <div className="space-y-3">
+                <label className="block text-sm font-medium text-slate-300">
                   Tus notas o borrador
                 </label>
                 <textarea
                   value={stepUserContent}
                   onChange={(e) => setStepUserContent(e.target.value)}
                   placeholder="Escribe aquí tu contenido, notas o borrador para este paso..."
-                  className="w-full h-40 px-4 py-3 bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50"
+                  className="w-full h-48 px-5 py-4 bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 text-base leading-relaxed"
                 />
               </div>
 
-              {/* Generate Ideas Button */}
+              {/* 5. Generate Button - Full width below textarea */}
               <button
                 onClick={handleGenerateIdeas}
                 disabled={isGeneratingIdeas}
-                className="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-purple-600/20 to-indigo-600/20 border border-purple-500/30 text-purple-300 hover:from-purple-600/30 hover:to-indigo-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full px-5 py-4 rounded-xl bg-gradient-to-r from-purple-600/20 to-indigo-600/20 border border-purple-500/30 text-purple-300 hover:from-purple-600/30 hover:to-indigo-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50 font-medium"
               >
                 {isGeneratingIdeas ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-purple-400/30 border-t-purple-400 rounded-full animate-spin" />
+                    <div className="w-5 h-5 border-2 border-purple-400/30 border-t-purple-400 rounded-full animate-spin" />
                     <span>Generando borrador...</span>
                   </>
                 ) : (
@@ -2622,21 +2687,49 @@ export default function ExperimentPage() {
                   </>
                 )}
               </button>
+
+              {/* 6. Meta info - Discrete at bottom */}
+              <div className="flex flex-wrap items-center gap-4 pt-2 text-xs text-slate-500 border-t border-slate-700/30">
+                <span className="flex items-center gap-1.5">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  {new Date(selectedStep.created_at).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })}
+                </span>
+                {selectedStep.effort && (
+                  <span className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full ${
+                    selectedStep.effort === "muy_pequeno" ? "bg-emerald-500/10 text-emerald-400" :
+                    selectedStep.effort === "pequeno" ? "bg-amber-500/10 text-amber-400" :
+                    "bg-orange-500/10 text-orange-400"
+                  }`}>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {selectedStep.effort === "muy_pequeno" ? "~5 min" : selectedStep.effort === "pequeno" ? "~20 min" : "~1 hora"}
+                  </span>
+                )}
+                {selectedStep.user_state && (
+                  <span className="flex items-center gap-1.5">
+                    {selectedStep.user_state === "not_started" ? "Arrancando" :
+                     selectedStep.user_state === "stuck" ? "Destrabando" : "Avanzando"}
+                  </span>
+                )}
+              </div>
             </div>
 
-            {/* Footer */}
-            <div className="p-5 border-t border-slate-700/50 bg-slate-800/50">
-              <div className="flex gap-3">
+            {/* 7. Footer with action buttons */}
+            <div className="p-6 border-t border-slate-700/50 bg-slate-800/80">
+              <div className="flex gap-4">
                 <button
                   onClick={closeStepDetail}
-                  className="flex-1 px-4 py-2.5 rounded-xl bg-slate-700/50 text-slate-300 hover:bg-slate-700 transition-colors"
+                  className="flex-1 px-5 py-3 rounded-xl bg-transparent border border-slate-600 text-slate-300 hover:bg-slate-700/50 hover:border-slate-500 transition-colors font-medium"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleSaveStepContent}
                   disabled={isSavingStepContent}
-                  className="flex-1 px-4 py-2.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="flex-1 px-5 py-3 rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 font-medium"
                 >
                   {isSavingStepContent ? (
                     <>

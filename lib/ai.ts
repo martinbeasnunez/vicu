@@ -573,7 +573,7 @@ export async function generateInitialSteps(
   if (objective.first_steps && objective.first_steps.length > 0) {
     return objective.first_steps.slice(0, 3).map((step, index) => ({
       title: step,
-      description: "",
+      description: `Acción concreta: ${step}`,
       effort: index === 0 ? "muy_pequeno" : "pequeno",
     }));
   }
@@ -636,33 +636,33 @@ function getDefaultSteps(category?: string | null): InitialStep[] {
   switch (category) {
     case "health":
       return [
-        { title: "Define tu métrica principal (peso, días de ejercicio, etc.)", description: "", effort: "muy_pequeno" },
-        { title: "Elige una acción mínima que puedas hacer hoy", description: "", effort: "muy_pequeno" },
-        { title: "Programa un recordatorio para mañana", description: "", effort: "muy_pequeno" },
+        { title: "Define tu métrica principal (peso, días de ejercicio, etc.)", description: "Elige un número o indicador claro que puedas medir cada semana.", effort: "muy_pequeno" },
+        { title: "Elige una acción mínima que puedas hacer hoy", description: "Busca algo tan pequeño que no haya excusa para no hacerlo.", effort: "muy_pequeno" },
+        { title: "Programa un recordatorio para mañana", description: "Configura una alarma o notificación para no olvidar tu compromiso.", effort: "muy_pequeno" },
       ];
     case "business":
       return [
-        { title: "Escribe en una frase a quién le vendes", description: "", effort: "muy_pequeno" },
-        { title: "Haz una lista de 5 personas que podrían ser clientes", description: "", effort: "pequeno" },
-        { title: "Contacta a la primera persona de la lista", description: "", effort: "pequeno" },
+        { title: "Escribe en una frase a quién le vendes", description: "Define con claridad quién es tu cliente ideal en una sola oración.", effort: "muy_pequeno" },
+        { title: "Haz una lista de 5 personas que podrían ser clientes", description: "Piensa en contactos reales que encajen con tu perfil de cliente.", effort: "pequeno" },
+        { title: "Contacta a la primera persona de la lista", description: "Envía un mensaje corto presentando tu propuesta de valor.", effort: "pequeno" },
       ];
     case "learning":
       return [
-        { title: "Define qué significa 'éxito' en este aprendizaje", description: "", effort: "muy_pequeno" },
-        { title: "Encuentra un recurso gratuito para empezar", description: "", effort: "pequeno" },
-        { title: "Dedica 15 minutos a explorar ese recurso", description: "", effort: "pequeno" },
+        { title: "Define qué significa 'éxito' en este aprendizaje", description: "Escribe cómo sabrás que ya aprendiste lo que necesitas.", effort: "muy_pequeno" },
+        { title: "Encuentra un recurso gratuito para empezar", description: "Busca un tutorial, curso o artículo que te introduzca al tema.", effort: "pequeno" },
+        { title: "Dedica 15 minutos a explorar ese recurso", description: "Bloquea tiempo hoy para darle una primera mirada al material.", effort: "pequeno" },
       ];
     case "habits":
       return [
-        { title: "Elige el momento exacto del día para tu hábito", description: "", effort: "muy_pequeno" },
-        { title: "Prepara lo que necesitas para hacerlo mañana", description: "", effort: "muy_pequeno" },
-        { title: "Hazlo una vez hoy, aunque sea en versión mínima", description: "", effort: "pequeno" },
+        { title: "Elige el momento exacto del día para tu hábito", description: "Define la hora y el contexto en que realizarás esta acción.", effort: "muy_pequeno" },
+        { title: "Prepara lo que necesitas para hacerlo mañana", description: "Deja todo listo para que no haya fricción cuando llegue el momento.", effort: "muy_pequeno" },
+        { title: "Hazlo una vez hoy, aunque sea en versión mínima", description: "Ejecuta una versión pequeña del hábito para romper la inercia.", effort: "pequeno" },
       ];
     default:
       return [
-        { title: "Escribe el resultado que quieres lograr en una frase", description: "", effort: "muy_pequeno" },
-        { title: "Identifica la primera acción concreta que puedes hacer", description: "", effort: "muy_pequeno" },
-        { title: "Ejecuta esa primera acción hoy", description: "", effort: "pequeno" },
+        { title: "Escribe el resultado que quieres lograr en una frase", description: "Define con claridad cuál es el resultado final que buscas.", effort: "muy_pequeno" },
+        { title: "Identifica la primera acción concreta que puedes hacer", description: "Elige algo específico y alcanzable para empezar hoy mismo.", effort: "muy_pequeno" },
+        { title: "Ejecuta esa primera acción hoy", description: "No lo dejes para después: hazlo ahora, aunque sea en versión mínima.", effort: "pequeno" },
       ];
   }
 }
