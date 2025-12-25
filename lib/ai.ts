@@ -556,7 +556,7 @@ export interface InitialStep {
 }
 
 /**
- * Generates 2-3 initial steps for a newly created objective based on its category and context.
+ * Generates 2-3 initial steps for a newly created objective based on its category, context and stage.
  * These steps help the user get started with their goal.
  */
 export async function generateInitialSteps(
@@ -567,10 +567,20 @@ export async function generateInitialSteps(
     first_steps?: string[] | null;
     experiment_type?: string | null;
     surface_type?: string | null;
+    for_stage?: string | null;
   }
 ): Promise<InitialStep[]> {
-  // If we already have first_steps from the analysis, use those
-  if (objective.first_steps && objective.first_steps.length > 0) {
+  console.log("[generateInitialSteps] Called with:", {
+    title: objective.title,
+    description: objective.description?.substring(0, 100),
+    detected_category: objective.detected_category,
+    first_steps_count: objective.first_steps?.length || 0,
+    for_stage: objective.for_stage,
+  });
+
+  // If we already have first_steps from the analysis, use those (only for initial "testing" stage)
+  if (objective.first_steps && objective.first_steps.length > 0 && (!objective.for_stage || objective.for_stage === "testing")) {
+    console.log("[generateInitialSteps] Using pre-analyzed first_steps:", objective.first_steps);
     return objective.first_steps.slice(0, 3).map((step, index) => ({
       title: step,
       description: `Acción concreta: ${step}`,
@@ -578,17 +588,48 @@ export async function generateInitialSteps(
     }));
   }
 
+  // Stage-specific guidance for step generation
+  const stageGuidance: Record<string, string> = {
+    testing: `ETAPA ACTUAL: Arrancando (testing)
+Los pasos deben enfocarse en:
+- Quitar fricción inicial y dar el primer paso
+- Validar que el objetivo es claro y alcanzable
+- Hacer algo pequeño AHORA para romper la inercia`,
+    scale: `ETAPA ACTUAL: En marcha (scale)
+Los pasos deben enfocarse en:
+- Ejecutar con ritmo y constancia
+- Mantener el momentum
+- Medir progreso de forma sencilla`,
+    iterate: `ETAPA ACTUAL: Ajustando (iterate)
+Los pasos deben enfocarse en:
+- Revisar qué está funcionando y qué no
+- Hacer ajustes basados en datos reales
+- Optimizar el proceso para mejores resultados`,
+    kill: `ETAPA ACTUAL: Cerrado (kill)
+El objetivo está cerrado, no se necesitan más pasos.`,
+    paused: `ETAPA ACTUAL: En pausa (paused)
+Los pasos deben enfocarse en:
+- Prepararse para retomar cuando sea el momento
+- Mantener un recordatorio mínimo del objetivo`,
+  };
+
+  const currentStage = objective.for_stage || "testing";
+  const stageContext = stageGuidance[currentStage] || stageGuidance.testing;
+
   // Otherwise, generate contextual steps using AI
   const systemPrompt = `Eres Vicu, un asistente que ayuda a las personas a cumplir sus objetivos.
 
-Tu tarea es generar 2-3 pasos iniciales MUY CONCRETOS y PEQUEÑOS para un objetivo recién creado.
+Tu tarea es generar 2-3 pasos iniciales MUY CONCRETOS y PEQUEÑOS para un objetivo.
+
+${stageContext}
 
 REGLAS IMPORTANTES:
 1. Los pasos deben ser ACCIONES ESPECÍFICAS, no genéricos
 2. El primer paso debe poder hacerse en menos de 5 minutos
 3. Cada paso debe ser verificable (se puede decir "sí, lo hice" o "no")
-4. Usa verbos de acción: "Escribe", "Define", "Busca", "Contacta"
+4. Usa verbos de acción: "Escribe", "Define", "Busca", "Contacta", "Revisa", "Mide"
 5. NO uses pasos como "Piensa en...", "Considera...", "Reflexiona..."
+6. Los pasos deben ser coherentes con la etapa actual del objetivo
 
 Responde SOLO con JSON válido (sin markdown):
 {
@@ -604,9 +645,11 @@ effort puede ser: "muy_pequeno" (~5 min), "pequeno" (~20 min), "medio" (~1 hora)
   const userPrompt = `Objetivo: ${objective.title}
 Descripción: ${objective.description}
 Categoría: ${objective.detected_category || "otro"}
-Tipo: ${objective.experiment_type || "otro"}`;
+Tipo: ${objective.experiment_type || "otro"}
+Etapa: ${currentStage}`;
 
   try {
+    console.log("[generateInitialSteps] Calling OpenAI API...");
     const completion = await getOpenAI().chat.completions.create({
       model: "gpt-4.1-mini",
       messages: [
@@ -617,15 +660,24 @@ Tipo: ${objective.experiment_type || "otro"}`;
     });
 
     const content = completion.choices[0]?.message?.content;
+    console.log("[generateInitialSteps] OpenAI response:", content?.substring(0, 200));
+
     if (!content) {
-      return getDefaultSteps(objective.detected_category);
+      console.log("[generateInitialSteps] No content from OpenAI, using defaults");
+      const defaults = getDefaultSteps(objective.detected_category);
+      console.log("[generateInitialSteps] Returning defaults:", defaults.map(s => s.title));
+      return defaults;
     }
 
     const parsed = JSON.parse(content);
-    return parsed.steps.slice(0, 3);
+    const steps = parsed.steps.slice(0, 3);
+    console.log("[generateInitialSteps] Parsed steps:", steps.map((s: InitialStep) => s.title));
+    return steps;
   } catch (error) {
-    console.error("Error generating initial steps:", error);
-    return getDefaultSteps(objective.detected_category);
+    console.error("[generateInitialSteps] Error calling OpenAI:", error);
+    const defaults = getDefaultSteps(objective.detected_category);
+    console.log("[generateInitialSteps] Returning defaults after error:", defaults.map(s => s.title));
+    return defaults;
   }
 }
 

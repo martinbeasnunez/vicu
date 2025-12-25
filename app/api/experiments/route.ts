@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase-server";
 import { computeDefaultRhythm, type SurfaceType } from "@/lib/experiment-helpers";
+import { generateInitialSteps } from "@/lib/ai";
 
 // Helper para generar un título corto a partir de la descripción (fallback)
 function generateFallbackTitle(description: string): string {
@@ -107,6 +108,115 @@ export async function POST(request: NextRequest) {
       { success: false, error: error.message },
       { status: 500 }
     );
+  }
+
+  // AUTOMATIC INITIAL STEPS GENERATION
+  // Generate 3 initial steps for every new experiment to ensure the objective
+  // page is never empty. This runs synchronously before returning the response.
+  try {
+    // Extract additional fields that might be passed for step generation
+    const { detected_category, first_steps } = data;
+
+    console.log(`[STEPS] Generating initial steps for experiment ${experiment.id}:`, {
+      title: experiment.title,
+      detected_category,
+      first_steps_count: first_steps?.length || 0,
+    });
+
+    const steps = await generateInitialSteps({
+      title: experiment.title,
+      description: description || "",
+      detected_category: detected_category || null,
+      first_steps: first_steps && first_steps.length > 0 ? first_steps : null, // Only pass if non-empty
+      experiment_type: experiment_type || null,
+      surface_type: surface_type || null,
+      for_stage: "testing", // New experiments always start in "testing" (Arrancando)
+    });
+
+    console.log(`[STEPS] Generated ${steps?.length || 0} steps:`, steps?.map(s => s.title));
+
+    // Insert steps as pending checkins
+    if (steps && steps.length > 0) {
+      const checkinsToInsert = steps.map((step) => ({
+        experiment_id: experiment.id,
+        status: "pending",
+        step_title: step.title,
+        step_description: step.description || `Acción: ${step.title}`,
+        effort: step.effort || "pequeno",
+        user_state: "not_started",
+        day_date: new Date().toISOString().split("T")[0],
+        for_stage: "testing",
+      }));
+
+      console.log(`[STEPS] Inserting ${checkinsToInsert.length} checkins for experiment ${experiment.id}`);
+
+      const { data: insertedSteps, error: stepsError } = await supabaseServer
+        .from("experiment_checkins")
+        .insert(checkinsToInsert)
+        .select();
+
+      if (stepsError) {
+        console.error("[STEPS] Error inserting initial steps:", stepsError);
+        // Don't fail the experiment creation if steps fail - just log it
+      } else {
+        console.log(`[STEPS] Successfully inserted ${insertedSteps?.length || 0} initial steps for experiment ${experiment.id}`);
+      }
+    } else {
+      console.warn(`[STEPS] No steps generated for experiment ${experiment.id} - falling back to defaults`);
+      // Fallback: insert 3 generic default steps to never leave the objective empty
+      const fallbackSteps = [
+        { step_title: "Define el primer paso concreto para tu objetivo", step_description: "Escribe qué acción específica puedes hacer en los próximos 5 minutos.", effort: "muy_pequeno" },
+        { step_title: "Prepara lo que necesitas para empezar", step_description: "Reúne herramientas, recursos o información que necesitarás.", effort: "pequeno" },
+        { step_title: "Ejecuta la primera acción hoy", step_description: "Haz algo pequeño ahora mismo para romper la inercia.", effort: "pequeno" },
+      ];
+
+      const fallbackCheckins = fallbackSteps.map((step) => ({
+        experiment_id: experiment.id,
+        status: "pending",
+        step_title: step.step_title,
+        step_description: step.step_description,
+        effort: step.effort,
+        user_state: "not_started",
+        day_date: new Date().toISOString().split("T")[0],
+        for_stage: "testing",
+      }));
+
+      const { error: fallbackError } = await supabaseServer
+        .from("experiment_checkins")
+        .insert(fallbackCheckins);
+
+      if (fallbackError) {
+        console.error("[STEPS] Error inserting fallback steps:", fallbackError);
+      } else {
+        console.log(`[STEPS] Inserted 3 fallback steps for experiment ${experiment.id}`);
+      }
+    }
+  } catch (stepsErr) {
+    console.error("[STEPS] Error in step generation flow:", stepsErr);
+    // Still try to insert fallback steps
+    try {
+      const emergencySteps = [
+        { step_title: "Define tu primer paso", step_description: "Escribe qué harás primero.", effort: "muy_pequeno" },
+        { step_title: "Prepara lo necesario", step_description: "Reúne lo que necesitas.", effort: "pequeno" },
+        { step_title: "Ejecuta hoy", step_description: "Haz algo pequeño ahora.", effort: "pequeno" },
+      ];
+
+      await supabaseServer
+        .from("experiment_checkins")
+        .insert(emergencySteps.map((step) => ({
+          experiment_id: experiment.id,
+          status: "pending",
+          step_title: step.step_title,
+          step_description: step.step_description,
+          effort: step.effort,
+          user_state: "not_started",
+          day_date: new Date().toISOString().split("T")[0],
+          for_stage: "testing",
+        })));
+      console.log("[STEPS] Inserted emergency fallback steps after error");
+    } catch (emergencyErr) {
+      console.error("[STEPS] Even emergency fallback failed:", emergencyErr);
+    }
   }
 
   return NextResponse.json({ success: true, experiment });

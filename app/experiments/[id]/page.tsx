@@ -909,30 +909,8 @@ export default function ExperimentPage() {
       setToast(newStreak > 1 ? `¡Paso completado! Racha: ${newStreak} días` : "¡Paso completado!");
       await fetchCheckins();
 
-      // Auto-change status: if all steps are completed and status is "testing" (Arrancando),
-      // change to "scale" (En marcha)
-      const updatedCheckins = await supabase
-        .from("experiment_checkins")
-        .select("*")
-        .eq("experiment_id", experiment.id);
-
-      if (updatedCheckins.data) {
-        const allDone = updatedCheckins.data.length > 0 &&
-          updatedCheckins.data.every((c: { status: string }) => c.status === "done");
-
-        if (allDone && experiment.status === "testing") {
-          // Auto-transition from Arrancando to En marcha
-          const { error: statusError } = await supabase
-            .from("experiments")
-            .update({ status: "scale" })
-            .eq("id", experiment.id);
-
-          if (!statusError) {
-            setExperiment((prev) => prev ? { ...prev, status: "scale" } : null);
-            setToast("¡Plan completado! Estado cambiado a En marcha.");
-          }
-        }
-      }
+      // Note: When all steps are completed, the Vicu recommendation card will appear
+      // allowing the user to click "Aceptar: Cambiar a En marcha" to transition
     } catch (error) {
       console.error("Error marking step done:", error);
       setToast("Error al completar el paso");

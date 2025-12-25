@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Generate initial steps
+    // Generate initial steps (stage-aware)
     const steps = await generateInitialSteps({
       title: title || "Mi objetivo",
       description: description || "",
@@ -36,6 +36,7 @@ export async function POST(request: NextRequest) {
       first_steps,
       experiment_type,
       surface_type,
+      for_stage: for_stage || "testing",
     });
 
     // Insert steps as pending checkins (ensuring description is never empty)

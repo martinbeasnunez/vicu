@@ -510,7 +510,7 @@ export default function VicuPage() {
         }
       }
 
-      // Generate attack plan (for landing/messages experiments)
+      // Generate attack plan (for landing/messages experiments) - fire and forget
       fetch("/api/experiment-actions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -534,22 +534,8 @@ export default function VicuPage() {
         console.error("Error generating attack plan:", err);
       });
 
-      // Generate initial steps for the objective (all experiment types)
-      fetch("/api/generate-initial-steps", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          experiment_id: experimentId,
-          title: experimentData.experiment.title,
-          description: analysis.summary,
-          detected_category: analysis.detected_category,
-          first_steps: analysis.first_steps,
-          experiment_type: dbExperimentType,
-          surface_type: surfaceType,
-        }),
-      }).catch((err) => {
-        console.error("Error generating initial steps:", err);
-      });
+      // Initial steps are now generated automatically by the /api/experiments endpoint
+      // No need to call generate-initial-steps separately - it's centralized in the backend
 
       router.push(`/experiments/${experimentId}`);
     } catch (error) {
