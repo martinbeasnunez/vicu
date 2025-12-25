@@ -711,7 +711,7 @@ export default function HoyPage() {
         {/* Header with navigation */}
         <header className="flex items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <Image src="/vicu-logo.png" alt="Vicu" width={32} height={32} className="h-7 w-7 sm:h-8 sm:w-8 flex-shrink-0" />
+            <Image src="/vicu-logo.png" alt="Vicu" width={32} height={32} className="h-7 w-7 sm:h-8 sm:w-8 flex-shrink-0" priority />
             <div className="min-w-0">
               <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold text-slate-50 tracking-tight">Hoy con Vicu</h1>
               <p className="text-xs sm:text-sm text-slate-400 mt-0.5 sm:mt-1 line-clamp-2 sm:line-clamp-none">
