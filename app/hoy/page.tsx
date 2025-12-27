@@ -178,6 +178,13 @@ export default function HoyPage() {
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [pushSubscribed, setPushSubscribed] = useState(false);
 
+  // WhatsApp (Kapso) notification state
+  const [whatsappEnabled, setWhatsappEnabled] = useState<boolean | null>(null);
+  const [whatsappLoading, setWhatsappLoading] = useState(false);
+
+  // Stats explanation tooltip
+  const [showStatsHelp, setShowStatsHelp] = useState(false);
+
   // Check notification availability and permission on mount
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -228,6 +235,23 @@ export default function HoyPage() {
       // User enabled before but permission was reset - they'll need to re-enable
       localStorage.removeItem("vicu_push_preference");
     }
+  }, []);
+
+  // Check WhatsApp notification status on mount
+  useEffect(() => {
+    const checkWhatsappStatus = async () => {
+      try {
+        const { data } = await supabase
+          .from("whatsapp_config")
+          .select("is_active")
+          .eq("user_id", "demo-user")
+          .single();
+        setWhatsappEnabled(data?.is_active ?? false);
+      } catch {
+        setWhatsappEnabled(false);
+      }
+    };
+    checkWhatsappStatus();
   }, []);
 
   // Handler to activate push notifications
@@ -328,6 +352,31 @@ export default function HoyPage() {
       showToast("Error al activar recordatorios. Intenta de nuevo.");
     } finally {
       setIsSubscribing(false);
+    }
+  };
+
+  // Toggle WhatsApp notifications
+  const handleToggleWhatsapp = async () => {
+    if (whatsappEnabled === null) return;
+    setWhatsappLoading(true);
+
+    try {
+      const newStatus = !whatsappEnabled;
+      const { error } = await supabase
+        .from("whatsapp_config")
+        .update({ is_active: newStatus })
+        .eq("user_id", "demo-user");
+
+      if (error) {
+        showToast("Error al cambiar configuración");
+      } else {
+        setWhatsappEnabled(newStatus);
+        showToast(newStatus ? "Recordatorios WhatsApp activados" : "Recordatorios WhatsApp pausados");
+      }
+    } catch {
+      showToast("Error al cambiar configuración");
+    } finally {
+      setWhatsappLoading(false);
     }
   };
 
@@ -733,32 +782,28 @@ export default function HoyPage() {
             <span className="text-lg font-semibold text-slate-200">VICU</span>
           </div>
 
-          {/* Right side: notifications toggle + new button */}
+          {/* Right side: WhatsApp toggle + new button */}
           <div className="flex items-center gap-2">
-            {/* Compact notification toggle */}
-            {pushSupported && (
-              pushSubscribed ? (
-                <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400" title="Recordatorios activos">
+            {/* WhatsApp notification toggle */}
+            {whatsappEnabled !== null && (
+              <button
+                onClick={handleToggleWhatsapp}
+                disabled={whatsappLoading}
+                className={`p-2 rounded-lg transition-all disabled:opacity-50 ${
+                  whatsappEnabled
+                    ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                    : "bg-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-700"
+                }`}
+                title={whatsappEnabled ? "Recordatorios WhatsApp activos (click para pausar)" : "Activar recordatorios WhatsApp"}
+              >
+                {whatsappLoading ? (
+                  <div className="w-4 h-4 border-2 border-slate-600 border-t-slate-300 rounded-full animate-spin" />
+                ) : (
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                   </svg>
-                </div>
-              ) : pushPermission !== "denied" && (
-                <button
-                  onClick={handleActivatePush}
-                  disabled={isSubscribing}
-                  className="p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-700 transition-all disabled:opacity-50"
-                  title="Activar recordatorios"
-                >
-                  {isSubscribing ? (
-                    <div className="w-4 h-4 border-2 border-slate-600 border-t-slate-300 rounded-full animate-spin" />
-                  ) : (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                    </svg>
-                  )}
-                </button>
-              )
+                )}
+              </button>
             )}
 
             <Link
@@ -775,7 +820,7 @@ export default function HoyPage() {
 
         {/* Stats Bar - Inline, minimal */}
         {userStats && !statsLoading && (
-          <div className="flex items-center gap-6 text-sm">
+          <div className="relative flex items-center gap-6 text-sm">
             {/* Level & XP */}
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">
@@ -815,6 +860,57 @@ export default function HoyPage() {
                 </span>
               </div>
             </div>
+
+            {/* Help button */}
+            <button
+              onClick={() => setShowStatsHelp(!showStatsHelp)}
+              className="p-1 text-slate-500 hover:text-slate-300 transition-colors"
+              title="¿Qué significa esto?"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+
+            {/* Stats explanation dropdown */}
+            {showStatsHelp && (
+              <div className="absolute top-full left-0 mt-2 w-72 p-4 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-50">
+                <div className="flex justify-between items-start mb-3">
+                  <h4 className="text-sm font-semibold text-slate-200">¿Cómo funciona?</h4>
+                  <button onClick={() => setShowStatsHelp(false)} className="text-slate-500 hover:text-slate-300">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="space-y-3 text-xs text-slate-400">
+                  <div className="flex gap-2">
+                    <div className="w-5 h-5 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex-shrink-0 flex items-center justify-center text-white text-[10px] font-bold">7</div>
+                    <div>
+                      <span className="text-slate-300 font-medium">Nivel:</span> Sube de nivel marcando avances. Cada nivel necesita más XP.
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-base">🔥</span>
+                    <div>
+                      <span className="text-slate-300 font-medium">Racha:</span> Días consecutivos con al menos 1 avance. Si no avanzas un día, se reinicia.
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-slate-300 font-medium">Puntos:</span>
+                    <div>
+                      Ganas 10 XP por cada avance marcado. Bonus por rachas largas.
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-slate-300 font-medium">Hoy:</span>
+                    <div>
+                      Tu meta diaria es {userStats.daily_goal} avances. ¡Complétala para mantener la racha!
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
