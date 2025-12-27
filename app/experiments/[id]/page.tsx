@@ -130,13 +130,15 @@ interface ExperimentCheckin {
   for_stage: ExperimentStage | null;
 }
 
-// Status badge colors for dark theme
+// Status badge colors for dark theme - MVP cycle states
 const STATUS_BADGE_COLORS: Record<ExperimentStatus, string> = {
-  testing: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-  scale: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-  iterate: "bg-amber-500/20 text-amber-400 border-amber-500/30",
-  kill: "bg-red-500/20 text-red-400 border-red-500/30",
-  paused: "bg-slate-500/20 text-slate-400 border-slate-500/30",
+  queued: "bg-slate-500/20 text-slate-400 border-slate-500/30",
+  building: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+  testing: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+  adjusting: "bg-amber-500/20 text-amber-400 border-amber-500/30",
+  achieved: "bg-green-500/20 text-green-400 border-green-500/30",
+  paused: "bg-zinc-500/20 text-zinc-400 border-zinc-500/30",
+  discarded: "bg-red-500/20 text-red-400 border-red-500/30",
 };
 
 // Surface type badge colors for dark theme
@@ -165,30 +167,40 @@ function formatLastCheckin(dateString: string | null): string {
 // Dynamic copy for "Hoy con este proyecto" based on experiment status
 function getTodayCopyForStatus(status: ExperimentStatus): { title: string; description: string } {
   switch (status) {
-    case "testing": // Arrancando
+    case "queued": // Por empezar
       return {
-        title: "Arrancando este objetivo",
-        description: "Define los primeros pasos y quita la fricción para empezar.",
+        title: "Por empezar",
+        description: "Define qué vas a construir y prepárate para dar el primer paso.",
       };
-    case "scale": // En marcha
+    case "building": // Construyendo
       return {
-        title: "En marcha",
-        description: "Tu objetivo ya está en movimiento. Hoy se trata de no soltarlo.",
+        title: "Construyendo tu MVP",
+        description: "Crea la primera versión mínima. No busques perfección, busca algo funcional.",
       };
-    case "iterate": // Ajustando
+    case "testing": // Probando
       return {
-        title: "Ajustando el plan",
-        description: "Ya estás en movimiento. Ahora afinemos el plan con pequeños ajustes para avanzar mejor.",
+        title: "Probando en el mundo real",
+        description: "Ya lanzaste algo. Ahora observa qué pasa y recoge feedback.",
       };
-    case "paused": // En pausa
+    case "adjusting": // Ajustando
       return {
-        title: "En pausa",
-        description: "Este objetivo está pausado por ahora. Cuando quieras retomarlo, Vicu te ayuda.",
+        title: "Ajustando basado en datos",
+        description: "Tienes feedback. Haz cambios específicos y prepara la siguiente prueba.",
       };
-    case "kill": // Cerrado
+    case "paused": // Pausado
       return {
-        title: "Cerrado",
-        description: "Este objetivo está cerrado. Puedes crear uno nuevo cuando quieras.",
+        title: "Pausado",
+        description: "Este objetivo está pausado. Cuando quieras retomarlo, Vicu te ayuda.",
+      };
+    case "achieved": // Logrado
+      return {
+        title: "Objetivo logrado",
+        description: "¡Felicitaciones! Completaste este objetivo.",
+      };
+    case "discarded": // Descartado
+      return {
+        title: "Descartado",
+        description: "Este objetivo fue descartado. Puedes crear uno nuevo cuando quieras.",
       };
     default:
       return {
@@ -207,34 +219,46 @@ function buildNextStepFromStage(status: ExperimentStatus, nextFocus?: string | n
   const base = nextFocus?.trim() || "";
 
   switch (status) {
-    case "testing": // Arrancando
+    case "queued": // Por empezar
       return {
-        title: "Da el primer paso para arrancar este objetivo",
-        description: base || "Define una primera acción concreta para comenzar hoy.",
+        title: "Define qué vas a construir primero",
+        description: base || "Clarifica el objetivo y elige el primer paso más pequeño.",
         estimatedMinutes: 10,
       };
-    case "scale": // En marcha
+    case "building": // Construyendo
       return {
-        title: "Mantén el ritmo de este objetivo",
-        description: base || "Elige una acción sencilla para avanzar hoy sin perder el hábito.",
+        title: "Construye la primera versión",
+        description: base || "Crea algo mínimo y funcional. No busques perfección.",
+        estimatedMinutes: 20,
+      };
+    case "testing": // Probando
+      return {
+        title: "Prueba y recoge feedback",
+        description: base || "Lanza lo que tienes y observa qué pasa. Mide resultados.",
         estimatedMinutes: 15,
       };
-    case "iterate": // Ajustando
+    case "adjusting": // Ajustando
       return {
-        title: "Ajusta el plan con base en lo que ya probaste",
-        description: base || "Revisa qué funcionó y qué no, y define un pequeño ajuste para hoy.",
+        title: "Ajusta basado en lo que aprendiste",
+        description: base || "Analiza el feedback y haz cambios específicos.",
         estimatedMinutes: 20,
       };
     case "paused":
       return {
         title: "Retoma cuando estés listo",
-        description: base || "Este objetivo está en pausa. Cuando quieras volver, empieza con algo pequeño.",
+        description: base || "Este objetivo está pausado. Cuando quieras volver, empieza con algo pequeño.",
         estimatedMinutes: 5,
       };
-    case "kill":
+    case "achieved":
       return {
-        title: "Objetivo cerrado",
-        description: base || "Este objetivo ya terminó. Crea uno nuevo si quieres empezar algo diferente.",
+        title: "Objetivo logrado",
+        description: base || "¡Completaste este objetivo! Crea uno nuevo cuando quieras.",
+        estimatedMinutes: 0,
+      };
+    case "discarded":
+      return {
+        title: "Objetivo descartado",
+        description: base || "Este objetivo fue descartado. Crea uno nuevo si quieres empezar algo diferente.",
         estimatedMinutes: 0,
       };
     default:
@@ -246,16 +270,18 @@ function buildNextStepFromStage(status: ExperimentStatus, nextFocus?: string | n
   }
 }
 
-// Stage labels for recommendation history
+// Stage labels for recommendation history - MVP cycle states
 const STAGE_LABELS: Record<ExperimentStage, string> = {
-  testing: "Arrancando",
-  scale: "En marcha",
-  iterate: "Ajustando",
-  kill: "Cerrado",
-  paused: "En pausa",
+  queued: "Por empezar",
+  building: "Construyendo",
+  testing: "Probando",
+  adjusting: "Ajustando",
+  achieved: "Logrado",
+  paused: "Pausado",
+  discarded: "Descartado",
 };
 
-// State machine: determines next stage transition based on current stage and progress
+// State machine: determines next stage transition based on current stage and recommendation action
 interface StageTransition {
   nextStage: ExperimentStage;
   label: string;
@@ -263,12 +289,23 @@ interface StageTransition {
   buttonColor: string;
 }
 
+// Map recommendation actions to their target stages
+const ACTION_TO_STAGE: Record<string, ExperimentStage> = {
+  seguir_construyendo: "building",
+  probar: "testing",
+  ajustar: "adjusting",
+  logrado: "achieved",
+  pausar: "paused",
+  descartar: "discarded",
+};
+
 function getRecommendationAction(
   currentStage: ExperimentStage,
-  stageProgress: { isComplete: boolean }
+  stageProgress: { isComplete: boolean },
+  recommendationAction?: string
 ): StageTransition | null {
-  // No transitions for closed or paused objectives
-  if (currentStage === "kill" || currentStage === "paused") {
+  // No transitions for finished states
+  if (currentStage === "achieved" || currentStage === "discarded") {
     return null;
   }
 
@@ -277,28 +314,79 @@ function getRecommendationAction(
     return null;
   }
 
-  // State machine transitions
+  // If we have a recommendation action, use it to determine the next stage
+  if (recommendationAction && ACTION_TO_STAGE[recommendationAction]) {
+    const nextStage = ACTION_TO_STAGE[recommendationAction];
+
+    // Don't transition to the same stage
+    if (nextStage === currentStage) {
+      return null;
+    }
+
+    const stageEmojis: Record<ExperimentStage, string> = {
+      queued: "📋",
+      building: "🔨",
+      testing: "🧪",
+      adjusting: "🔄",
+      achieved: "🎉",
+      paused: "⏸️",
+      discarded: "🗑️",
+    };
+
+    const stageColors: Record<ExperimentStage, string> = {
+      queued: "bg-slate-500 hover:bg-slate-400",
+      building: "bg-blue-500 hover:bg-blue-400",
+      testing: "bg-purple-500 hover:bg-purple-400",
+      adjusting: "bg-amber-500 hover:bg-amber-400",
+      achieved: "bg-green-500 hover:bg-green-400",
+      paused: "bg-zinc-500 hover:bg-zinc-400",
+      discarded: "bg-red-500 hover:bg-red-400",
+    };
+
+    return {
+      nextStage,
+      label: `Aceptar: Cambiar a ${STAGE_LABELS[nextStage]}`,
+      emoji: stageEmojis[nextStage],
+      buttonColor: stageColors[nextStage],
+    };
+  }
+
+  // Default MVP cycle progression if no recommendation action
   switch (currentStage) {
-    case "testing": // Arrancando -> En marcha
+    case "queued": // Por empezar -> Construyendo
       return {
-        nextStage: "scale",
-        label: "Aceptar: Cambiar a En marcha",
-        emoji: "🚀",
-        buttonColor: "bg-emerald-500 hover:bg-emerald-400",
+        nextStage: "building",
+        label: "Aceptar: Cambiar a Construyendo",
+        emoji: "🔨",
+        buttonColor: "bg-blue-500 hover:bg-blue-400",
       };
-    case "scale": // En marcha -> Ajustando
+    case "building": // Construyendo -> Probando
       return {
-        nextStage: "iterate",
+        nextStage: "testing",
+        label: "Aceptar: Cambiar a Probando",
+        emoji: "🧪",
+        buttonColor: "bg-purple-500 hover:bg-purple-400",
+      };
+    case "testing": // Probando -> Ajustando
+      return {
+        nextStage: "adjusting",
         label: "Aceptar: Cambiar a Ajustando",
         emoji: "🔄",
         buttonColor: "bg-amber-500 hover:bg-amber-400",
       };
-    case "iterate": // Ajustando -> Cerrado
+    case "adjusting": // Ajustando -> Logrado (o vuelve a Probando)
       return {
-        nextStage: "kill",
-        label: "Aceptar: Cambiar a Cerrado",
-        emoji: "✓",
-        buttonColor: "bg-slate-500 hover:bg-slate-400",
+        nextStage: "achieved",
+        label: "Aceptar: Cambiar a Logrado",
+        emoji: "🎉",
+        buttonColor: "bg-green-500 hover:bg-green-400",
+      };
+    case "paused": // Pausado -> Construyendo (retomar)
+      return {
+        nextStage: "building",
+        label: "Retomar: Cambiar a Construyendo",
+        emoji: "🔨",
+        buttonColor: "bg-blue-500 hover:bg-blue-400",
       };
     default:
       return null;
@@ -1086,19 +1174,23 @@ export default function ExperimentPage() {
     }
   };
 
-  // Map recommendation action to experiment status
+  // Map recommendation action to experiment status - MVP cycle actions
   const mapRecommendationToStatus = (action: string): ExperimentStatus => {
     switch (action.toLowerCase()) {
-      case "escalar":
-        return "scale";
-      case "iterar":
-        return "iterate";
+      case "seguir_construyendo":
+        return "building";
+      case "probar":
+        return "testing";
+      case "ajustar":
+        return "adjusting";
+      case "logrado":
+        return "achieved";
       case "pausar":
         return "paused";
-      case "cerrar":
-        return "kill";
+      case "descartar":
+        return "discarded";
       default:
-        return "scale"; // default to "En marcha"
+        return "building"; // default to "Construyendo"
     }
   };
 
@@ -1128,8 +1220,8 @@ export default function ExperimentPage() {
       setExperiment(updatedExperiment);
       setToast(`Estado cambiado a ${STATUS_LABELS[newStatus]}`);
 
-      // Generate new steps for the new stage (except for "cerrado")
-      if (newStatus !== "kill") {
+      // Generate new steps for the new stage (except for finished states)
+      if (newStatus !== "achieved" && newStatus !== "discarded") {
         const stepsDescription = previousNextFocus || `Pasos para la etapa ${STAGE_LABELS[newStatus]}`;
         try {
           await fetch("/api/generate-initial-steps", {
@@ -1185,7 +1277,7 @@ export default function ExperimentPage() {
           setIsLoadingRecommendation(false);
         }
       } else {
-        // For "kill" stage, just mark as accepted without generating new recommendation
+        // For finished states (achieved/discarded), just mark as accepted without generating new recommendation
         setHasAcceptedRecommendation(true);
         setAcceptedStatus(newStatus);
         setVicuRecommendation(null);
@@ -1203,7 +1295,7 @@ export default function ExperimentPage() {
     if (!experiment || !vicuRecommendation || isStatusUpdating || hasAcceptedRecommendation) return;
 
     const currentStage = experiment.status as ExperimentStage;
-    const transition = getRecommendationAction(currentStage, { isComplete: true });
+    const transition = getRecommendationAction(currentStage, { isComplete: true }, vicuRecommendation.action);
 
     if (transition) {
       await handleAcceptStageTransition(transition);
@@ -1828,9 +1920,9 @@ export default function ExperimentPage() {
                   <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider">Fases del proyecto</h3>
                   <span className="text-xs text-slate-500">
                     Fase actual: <span className="text-indigo-400">{
-                      experiment.status === "testing" ? experiment.phases[0]?.name :
-                      experiment.status === "scale" ? experiment.phases[1]?.name || experiment.phases[0]?.name :
-                      experiment.status === "iterate" ? experiment.phases[2]?.name || experiment.phases[1]?.name :
+                      experiment.status === "queued" || experiment.status === "building" ? experiment.phases[0]?.name :
+                      experiment.status === "testing" ? experiment.phases[1]?.name || experiment.phases[0]?.name :
+                      experiment.status === "adjusting" ? experiment.phases[2]?.name || experiment.phases[1]?.name :
                       experiment.phases[experiment.phases.length - 1]?.name
                     }</span>
                   </span>
@@ -1839,14 +1931,14 @@ export default function ExperimentPage() {
                   {experiment.phases.map((phase, index) => {
                     // Determine if this phase is current, completed, or pending
                     const isCurrentPhase =
-                      (experiment.status === "testing" && index === 0) ||
-                      (experiment.status === "scale" && index === 1) ||
-                      (experiment.status === "iterate" && index === 2) ||
-                      (experiment.status === "kill" || experiment.status === "paused");
+                      ((experiment.status === "queued" || experiment.status === "building") && index === 0) ||
+                      (experiment.status === "testing" && index === 1) ||
+                      (experiment.status === "adjusting" && index === 2) ||
+                      (experiment.status === "achieved" || experiment.status === "discarded" || experiment.status === "paused");
                     const isCompleted =
-                      (experiment.status === "scale" && index === 0) ||
-                      (experiment.status === "iterate" && index <= 1) ||
-                      ((experiment.status === "kill" || experiment.status === "paused") && experiment.phases && index < experiment.phases.length - 1);
+                      (experiment.status === "testing" && index === 0) ||
+                      (experiment.status === "adjusting" && index <= 1) ||
+                      ((experiment.status === "achieved" || experiment.status === "discarded" || experiment.status === "paused") && experiment.phases && index < experiment.phases.length - 1);
 
                     return (
                       <div
@@ -1878,9 +1970,9 @@ export default function ExperimentPage() {
                 {/* Show current phase details */}
                 {(() => {
                   const currentPhaseIndex =
-                    experiment.status === "testing" ? 0 :
-                    experiment.status === "scale" ? 1 :
-                    experiment.status === "iterate" ? 2 :
+                    (experiment.status === "queued" || experiment.status === "building") ? 0 :
+                    experiment.status === "testing" ? 1 :
+                    experiment.status === "adjusting" ? 2 :
                     experiment.phases.length - 1;
                   const currentPhase = experiment.phases[currentPhaseIndex];
                   if (!currentPhase) return null;
@@ -1900,10 +1992,10 @@ export default function ExperimentPage() {
             {(() => {
               const currentStage = experiment.status as ExperimentStage;
               const stageProgress = { isComplete: totalSteps > 0 && completedSteps === totalSteps };
-              const stageTransition = getRecommendationAction(currentStage, stageProgress);
+              const stageTransition = getRecommendationAction(currentStage, stageProgress, vicuRecommendation?.action);
 
-              // Closed state: show summary only
-              if (currentStage === "kill") {
+              // Achieved/Discarded state: show summary only
+              if (currentStage === "achieved" || currentStage === "discarded") {
                 return (
                   <div className="card-premium px-5 py-5 border-slate-500/20">
                     <div className="flex items-center gap-3 mb-4">
@@ -1913,12 +2005,18 @@ export default function ExperimentPage() {
                         </svg>
                       </div>
                       <div>
-                        <h3 className="text-lg font-semibold text-slate-300">Objetivo cerrado</h3>
-                        <p className="text-sm text-slate-500">Has completado este objetivo</p>
+                        <h3 className="text-lg font-semibold text-slate-300">
+                          {currentStage === "achieved" ? "Objetivo logrado" : "Objetivo descartado"}
+                        </h3>
+                        <p className="text-sm text-slate-500">
+                          {currentStage === "achieved" ? "Has completado este objetivo" : "Este objetivo fue descartado"}
+                        </p>
                       </div>
                     </div>
                     <p className="text-sm text-slate-400">
-                      Este objetivo ya está cerrado. Puedes revisar tu historial de recomendaciones abajo o crear un nuevo objetivo.
+                      {currentStage === "achieved"
+                        ? "¡Felicitaciones! Puedes revisar tu historial de recomendaciones abajo o crear un nuevo objetivo."
+                        : "Este objetivo fue descartado. Puedes revisar tu historial o crear un nuevo objetivo."}
                     </p>
                   </div>
                 );
@@ -1975,8 +2073,9 @@ export default function ExperimentPage() {
                     {/* Stage transition badge */}
                     <div className="mb-4">
                       <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${
-                        stageTransition.nextStage === "scale" ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" :
-                        stageTransition.nextStage === "iterate" ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" :
+                        stageTransition.nextStage === "testing" ? "bg-purple-500/20 text-purple-400 border border-purple-500/30" :
+                        stageTransition.nextStage === "adjusting" ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" :
+                        stageTransition.nextStage === "achieved" ? "bg-green-500/20 text-green-400 border border-green-500/30" :
                         "bg-slate-500/20 text-slate-400 border border-slate-500/30"
                       }`}>
                         {stageTransition.emoji} {stageTransition.label.replace("Aceptar: ", "")}
@@ -1989,9 +2088,11 @@ export default function ExperimentPage() {
                     </h4>
                     <p className="text-sm text-slate-300 leading-relaxed mb-4">
                       Has completado {completedSteps} de {totalSteps} pasos de esta etapa.
-                      {stageTransition.nextStage === "kill"
-                        ? " Es hora de cerrar este objetivo y celebrar el logro."
-                        : ` Es hora de avanzar a la siguiente fase: ${STAGE_LABELS[stageTransition.nextStage]}.`
+                      {stageTransition.nextStage === "achieved"
+                        ? " ¡Felicitaciones! Es hora de celebrar el logro."
+                        : stageTransition.nextStage === "discarded"
+                          ? " Este objetivo será descartado."
+                          : ` Es hora de avanzar a la siguiente fase: ${STAGE_LABELS[stageTransition.nextStage]}.`
                       }
                     </p>
 
@@ -2012,7 +2113,7 @@ export default function ExperimentPage() {
                           </div>
                         )}
 
-                        {vicuRecommendation.suggested_next_focus && stageTransition.nextStage !== "kill" && (
+                        {vicuRecommendation.suggested_next_focus && stageTransition.nextStage !== "achieved" && stageTransition.nextStage !== "discarded" && (
                           <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 mb-4">
                             <p className="text-xs text-indigo-400 uppercase tracking-wider mb-1 font-medium">Siguiente enfoque</p>
                             <p className="text-sm text-slate-200">{vicuRecommendation.suggested_next_focus}</p>
@@ -2099,10 +2200,12 @@ export default function ExperimentPage() {
                           {/* Stage badge */}
                           {rec.for_stage && (
                             <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                              rec.for_stage === "testing" ? "bg-blue-500/20 text-blue-400" :
-                              rec.for_stage === "scale" ? "bg-emerald-500/20 text-emerald-400" :
-                              rec.for_stage === "iterate" ? "bg-amber-500/20 text-amber-400" :
-                              rec.for_stage === "paused" ? "bg-slate-500/20 text-slate-400" :
+                              rec.for_stage === "queued" ? "bg-slate-500/20 text-slate-400" :
+                              rec.for_stage === "building" ? "bg-blue-500/20 text-blue-400" :
+                              rec.for_stage === "testing" ? "bg-purple-500/20 text-purple-400" :
+                              rec.for_stage === "adjusting" ? "bg-amber-500/20 text-amber-400" :
+                              rec.for_stage === "achieved" ? "bg-green-500/20 text-green-400" :
+                              rec.for_stage === "paused" ? "bg-zinc-500/20 text-zinc-400" :
                               "bg-red-500/20 text-red-400"
                             }`}>
                               {STAGE_LABELS[rec.for_stage]}
@@ -2110,15 +2213,19 @@ export default function ExperimentPage() {
                           )}
                           {/* Action badge */}
                           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                            rec.action === "escalar" ? "bg-emerald-500/10 text-emerald-400/80" :
-                            rec.action === "iterar" ? "bg-amber-500/10 text-amber-400/80" :
-                            rec.action === "pausar" ? "bg-slate-500/10 text-slate-400/80" :
+                            rec.action === "seguir_construyendo" ? "bg-blue-500/10 text-blue-400/80" :
+                            rec.action === "probar" ? "bg-purple-500/10 text-purple-400/80" :
+                            rec.action === "ajustar" ? "bg-amber-500/10 text-amber-400/80" :
+                            rec.action === "logrado" ? "bg-green-500/10 text-green-400/80" :
+                            rec.action === "pausar" ? "bg-zinc-500/10 text-zinc-400/80" :
                             "bg-red-500/10 text-red-400/80"
                           }`}>
-                            {rec.action === "escalar" && "Escalar"}
-                            {rec.action === "iterar" && "Iterar"}
+                            {rec.action === "seguir_construyendo" && "Construir"}
+                            {rec.action === "probar" && "Probar"}
+                            {rec.action === "ajustar" && "Ajustar"}
+                            {rec.action === "logrado" && "Logrado"}
                             {rec.action === "pausar" && "Pausar"}
-                            {rec.action === "cerrar" && "Cerrar"}
+                            {rec.action === "descartar" && "Descartar"}
                           </span>
                           {/* Date */}
                           <span className="text-xs text-slate-500 ml-auto">
@@ -2228,13 +2335,15 @@ export default function ExperimentPage() {
                               <span>{new Date(checkin.created_at).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}</span>
                               {/* Pill de FASE del objetivo */}
                               <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                                (checkin.for_stage || experiment.status) === "testing" ? "bg-blue-500/20 text-blue-400" :
-                                (checkin.for_stage || experiment.status) === "scale" ? "bg-emerald-500/20 text-emerald-400" :
-                                (checkin.for_stage || experiment.status) === "iterate" ? "bg-amber-500/20 text-amber-400" :
-                                (checkin.for_stage || experiment.status) === "paused" ? "bg-slate-500/20 text-slate-400" :
+                                (checkin.for_stage || experiment.status) === "queued" ? "bg-slate-500/20 text-slate-400" :
+                                (checkin.for_stage || experiment.status) === "building" ? "bg-blue-500/20 text-blue-400" :
+                                (checkin.for_stage || experiment.status) === "testing" ? "bg-purple-500/20 text-purple-400" :
+                                (checkin.for_stage || experiment.status) === "adjusting" ? "bg-amber-500/20 text-amber-400" :
+                                (checkin.for_stage || experiment.status) === "achieved" ? "bg-green-500/20 text-green-400" :
+                                (checkin.for_stage || experiment.status) === "paused" ? "bg-zinc-500/20 text-zinc-400" :
                                 "bg-red-500/20 text-red-400"
                               }`}>
-                                {STAGE_LABELS[(checkin.for_stage || experiment.status) as ExperimentStage] || "Arrancando"}
+                                {STAGE_LABELS[(checkin.for_stage || experiment.status) as ExperimentStage] || "Construyendo"}
                               </span>
                               {/* Pill de ESTADO del paso */}
                               <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${
@@ -2284,8 +2393,8 @@ export default function ExperimentPage() {
             )}
 
             {/* HOY CON ESTE PROYECTO - Bloque principal con copy dinámico según estado */}
-            {/* Hide this block when objective is closed */}
-            {experiment.status !== "kill" && (
+            {/* Hide this block when objective is finished (achieved/discarded) */}
+            {experiment.status !== "achieved" && experiment.status !== "discarded" && (
             <div className="card-accent px-5 py-5 border-indigo-500/30">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">

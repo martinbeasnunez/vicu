@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       first_steps,
       experiment_type,
       surface_type,
-      for_stage: for_stage || "testing",
+      for_stage: for_stage || "building",
     });
 
     // Insert steps as pending checkins (ensuring description is never empty)
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
       effort: step.effort,
       user_state: "not_started",
       day_date: new Date().toISOString().split("T")[0],
-      for_stage: for_stage || "testing", // Default to testing if not specified
+      for_stage: for_stage || "building", // Default to building if not specified
     }));
 
     const { data: insertedCheckins, error: insertError } = await supabaseServer

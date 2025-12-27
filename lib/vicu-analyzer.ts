@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { enrichWithSearch, SearchResult } from "./web-search";
 
 // Lazy initialization to avoid build-time errors in Vercel
 let _openai: OpenAI | null = null;
@@ -59,6 +60,10 @@ export interface VicuAnalysis {
   detected_subject?: ProjectSubject;
   // Project phases for macro breakdown
   phases?: ObjectivePhase[];
+  // Search results used to enrich the analysis
+  search_results?: SearchResult[];
+  // Facts discovered from search (to show to user)
+  discovered_facts?: string[];
 }
 
 const ANALYSIS_SYSTEM_PROMPT = `Eres Vicu, una IA de SEGUIMIENTO que ayuda a las personas a CUMPLIR sus metas y proyectos.
@@ -275,7 +280,23 @@ REGLAS IMPORTANTES:
    - restricciones: ¿Qué limitaciones tiene?
    - resultado_minimo: ¿Cuál sería un resultado que valdría la pena?
 
-5. **READBACK FINAL**: Cuando tengas suficiente contexto (confidence >= 50), prepara un resumen estructurado de lo que entendiste para que el usuario lo confirme antes de crear el proyecto.`;
+5. **READBACK FINAL**: Cuando tengas suficiente contexto (confidence >= 50), prepara un resumen estructurado de lo que entendiste para que el usuario lo confirme antes de crear el proyecto.
+
+## USO DE INFORMACIÓN INVESTIGADA (CRÍTICO):
+
+Si recibes una sección "## INFORMACIÓN INVESTIGADA AUTOMÁTICAMENTE", USA ESA INFORMACIÓN:
+
+1. **NO PREGUNTES LO QUE YA SABES**: Si la investigación encontró precios, costos, o datos relevantes, NO preguntes al usuario por esos datos. Úsalos directamente.
+
+2. **MENCIONA LO QUE ENCONTRASTE**: En tu respuesta, menciona brevemente los datos que investigaste para que el usuario sepa que hiciste la tarea. Ejemplo: "Investigué y un Suzuki Jimny nuevo cuesta aproximadamente X, mientras que usado está entre Y y Z."
+
+3. **HAZ PREGUNTAS MÁS INTELIGENTES**: Con los datos de la investigación, puedes hacer preguntas más específicas:
+   - En vez de "¿Cuánto cuesta lo que quieres comprar?" → "Con el precio de ~90k para un Jimny nuevo, ¿prefieres nuevo o considerarías uno usado por ~60k?"
+   - En vez de "¿Cuánto tiempo te tomará?" → "Típicamente aprender X toma Y meses. ¿Tienes ese tiempo disponible?"
+
+4. **CALCULA LA BRECHA**: Si tienes el precio/costo y lo que el usuario tiene, calcula automáticamente cuánto le falta y cuánto necesita ahorrar por mes/semana.
+
+5. **SÉ PROACTIVO**: No esperes a que el usuario pregunte. Si encontraste información útil, compártela inmediatamente.`;
 
 export async function analyzeChat(messages: ChatMessage[]): Promise<VicuAnalysis> {
   // Construir el historial de conversación como texto
@@ -283,10 +304,34 @@ export async function analyzeChat(messages: ChatMessage[]): Promise<VicuAnalysis
     .map((m) => `${m.role === "vicu" ? "Vicu" : "Usuario"}: ${m.content}`)
     .join("\n");
 
+  // Get the last user message for search enrichment
+  const lastUserMessage = messages.filter(m => m.role === "user").pop()?.content || "";
+
+  // STEP 1: Proactively search for relevant information
+  let searchContext = "";
+  let searchResults: SearchResult[] = [];
+  let discoveredFacts: string[] = [];
+
+  try {
+    const enrichment = await enrichWithSearch(lastUserMessage, conversationText);
+    if (enrichment.enriched && enrichment.searchResults.length > 0) {
+      searchResults = enrichment.searchResults;
+      // Collect all facts from search results
+      discoveredFacts = searchResults.flatMap(r => r.facts);
+      // Build context string for the prompt
+      searchContext = `\n\n## INFORMACIÓN INVESTIGADA AUTOMÁTICAMENTE:\n${searchResults.map(r =>
+        `**${r.query}**\n${r.summary}\n- ${r.facts.join("\n- ")}\n(Fuente típica: ${r.source_hint})`
+      ).join("\n\n")}`;
+    }
+  } catch (searchError) {
+    console.warn("Search enrichment failed, continuing without:", searchError);
+  }
+
   // Inyectar la fecha de hoy en el prompt
   const todayDate = new Date().toISOString().split("T")[0];
   const promptWithDate = ANALYSIS_SYSTEM_PROMPT.replace("{{TODAY_DATE}}", todayDate);
 
+  // STEP 2: Analyze with enriched context
   const completion = await getOpenAI().chat.completions.create({
     model: "gpt-4.1-mini",
     messages: [
@@ -296,10 +341,10 @@ export async function analyzeChat(messages: ChatMessage[]): Promise<VicuAnalysis
       },
       {
         role: "user",
-        content: `Analiza esta conversación y extrae el plan de experimento:\n\n${conversationText}`,
+        content: `Analiza esta conversación y extrae el plan de experimento:\n\n${conversationText}${searchContext}`,
       },
     ],
-    temperature: 0.3, // Más determinístico para clasificación
+    temperature: 0.3,
   });
 
   const content = completion.choices[0]?.message?.content;
@@ -316,6 +361,8 @@ export async function analyzeChat(messages: ChatMessage[]): Promise<VicuAnalysis
     return {
       ...parsed,
       confidence: normalizedConfidence,
+      search_results: searchResults.length > 0 ? searchResults : undefined,
+      discovered_facts: discoveredFacts.length > 0 ? discoveredFacts : undefined,
     } as VicuAnalysis;
   } catch {
     console.error("Failed to parse analysis response:", content);
@@ -325,7 +372,7 @@ export async function analyzeChat(messages: ChatMessage[]): Promise<VicuAnalysis
       generated_title: "",
       context: "business",
       experiment_type: "otro",
-      surface_type: "ritual", // Default seguro: ritual, no landing
+      surface_type: "ritual",
       target_audience: "",
       main_pain: "",
       promise: "",
@@ -336,6 +383,8 @@ export async function analyzeChat(messages: ChatMessage[]): Promise<VicuAnalysis
       needs_clarification: true,
       clarifying_questions: ["Cuéntame más sobre tu proyecto. ¿Qué quieres lograr exactamente?"],
       confidence: 0,
+      search_results: searchResults.length > 0 ? searchResults : undefined,
+      discovered_facts: discoveredFacts.length > 0 ? discoveredFacts : undefined,
     };
   }
 }

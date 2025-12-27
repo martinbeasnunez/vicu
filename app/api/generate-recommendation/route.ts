@@ -22,8 +22,8 @@ function getSupabase(): SupabaseClient {
   return _supabase;
 }
 
-export type VicuRecommendationAction = "escalar" | "iterar" | "pausar" | "cerrar";
-export type ExperimentStage = "testing" | "scale" | "iterate" | "kill" | "paused";
+export type VicuRecommendationAction = "seguir_construyendo" | "probar" | "ajustar" | "logrado" | "pausar" | "descartar";
+export type ExperimentStage = "queued" | "building" | "testing" | "adjusting" | "achieved" | "paused" | "discarded";
 
 export interface VicuRecommendationData {
   action: VicuRecommendationAction;
@@ -48,10 +48,12 @@ export interface GenerateRecommendationResponse {
 }
 
 const ACTION_LABELS: Record<VicuRecommendationAction, string> = {
-  escalar: "En marcha",
-  iterar: "Ajustando",
-  pausar: "En pausa",
-  cerrar: "Cerrado",
+  seguir_construyendo: "Construyendo",
+  probar: "Probando",
+  ajustar: "Ajustando",
+  logrado: "Logrado",
+  pausar: "Pausado",
+  descartar: "Descartado",
 };
 
 export async function POST(request: NextRequest) {
@@ -149,11 +151,13 @@ DESCRIPCIÓN/OBJETIVO: ${experiment.description || "Sin descripción"}`;
 
     // Add current stage context
     const stageLabels: Record<ExperimentStage, string> = {
-      testing: "Arrancando",
-      scale: "En marcha",
-      iterate: "Ajustando",
-      kill: "Cerrado",
-      paused: "En pausa",
+      queued: "Por empezar",
+      building: "Construyendo",
+      testing: "Probando",
+      adjusting: "Ajustando",
+      achieved: "Logrado",
+      paused: "Pausado",
+      discarded: "Descartado",
     };
     projectContext += `\n\nETAPA ACTUAL: ${stageLabels[currentStage]} (${currentStage})`;
 
@@ -189,27 +193,38 @@ DESCRIPCIÓN/OBJETIVO: ${experiment.description || "Sin descripción"}`;
 "${previous_next_focus}"`;
     }
 
-    const systemPrompt = `Eres Vicu, un estratega de growth que ayuda a emprendedores y personas a tomar decisiones inteligentes sobre sus proyectos y objetivos.
+    const systemPrompt = `Eres Vicu, un estratega de growth con mentalidad MVP que ayuda a emprendedores y personas a tomar decisiones inteligentes sobre sus proyectos y objetivos.
 
-Tu tarea es analizar el progreso de un proyecto/experimento y dar UNA RECOMENDACIÓN CLARA sobre qué debería hacer el usuario a continuación.
+Tu tarea es analizar el progreso de un proyecto y dar UNA RECOMENDACIÓN CLARA sobre qué debería hacer el usuario a continuación.
+
+CICLO MVP - Estados del proyecto:
+1. Por empezar (queued) → Idea capturada, sin acción
+2. Construyendo (building) → Creando la primera versión mínima
+3. Probando (testing) → Lanzaste algo, esperando feedback/datos
+4. Ajustando (adjusting) → Cambiando basado en lo aprendido
+5. Logrado (achieved) → Meta cumplida
+6. Pausado (paused) → Detenido temporalmente
+7. Descartado (discarded) → No funcionó o ya no importa
 
 OPCIONES DE ACCIÓN (elige UNA):
-- "escalar": El proyecto tuvo buenos resultados. Recomendamos invertir más tiempo/recursos en él.
-- "iterar": Hay potencial pero necesita ajustes. Recomendamos hacer cambios y volver a probar.
-- "pausar": Los resultados no son concluyentes o el usuario está agotado. Recomendamos tomar distancia temporalmente.
-- "cerrar": El proyecto no funcionó o ya cumplió su propósito. Recomendamos finalizarlo y pasar a otra cosa.
+- "seguir_construyendo": Aún no hay algo listo para probar. Seguir construyendo el MVP.
+- "probar": Ya hay algo construido. Es hora de lanzar y obtener feedback real.
+- "ajustar": Hay datos/feedback. Hacer cambios específicos y volver a probar.
+- "logrado": El objetivo se cumplió. Celebrar y cerrar.
+- "pausar": Bloqueo o agotamiento. Tomar distancia temporalmente.
+- "descartar": No funcionó después de varios intentos, o ya no es relevante.
 
 CRITERIOS PARA DECIDIR:
-1. ¿Se completó el plan? (si no, generalmente es "escalar" para seguir ejecutando o "pausar" si hay bloqueos)
-2. ¿Hay autoevaluación del usuario? (alto impacto → escalar, medio → iterar, bajo → pausar/cerrar)
-3. ¿Hay métricas objetivas? (conversión alta → escalar, media → iterar, baja → pausar/cerrar)
-4. ¿Se acerca el deadline? (si hay urgencia, ser más decisivo)
-5. ¿Es un proyecto personal/ritual? (ser más gentil, enfocarse en el progreso del hábito)
+1. ¿Hay algo construido para probar? (no → seguir_construyendo, sí → probar)
+2. ¿Hay datos/feedback del mundo real? (no → probar, sí → ajustar o logrado)
+3. ¿Los resultados son positivos? (sí y meta cumplida → logrado, sí pero incompleto → ajustar)
+4. ¿Hubo varios ciclos sin progreso? (sí → pausar o descartar)
+5. ¿El usuario reporta bloqueo o agotamiento? (sí → pausar)
 
 FORMATO DE RESPUESTA:
 Responde SOLO con JSON válido (sin markdown, sin \`\`\`) con esta estructura:
 {
-  "action": "escalar" | "iterar" | "pausar" | "cerrar",
+  "action": "seguir_construyendo" | "probar" | "ajustar" | "logrado" | "pausar" | "descartar",
   "title": "Título de la recomendación (máx 60 caracteres)",
   "summary": "Explicación en 2-3 oraciones de por qué esta recomendación",
   "reasons": ["Razón 1", "Razón 2", "Razón 3"],
@@ -220,7 +235,8 @@ IMPORTANTE:
 - Sé específico para ESTE proyecto, no genérico.
 - El título debe ser claro y directo.
 - Las razones deben basarse en datos concretos del proyecto.
-- El siguiente paso debe ser accionable y realista.`;
+- El siguiente paso debe ser accionable y realista.
+- Fomenta ciclos cortos: construir → probar → ajustar → repetir.`;
 
     const userPrompt = `Analiza este proyecto y genera una recomendación:
 

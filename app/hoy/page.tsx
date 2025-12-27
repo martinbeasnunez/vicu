@@ -5,9 +5,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-
-// Force dynamic rendering - do not prerender during build
-export const dynamic = "force-dynamic";
 import {
   ExperimentStatus,
   STATUS_LABELS,
@@ -15,11 +12,11 @@ import {
 } from "@/lib/experiment-helpers";
 import type { CurrentState, EffortLevel, NextStepResponse } from "@/app/api/next-step/route";
 import { useUserStats } from "@/lib/useUserStats";
-import { Badge } from "@/lib/gamification";
-import GamificationPanel, { XpGainAnimation, BadgeUnlockAnimation, LevelUpAnimation } from "@/components/GamificationPanel";
+import { Badge, getLevelName } from "@/lib/gamification";
+import { XpGainAnimation, BadgeUnlockAnimation, LevelUpAnimation } from "@/components/GamificationPanel";
 
 // All statuses for filtering (including inactive ones)
-const ALL_STATUSES: ExperimentStatus[] = ["testing", "scale", "iterate", "paused", "kill"];
+const ALL_STATUSES: ExperimentStatus[] = ["queued", "building", "testing", "adjusting", "achieved", "paused", "discarded"];
 
 interface Experiment {
   id: string;
@@ -72,28 +69,32 @@ const EFFORT_LABELS: Record<EffortLevel, { text: string; color: string }> = {
   medio: { text: "~1 hora", color: "text-orange-400" },
 };
 
-// Status badge colors
+// Status badge colors - MVP cycle states
 const STATUS_BADGE_COLORS: Record<ExperimentStatus, string> = {
-  testing: "bg-blue-500/20 text-blue-400",
-  scale: "bg-emerald-500/20 text-emerald-400",
-  iterate: "bg-amber-500/20 text-amber-400",
-  kill: "bg-red-500/20 text-red-400",
-  paused: "bg-slate-500/20 text-slate-400",
+  queued: "bg-slate-500/20 text-slate-400",
+  building: "bg-blue-500/20 text-blue-400",
+  testing: "bg-purple-500/20 text-purple-400",
+  adjusting: "bg-amber-500/20 text-amber-400",
+  achieved: "bg-green-500/20 text-green-400",
+  paused: "bg-zinc-500/20 text-zinc-400",
+  discarded: "bg-red-500/20 text-red-400",
 };
 
 // SURFACE_BADGE_COLORS removed - surface types hidden from UI
 
-// Active statuses for "Hoy" view (default filter)
-const ACTIVE_STATUSES: ExperimentStatus[] = ["testing", "scale", "iterate"];
+// Active statuses for "Hoy" view (default filter) - excludes finished and paused
+const ACTIVE_STATUSES: ExperimentStatus[] = ["queued", "building", "testing", "adjusting"];
 
-// Filter chip styling
+// Filter chip styling - MVP cycle states
 const FILTER_CHIP_COLORS: Record<ExperimentStatus | "all", { active: string; inactive: string }> = {
   all: { active: "bg-slate-100 text-slate-900", inactive: "bg-slate-800/50 text-slate-400 hover:bg-slate-700/50" },
-  testing: { active: "bg-blue-500 text-white", inactive: "bg-blue-500/10 text-blue-400 hover:bg-blue-500/20" },
-  scale: { active: "bg-emerald-500 text-white", inactive: "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" },
-  iterate: { active: "bg-amber-500 text-white", inactive: "bg-amber-500/10 text-amber-400 hover:bg-amber-500/20" },
-  paused: { active: "bg-slate-500 text-white", inactive: "bg-slate-500/10 text-slate-400 hover:bg-slate-500/20" },
-  kill: { active: "bg-red-500 text-white", inactive: "bg-red-500/10 text-red-400 hover:bg-red-500/20" },
+  queued: { active: "bg-slate-500 text-white", inactive: "bg-slate-500/10 text-slate-400 hover:bg-slate-500/20" },
+  building: { active: "bg-blue-500 text-white", inactive: "bg-blue-500/10 text-blue-400 hover:bg-blue-500/20" },
+  testing: { active: "bg-purple-500 text-white", inactive: "bg-purple-500/10 text-purple-400 hover:bg-purple-500/20" },
+  adjusting: { active: "bg-amber-500 text-white", inactive: "bg-amber-500/10 text-amber-400 hover:bg-amber-500/20" },
+  achieved: { active: "bg-green-500 text-white", inactive: "bg-green-500/10 text-green-400 hover:bg-green-500/20" },
+  paused: { active: "bg-zinc-500 text-white", inactive: "bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20" },
+  discarded: { active: "bg-red-500 text-white", inactive: "bg-red-500/10 text-red-400 hover:bg-red-500/20" },
 };
 
 function formatLastCheckin(dateString: string | null): string {
@@ -199,17 +200,30 @@ export default function HoyPage() {
 
     // If permission is granted, check if already subscribed
     if (Notification.permission === "granted") {
-      navigator.serviceWorker.ready.then((registration) => {
-        registration.pushManager.getSubscription().then((subscription) => {
-          // User is subscribed if they have a real subscription OR saved preference
-          setPushSubscribed(!!subscription || savedPreference === "enabled");
-        });
-      }).catch(() => {
-        // Service worker not registered yet - check saved preference
-        if (savedPreference === "enabled") {
-          setPushSubscribed(true);
+      // Add timeout to prevent hanging
+      const checkSubscription = async () => {
+        try {
+          const timeoutPromise = new Promise<null>((_, reject) =>
+            setTimeout(() => reject(new Error("Timeout")), 2000)
+          );
+          const registration = await Promise.race([
+            navigator.serviceWorker.ready,
+            timeoutPromise
+          ]);
+          if (registration) {
+            const subscription = await registration.pushManager.getSubscription();
+            setPushSubscribed(!!subscription || savedPreference === "enabled");
+          } else if (savedPreference === "enabled") {
+            setPushSubscribed(true);
+          }
+        } catch {
+          // Service worker not registered yet or timeout - check saved preference
+          if (savedPreference === "enabled") {
+            setPushSubscribed(true);
+          }
         }
-      });
+      };
+      checkSubscription();
     } else if (savedPreference === "enabled") {
       // User enabled before but permission was reset - they'll need to re-enable
       localStorage.removeItem("vicu_push_preference");
@@ -318,75 +332,79 @@ export default function HoyPage() {
   };
 
   const fetchData = useCallback(async () => {
-    // First check if user has any experiments at all (excluding deleted)
-    const { count: totalCount } = await supabase
-      .from("experiments")
-      .select("*", { count: "exact", head: true })
-      .is("deleted_at", null);
-
-    setHasAnyExperiments((totalCount || 0) > 0);
-
-    // Try fetching with streak fields first, fallback without them
-    let expsData: Experiment[] | null = null;
-
-    // Fetch ALL experiments (not deleted), ordered by newest first
-    // We filter by status on the client side to support filter chips
-    const result1 = await supabase
-      .from("experiments")
-      .select("id, title, status, surface_type, deadline, created_at, last_checkin_at, checkins_count, streak_days")
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false }); // newest first
-
-    if (result1.error) {
-      // Fallback: query without new fields (migration not run yet)
-      console.warn("Fetching without streak/deleted fields (run migration)");
-      const result2 = await supabase
+    try {
+      // First check if user has any experiments at all (excluding deleted)
+      const { count: totalCount } = await supabase
         .from("experiments")
-        .select("id, title, status, surface_type, deadline, created_at")
+        .select("*", { count: "exact", head: true })
+        .is("deleted_at", null);
+
+      setHasAnyExperiments((totalCount || 0) > 0);
+
+      // Try fetching with streak fields first, fallback without them
+      let expsData: Experiment[] | null = null;
+
+      // Fetch ALL experiments (not deleted), ordered by newest first
+      // We filter by status on the client side to support filter chips
+      const result1 = await supabase
+        .from("experiments")
+        .select("id, title, status, surface_type, deadline, created_at, last_checkin_at, checkins_count, streak_days")
+        .is("deleted_at", null)
         .order("created_at", { ascending: false }); // newest first
 
-      if (result2.error) {
-        console.error("Error fetching experiments:", result2.error);
+      if (result1.error) {
+        // Fallback: query without new fields (migration not run yet)
+        console.warn("Fetching without streak/deleted fields (run migration)");
+        const result2 = await supabase
+          .from("experiments")
+          .select("id, title, status, surface_type, deadline, created_at")
+          .order("created_at", { ascending: false }); // newest first
+
+        if (result2.error) {
+          console.error("Error fetching experiments:", result2.error);
+        } else {
+          // Add default values for new fields
+          expsData = (result2.data || []).map((e) => ({
+            ...e,
+            last_checkin_at: null,
+            checkins_count: 0,
+            streak_days: 0,
+          })) as Experiment[];
+        }
       } else {
-        // Add default values for new fields
-        expsData = (result2.data || []).map((e) => ({
+        expsData = (result1.data || []).map((e) => ({
           ...e,
-          last_checkin_at: null,
-          checkins_count: 0,
-          streak_days: 0,
+          last_checkin_at: e.last_checkin_at || null,
+          checkins_count: e.checkins_count || 0,
+          streak_days: e.streak_days || 0,
         })) as Experiment[];
       }
-    } else {
-      expsData = (result1.data || []).map((e) => ({
-        ...e,
-        last_checkin_at: e.last_checkin_at || null,
-        checkins_count: e.checkins_count || 0,
-        streak_days: e.streak_days || 0,
-      })) as Experiment[];
+
+      if (expsData) {
+        setExperiments(expsData);
+        // Check if there are more experiments to load
+        setHasMore(expsData.length > EXPERIMENTS_PER_PAGE);
+
+        // Calculate today's check-ins count
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const checkedToday = expsData.filter((e) => {
+          if (!e.last_checkin_at) return false;
+          const lastDate = new Date(e.last_checkin_at);
+          lastDate.setHours(0, 0, 0, 0);
+          return lastDate.getTime() === today.getTime();
+        }).length;
+        setTodayCheckins(checkedToday);
+
+        // Calculate max streak
+        const max = Math.max(0, ...expsData.map((e) => e.streak_days));
+        setMaxStreak(max);
+      }
+    } catch (err) {
+      console.error("Error fetching experiments:", err);
+    } finally {
+      setLoading(false);
     }
-
-    if (expsData) {
-      setExperiments(expsData);
-      // Check if there are more experiments to load
-      setHasMore(expsData.length > EXPERIMENTS_PER_PAGE);
-
-      // Calculate today's check-ins count
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const checkedToday = expsData.filter((e) => {
-        if (!e.last_checkin_at) return false;
-        const lastDate = new Date(e.last_checkin_at);
-        lastDate.setHours(0, 0, 0, 0);
-        return lastDate.getTime() === today.getTime();
-      }).length;
-      setTodayCheckins(checkedToday);
-
-      // Calculate max streak
-      const max = Math.max(0, ...expsData.map((e) => e.streak_days));
-      setMaxStreak(max);
-    }
-
-    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -707,99 +725,98 @@ export default function HoyPage() {
         </div>
       )}
 
-      <main className="max-w-3xl mx-auto px-3 sm:px-4 py-6 sm:py-8 md:py-10 flex flex-col gap-4 sm:gap-6 safe-area-top safe-area-bottom">
-        {/* Header with navigation */}
-        <header className="flex items-start sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <Image src="/vicu-logo.png" alt="Vicu" width={32} height={32} className="h-7 w-7 sm:h-8 sm:w-8 flex-shrink-0" priority />
-            <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold text-slate-50 tracking-tight">Hoy con Vicu</h1>
-              <p className="text-xs sm:text-sm text-slate-400 mt-0.5 sm:mt-1 line-clamp-2 sm:line-clamp-none">
-                Revisa qué proyectos quieres mover hoy.
-              </p>
-            </div>
+      <main className="max-w-3xl mx-auto px-4 sm:px-6 pt-6 pb-8 flex flex-col gap-6 mt-6 sm:mt-8">
+        {/* Minimal Header */}
+        <header className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Image src="/vicu-logo.png" alt="Vicu" width={28} height={28} className="h-7 w-7" priority />
+            <span className="text-lg font-semibold text-slate-200">VICU</span>
+          </div>
+
+          {/* Right side: notifications toggle + new button */}
+          <div className="flex items-center gap-2">
+            {/* Compact notification toggle */}
+            {pushSupported && (
+              pushSubscribed ? (
+                <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400" title="Recordatorios activos">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                </div>
+              ) : pushPermission !== "denied" && (
+                <button
+                  onClick={handleActivatePush}
+                  disabled={isSubscribing}
+                  className="p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-700 transition-all disabled:opacity-50"
+                  title="Activar recordatorios"
+                >
+                  {isSubscribing ? (
+                    <div className="w-4 h-4 border-2 border-slate-600 border-t-slate-300 rounded-full animate-spin" />
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                    </svg>
+                  )}
+                </button>
+              )
+            )}
+
+            <Link
+              href="/vicu"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-500 text-white text-sm font-medium hover:bg-indigo-400 transition-all"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              <span>Nuevo</span>
+            </Link>
           </div>
         </header>
 
-        {/* Gamification Panel - Compact version */}
-        <GamificationPanel stats={userStats} loading={statsLoading} compact />
+        {/* Stats Bar - Inline, minimal */}
+        {userStats && !statsLoading && (
+          <div className="flex items-center gap-6 text-sm">
+            {/* Level & XP */}
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">
+                {userStats.level}
+              </div>
+              <div className="flex flex-col">
+                <span className="text-slate-400 text-xs leading-tight">{getLevelName(userStats.level)}</span>
+                <span className="text-slate-200 font-medium leading-tight">{userStats.xp} pts</span>
+              </div>
+            </div>
 
-        {/* Push Notification Reminder Toggle */}
-        {pushSupported ? (
-          <div className="card-glass px-3 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-              <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex-shrink-0 flex items-center justify-center ${
-                pushSubscribed ? "bg-emerald-500/20" : pushPermission === "denied" ? "bg-red-500/20" : "bg-indigo-500/20"
-              }`}>
-                <svg className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${
-                  pushSubscribed ? "text-emerald-400" : pushPermission === "denied" ? "text-red-400" : "text-indigo-400"
-                }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                </svg>
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs sm:text-sm font-medium text-slate-200">Recordatorios</p>
-                <p className="text-[10px] sm:text-xs text-slate-500 truncate sm:whitespace-normal">
-                  {pushSubscribed
-                    ? "Activos"
-                    : pushPermission === "denied"
-                    ? "Bloqueados"
-                    : "Recibe recordatorios"}
-                </p>
-              </div>
+            {/* Divider */}
+            <div className="w-px h-6 bg-slate-700" />
+
+            {/* Streak */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-lg">🔥</span>
+              <span className="text-orange-400 font-semibold">{userStats.streak_days}</span>
+              <span className="text-slate-500 text-xs">días</span>
             </div>
-            {pushSubscribed ? (
-              <span className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 whitespace-nowrap flex-shrink-0">
-                Activado
-              </span>
-            ) : pushPermission === "denied" ? (
-              <span className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-medium bg-red-500/20 text-red-400 border border-red-500/30 whitespace-nowrap flex-shrink-0">
-                Bloqueado
-              </span>
-            ) : (
-              <button
-                onClick={handleActivatePush}
-                disabled={isSubscribing}
-                className="px-3 py-2 sm:py-1.5 rounded-full text-xs font-medium bg-indigo-500 text-white hover:bg-indigo-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0 touch-target"
-              >
-                {isSubscribing ? (
-                  <span className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span className="hidden sm:inline">Activando...</span>
-                  </span>
-                ) : (
-                  "Activar"
-                )}
-              </button>
-            )}
-          </div>
-        ) : (
-          /* Browser doesn't support push notifications - show minimal message */
-          <div className="card-glass px-3 sm:px-4 py-2.5 sm:py-3 flex items-center gap-2 sm:gap-3 opacity-60">
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-slate-500/20 flex items-center justify-center flex-shrink-0">
-              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-xs sm:text-sm font-medium text-slate-400">Recordatorios</p>
-              <p className="text-[10px] sm:text-xs text-slate-600">No disponible</p>
+
+            {/* Divider */}
+            <div className="w-px h-6 bg-slate-700" />
+
+            {/* Daily progress */}
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400 text-xs">Hoy</span>
+              <div className="flex items-center gap-1.5">
+                <div className="w-12 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${userStats.daily_checkins >= userStats.daily_goal ? "bg-emerald-500" : "bg-indigo-500"}`}
+                    style={{ width: `${Math.min(100, (userStats.daily_checkins / userStats.daily_goal) * 100)}%` }}
+                  />
+                </div>
+                <span className={`text-xs font-medium ${userStats.daily_checkins >= userStats.daily_goal ? "text-emerald-400" : "text-slate-300"}`}>
+                  {userStats.daily_checkins}/{userStats.daily_goal}
+                </span>
+              </div>
             </div>
           </div>
         )}
-
-        {/* Navigation - Vicu now uses /hoy as main home, projects list hidden from nav */}
-        <nav className="flex items-center justify-end border-b border-slate-800 pb-2 sm:pb-3">
-          <Link
-            href="/vicu"
-            className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2 rounded-full bg-indigo-500 text-white text-xs sm:text-sm font-medium hover:bg-indigo-400 transition-all touch-target"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            <span>Nuevo</span>
-          </Link>
-        </nav>
 
         {/* Status Filter Chips */}
         {experiments.length > 0 && (
@@ -974,17 +991,6 @@ export default function HoyPage() {
           )}
         </section>
 
-        {/* "Tu progreso" section REMOVED - gamification is now shown in compact header panel */}
-
-        {/* Quick link to create new */}
-        <section className="text-center">
-          <Link
-            href="/vicu"
-            className="text-sm text-slate-500 hover:text-indigo-400 transition-colors"
-          >
-            + Crear nuevo objetivo
-          </Link>
-        </section>
       </main>
 
       {/* Mover Proyecto Modal */}

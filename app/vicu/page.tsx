@@ -214,6 +214,14 @@ export default function VicuPage() {
       parts.push(`**Objetivo:** ${result.summary}`);
     }
 
+    // Show discovered facts from research (if any)
+    if (result.discovered_facts && result.discovered_facts.length > 0) {
+      parts.push(`\n**Datos que investigué:**`);
+      result.discovered_facts.slice(0, 4).forEach(fact => {
+        parts.push(`• ${fact}`);
+      });
+    }
+
     if (result.context_bullets && result.context_bullets.length > 0) {
       parts.push(`\n**Contexto clave:**`);
       result.context_bullets.forEach(bullet => {
@@ -244,6 +252,15 @@ export default function VicuPage() {
     parts.push("\n\n¿Está todo correcto? Si algo no cuadra, cuéntamelo para ajustarlo.");
 
     return parts.join("\n");
+  };
+
+  // Build a context-aware response prefix when search results are available
+  const buildSearchContextPrefix = (result: VicuAnalysis): string => {
+    if (!result.discovered_facts || result.discovered_facts.length === 0) {
+      return "";
+    }
+    // Return a brief mention that we found relevant data
+    return `💡 Investigué un poco y encontré información útil:\n• ${result.discovered_facts.slice(0, 2).join("\n• ")}\n\n`;
   };
 
   const handleSendMessage = async () => {
@@ -317,6 +334,9 @@ export default function VicuPage() {
             q => !isQuestionAlreadyAsked(q)
           );
 
+          // Prepend search context if we found useful data
+          const searchPrefix = buildSearchContextPrefix(result);
+
           if (newQuestions.length > 0) {
             // Ask only 1 question at a time to avoid overwhelming
             const questionToAsk = newQuestions[0];
@@ -327,8 +347,9 @@ export default function VicuPage() {
               // Skip this question, try the next one or move forward
               if (newQuestions.length > 1) {
                 const altQuestion = newQuestions[1];
+                const messageWithContext = searchPrefix + altQuestion;
                 setTimeout(() => {
-                  addMessage("vicu", altQuestion);
+                  addMessage("vicu", messageWithContext);
                   setAskedQuestions(prev => new Set([...prev, normalizeQuestion(altQuestion)]));
                 }, 300);
               } else if (result.confidence >= 0.5) {
@@ -340,8 +361,9 @@ export default function VicuPage() {
                 }, 300);
               }
             } else {
+              const messageWithContext = searchPrefix + questionToAsk;
               setTimeout(() => {
-                addMessage("vicu", questionToAsk);
+                addMessage("vicu", messageWithContext);
                 setAskedQuestions(prev => new Set([...prev, normalizeQuestion(questionToAsk)]));
               }, 300);
             }
@@ -656,8 +678,8 @@ export default function VicuPage() {
                   }`}
                 >
                   {message.role === "vicu" && (
-                    <div className="flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center mr-2 sm:mr-3 shadow-lg shadow-indigo-500/25">
-                      <span className="text-white text-xs sm:text-sm font-bold">v</span>
+                    <div className="flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-slate-800 flex items-center justify-center mr-2 sm:mr-3 overflow-hidden">
+                      <Image src="/vicu-logo.png" alt="Vicu" width={28} height={28} className="w-5 h-5 sm:w-6 sm:h-6" />
                     </div>
                   )}
                   <div
@@ -679,8 +701,8 @@ export default function VicuPage() {
               {/* Typing indicator */}
               {isAnalyzing && (
                 <div className="flex justify-start animate-fade-in">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center mr-3 shadow-lg shadow-indigo-500/25">
-                    <span className="text-white text-sm font-bold">v</span>
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center mr-3 overflow-hidden">
+                    <Image src="/vicu-logo.png" alt="Vicu" width={28} height={28} className="w-6 h-6" />
                   </div>
                   <div className="bg-slate-900/70 border border-white/10 rounded-2xl rounded-bl-md px-4 py-3">
                     <div className="flex items-center gap-1.5">
@@ -692,31 +714,23 @@ export default function VicuPage() {
                 </div>
               )}
 
-              {/* Readback state - Show confirmation buttons */}
+              {/* Readback state - Show confirmation button that creates directly */}
               {phase === "readback" && !isAnalyzing && analysis && (
                 <div className="pt-4 animate-fade-in-up">
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <button
-                      onClick={handleConfirmReadback}
-                      className="flex-1 px-6 py-3.5 rounded-xl bg-emerald-500 text-white font-medium hover:bg-emerald-400 transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      Confirmar y crear objetivo
-                    </button>
-                    <button
-                      onClick={() => {
-                        inputRef.current?.focus();
-                      }}
-                      className="flex-1 px-6 py-3.5 rounded-xl border border-white/20 text-slate-300 font-medium hover:bg-white/5 transition-all duration-200 flex items-center justify-center gap-2"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                      </svg>
-                      Editar antes de crear
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => {
+                      // Skip "ready" phase - go directly to creating
+                      setPhase("creating");
+                      addMessage("vicu", "¡Perfecto! Creando tu proyecto...");
+                      createExperiment();
+                    }}
+                    className="w-full px-6 py-4 rounded-xl bg-emerald-500 text-white font-medium hover:bg-emerald-400 transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Crear proyecto
+                  </button>
                   <p className="text-center text-slate-500 text-xs mt-3">
                     Si algo no está bien, escribe tu corrección abajo
                   </p>
@@ -729,8 +743,8 @@ export default function VicuPage() {
                   {/* Brief Card */}
                   <div className="card-premium rounded-2xl px-5 py-5 border-indigo-500/30">
                     <div className="flex items-center gap-2 mb-4">
-                      <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center">
-                        <span className="text-white text-xs font-bold">v</span>
+                      <div className="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center overflow-hidden">
+                        <Image src="/vicu-logo.png" alt="Vicu" width={20} height={20} className="w-4 h-4" />
                       </div>
                       <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider">Resumen de tu proyecto</h3>
                     </div>
@@ -818,15 +832,17 @@ export default function VicuPage() {
                 </div>
               )}
 
-              {/* Creating state - Loader */}
+              {/* Creating state - Loader with animated logo */}
               {phase === "creating" && (
                 <div className="flex flex-col items-center justify-center py-12 animate-fade-in">
                   <div className="relative mb-6">
-                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500/20 to-indigo-600/20 flex items-center justify-center">
-                      <div className="w-12 h-12 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
-                    </div>
-                    <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
-                      <span className="text-white text-xs font-bold">v</span>
+                    {/* Spinning ring */}
+                    <div className="w-20 h-20 rounded-full border-2 border-indigo-500/20 border-t-indigo-500 animate-spin" />
+                    {/* Logo in center */}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center overflow-hidden animate-pulse">
+                        <Image src="/vicu-logo.png" alt="Vicu" width={40} height={40} className="w-8 h-8" />
+                      </div>
                     </div>
                   </div>
                   <p className="text-xl font-medium text-slate-50 text-center mb-2">

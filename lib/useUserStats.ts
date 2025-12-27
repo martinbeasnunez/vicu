@@ -34,49 +34,117 @@ export function useUserStats(): UseUserStatsReturn {
 
   const fetchStats = useCallback(async () => {
     try {
-      const { data, error: fetchError } = await supabase
-        .from("user_stats")
-        .select("*")
-        .eq("user_id", DEFAULT_USER_ID)
-        .single();
+      setLoading(true);
 
-      if (fetchError) {
-        // Table might not exist yet or no row found - create default stats
-        // PGRST116 = no rows returned, 42P01 = table doesn't exist
-        console.warn("useUserStats fetch error:", fetchError.code, fetchError.message);
-        setStats({
-          id: "",
-          user_id: DEFAULT_USER_ID,
-          xp: 0,
-          level: 1,
-          streak_days: 0,
-          longest_streak: 0,
-          last_checkin_date: null,
-          daily_checkins: 0,
-          daily_goal: 2,
-          total_checkins: 0,
-          total_projects_completed: 0,
-          badges: [],
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
-        setLoading(false);
-        return;
+      // Fetch REAL stats from experiment_checkins and experiments
+      // Add timeout to prevent hanging - resolve with empty data on timeout
+      const timeoutPromise = new Promise<[{ data: never[]; error: null }, { data: never[]; error: null }]>((resolve) =>
+        setTimeout(() => resolve([{ data: [], error: null }, { data: [], error: null }]), 5000)
+      );
+
+      const fetchPromise = Promise.all([
+        supabase
+          .from("experiment_checkins")
+          .select("id, status, created_at")
+          .eq("status", "done"),
+        supabase
+          .from("experiments")
+          .select("id, status")
+          .in("status", ["achieved"]),
+      ]);
+
+      const [checkinsResult, experimentsResult] = await Promise.race([
+        fetchPromise,
+        timeoutPromise
+      ]) as [
+        { data: Array<{ id: string; status: string; created_at: string }> | null; error: unknown },
+        { data: Array<{ id: string; status: string }> | null; error: unknown }
+      ];
+
+      const completedCheckins = (checkinsResult.data || []) as Array<{ id: string; status: string; created_at: string }>;
+      const completedProjects = (experimentsResult.data || []) as Array<{ id: string; status: string }>;
+
+      // Calculate total checkins (completed steps)
+      const totalCheckins = completedCheckins.length;
+
+      // Calculate projects completed
+      const totalProjectsCompleted = completedProjects.length;
+
+      // Calculate XP based on real data
+      // Base: 10 XP per completed step + 100 XP per completed project
+      const xp = (totalCheckins * XP_REWARDS.CHECKIN) + (totalProjectsCompleted * XP_REWARDS.PROJECT_COMPLETED);
+      const level = calculateLevel(xp);
+
+      // Calculate streak from checkin dates
+      const checkinDates = completedCheckins
+        .map(c => c.created_at?.split("T")[0])
+        .filter(Boolean)
+        .sort((a, b) => b.localeCompare(a)); // Most recent first
+
+      let streakDays = 0;
+      let lastCheckinDate: string | null = null;
+
+      if (checkinDates.length > 0) {
+        lastCheckinDate = checkinDates[0];
+        const today = new Date().toISOString().split("T")[0];
+        const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+
+        // Only count streak if last checkin was today or yesterday
+        if (lastCheckinDate === today || lastCheckinDate === yesterday) {
+          streakDays = 1;
+          let checkDate = lastCheckinDate === today ? yesterday : new Date(new Date(lastCheckinDate).getTime() - 86400000).toISOString().split("T")[0];
+
+          // Count consecutive days backwards
+          const uniqueDates = [...new Set(checkinDates)];
+          for (let i = 1; i < uniqueDates.length; i++) {
+            if (uniqueDates.includes(checkDate)) {
+              streakDays++;
+              checkDate = new Date(new Date(checkDate).getTime() - 86400000).toISOString().split("T")[0];
+            } else {
+              break;
+            }
+          }
+        }
       }
 
-      // Parse badges from JSON if needed
-      const parsedStats: UserStats = {
-        ...data,
-        badges: Array.isArray(data.badges) ? data.badges : [],
+      // Calculate daily checkins (today)
+      const today = new Date().toISOString().split("T")[0];
+      const dailyCheckins = completedCheckins.filter(c => c.created_at?.startsWith(today)).length;
+
+      // Try to get saved badges from user_stats, but use real data for everything else
+      let badges: Badge[] = [];
+      try {
+        const { data: savedStats } = await supabase
+          .from("user_stats")
+          .select("badges")
+          .eq("user_id", DEFAULT_USER_ID)
+          .single();
+
+        if (savedStats?.badges && Array.isArray(savedStats.badges)) {
+          badges = savedStats.badges;
+        }
+      } catch {
+        // Ignore badge fetch errors - they're not critical
+      }
+
+      const realStats: UserStats = {
+        id: "",
+        user_id: DEFAULT_USER_ID,
+        xp,
+        level,
+        streak_days: streakDays,
+        longest_streak: streakDays, // Simplified - would need historical data for accurate longest
+        last_checkin_date: lastCheckinDate,
+        daily_checkins: dailyCheckins,
+        daily_goal: 2,
+        total_checkins: totalCheckins,
+        total_projects_completed: totalProjectsCompleted,
+        badges,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
-      // Reset daily checkins if it's a new day
-      const today = new Date().toISOString().split("T")[0];
-      if (parsedStats.last_checkin_date !== today) {
-        parsedStats.daily_checkins = 0;
-      }
-
-      setStats(parsedStats);
+      setStats(realStats);
       setError(null);
     } catch (err) {
       console.error("Error fetching user stats:", err);

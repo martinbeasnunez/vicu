@@ -73,7 +73,7 @@ export async function POST() {
       .from("experiments")
       .select("id, title, status, last_checkin_at")
       .is("deleted_at", null)
-      .in("status", ["testing", "scale", "iterate"]); // Active statuses
+      .in("status", ["queued", "building", "testing", "adjusting"]); // Active statuses
 
     if (expError) {
       console.error("Error fetching experiments:", expError);

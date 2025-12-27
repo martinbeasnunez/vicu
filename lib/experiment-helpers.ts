@@ -217,8 +217,8 @@ export function calculateSuggestedCadence(
 
   // Landing experiments (client acquisition)
   if (surfaceType === "landing") {
-    if (status === "testing") return "twice_weekly";
-    if (status === "scale") return "weekly";
+    if (status === "building" || status === "testing") return "twice_weekly";
+    if (status === "adjusting") return "weekly";
     return "twice_weekly";
   }
 
@@ -231,23 +231,27 @@ export function calculateSuggestedCadence(
   return "twice_weekly";
 }
 
-// Status types
-export type ExperimentStatus = "testing" | "scale" | "iterate" | "kill" | "paused";
+// Status types - MVP cycle states
+export type ExperimentStatus = "queued" | "building" | "testing" | "adjusting" | "achieved" | "paused" | "discarded";
 
 export const STATUS_LABELS: Record<ExperimentStatus, string> = {
-  testing: "Arrancando",
-  scale: "En marcha",
-  iterate: "Ajustando",
-  kill: "Cerrado",
-  paused: "En pausa",
+  queued: "Por empezar",
+  building: "Construyendo",
+  testing: "Probando",
+  adjusting: "Ajustando",
+  achieved: "Logrado",
+  paused: "Pausado",
+  discarded: "Descartado",
 };
 
 export const STATUS_COLORS: Record<ExperimentStatus, { bg: string; text: string }> = {
-  testing: { bg: "bg-blue-100 dark:bg-blue-900/30", text: "text-blue-700 dark:text-blue-400" },
-  scale: { bg: "bg-green-100 dark:bg-green-900/30", text: "text-green-700 dark:text-green-400" },
-  iterate: { bg: "bg-amber-100 dark:bg-amber-900/30", text: "text-amber-700 dark:text-amber-400" },
-  kill: { bg: "bg-red-100 dark:bg-red-900/30", text: "text-red-700 dark:text-red-400" },
+  queued: { bg: "bg-slate-100 dark:bg-slate-800", text: "text-slate-600 dark:text-slate-400" },
+  building: { bg: "bg-blue-100 dark:bg-blue-900/30", text: "text-blue-700 dark:text-blue-400" },
+  testing: { bg: "bg-purple-100 dark:bg-purple-900/30", text: "text-purple-700 dark:text-purple-400" },
+  adjusting: { bg: "bg-amber-100 dark:bg-amber-900/30", text: "text-amber-700 dark:text-amber-400" },
+  achieved: { bg: "bg-green-100 dark:bg-green-900/30", text: "text-green-700 dark:text-green-400" },
   paused: { bg: "bg-zinc-100 dark:bg-zinc-800", text: "text-zinc-600 dark:text-zinc-400" },
+  discarded: { bg: "bg-red-100 dark:bg-red-900/30", text: "text-red-700 dark:text-red-400" },
 };
 
 // Metrics types
@@ -259,13 +263,15 @@ export interface ExperimentMetrics {
   doneActions: number;
 }
 
-// Recommendation types
+// Recommendation types - legacy tags for backward compatibility
 export type RecommendationTag =
-  | "keep_executing"
-  | "kill_or_rethink"
-  | "iterate"
+  | "keep_building"
+  | "ready_to_test"
   | "keep_testing"
-  | "scale"
+  | "adjust"
+  | "achieved"
+  | "pause"
+  | "discard"
   | "no_data";
 
 export interface VicuRecommendation {
@@ -278,11 +284,13 @@ export interface VicuRecommendation {
 }
 
 const RECOMMENDATION_COLORS: Record<RecommendationTag, { bg: string; text: string }> = {
-  keep_executing: { bg: "bg-blue-100 dark:bg-blue-900/30", text: "text-blue-700 dark:text-blue-400" },
-  kill_or_rethink: { bg: "bg-red-100 dark:bg-red-900/30", text: "text-red-700 dark:text-red-400" },
-  iterate: { bg: "bg-amber-100 dark:bg-amber-900/30", text: "text-amber-700 dark:text-amber-400" },
+  keep_building: { bg: "bg-blue-100 dark:bg-blue-900/30", text: "text-blue-700 dark:text-blue-400" },
+  ready_to_test: { bg: "bg-purple-100 dark:bg-purple-900/30", text: "text-purple-700 dark:text-purple-400" },
   keep_testing: { bg: "bg-purple-100 dark:bg-purple-900/30", text: "text-purple-700 dark:text-purple-400" },
-  scale: { bg: "bg-green-100 dark:bg-green-900/30", text: "text-green-700 dark:text-green-400" },
+  adjust: { bg: "bg-amber-100 dark:bg-amber-900/30", text: "text-amber-700 dark:text-amber-400" },
+  achieved: { bg: "bg-green-100 dark:bg-green-900/30", text: "text-green-700 dark:text-green-400" },
+  pause: { bg: "bg-zinc-100 dark:bg-zinc-800", text: "text-zinc-600 dark:text-zinc-400" },
+  discard: { bg: "bg-red-100 dark:bg-red-900/30", text: "text-red-700 dark:text-red-400" },
   no_data: { bg: "bg-zinc-100 dark:bg-zinc-800", text: "text-zinc-600 dark:text-zinc-400" },
 };
 
@@ -416,11 +424,11 @@ export function calculateLandingRecommendation(
     steps.push("Revisa las métricas mañana");
 
     return {
-      tag: "keep_executing",
-      tagLabel: "Ejecutar",
+      tag: "keep_building",
+      tagLabel: "Seguir construyendo",
       title: "Sigue ejecutando el plan de ataque.",
       text: `Has completado ${doneActions}/${totalActions} acciones y tienes ${visits} visitas.`,
-      color: RECOMMENDATION_COLORS.keep_executing,
+      color: RECOMMENDATION_COLORS.keep_building,
       steps,
     };
   }
@@ -445,26 +453,26 @@ export function calculateLandingRecommendation(
   // Now evaluate based on conversion
   if (conversion >= 0.15 && leads >= 5) {
     return {
-      tag: "scale",
-      tagLabel: "En marcha",
+      tag: "achieved",
+      tagLabel: "Logrado",
       title: "Este objetivo tiene tracción.",
       text: `Conversión de ${conversionPercent}% con ${leads} leads.`,
-      color: RECOMMENDATION_COLORS.scale,
+      color: RECOMMENDATION_COLORS.achieved,
       steps: [
         "Duplica el esfuerzo en el canal que más convirtió",
         "Contacta a tus leads en las próximas 24h",
-        "Considera cambiar el estado a 'En marcha'",
+        "Considera marcar el objetivo como 'Logrado'",
       ],
     };
   }
 
   if (conversion >= 0.05) {
     return {
-      tag: "iterate",
+      tag: "adjust",
       tagLabel: "Ajustando",
       title: "Conversión media, hay potencial.",
       text: `Conversión de ${conversionPercent}% con ${leads} leads.`,
-      color: RECOMMENDATION_COLORS.iterate,
+      color: RECOMMENDATION_COLORS.adjust,
       steps: [
         "Revisa si tu promesa es lo suficientemente clara",
         "Prueba un CTA diferente en tu landing",
@@ -475,11 +483,11 @@ export function calculateLandingRecommendation(
 
   // Low conversion
   return {
-    tag: "kill_or_rethink",
-    tagLabel: "En pausa",
+    tag: "pause",
+    tagLabel: "Pausar",
     title: "Conversión baja, considera replantear.",
     text: `Solo ${conversionPercent}% de conversión tras ${visits} visitas.`,
-    color: RECOMMENDATION_COLORS.kill_or_rethink,
+    color: RECOMMENDATION_COLORS.pause,
     steps: [
       "Habla con 3 personas de tu audiencia objetivo",
       "Pregunta si la promesa les parece atractiva",
@@ -500,11 +508,11 @@ export function calculateNonLandingRecommendation(
   // Rule 1: Less than half completed
   if (ratio < 0.5) {
     return {
-      tag: "keep_executing",
-      tagLabel: "Ejecutar",
+      tag: "keep_building",
+      tagLabel: "Seguir construyendo",
       title: "Sigue ejecutando el plan.",
       text: `Has ejecutado ${doneActions}/${totalActions} acciones.`,
-      color: RECOMMENDATION_COLORS.keep_executing,
+      color: RECOMMENDATION_COLORS.keep_building,
       steps: [
         `Completa ${Math.ceil(totalActions * 0.5) - doneActions} acciones más`,
         "Dedica 15-30 minutos hoy a ejecutar",
@@ -516,11 +524,11 @@ export function calculateNonLandingRecommendation(
   // Rule 2: More than half but not complete
   if (ratio < 1) {
     return {
-      tag: "keep_executing",
-      tagLabel: "Ejecutar",
+      tag: "keep_building",
+      tagLabel: "Seguir construyendo",
       title: "Ya probaste varias acciones.",
       text: `Te faltan ${pendingActions} acciones para completar el plan.`,
-      color: RECOMMENDATION_COLORS.keep_executing,
+      color: RECOMMENDATION_COLORS.keep_building,
       steps: [
         `Completa las ${pendingActions} acciones restantes`,
         "Evalúa cómo te sientes con los resultados",
@@ -549,11 +557,11 @@ export function calculateNonLandingRecommendation(
   switch (selfResult) {
     case "alto":
       return {
-        tag: "scale",
-        tagLabel: "En marcha",
-        title: "Excelente resultado. Considera seguir en marcha.",
+        tag: "achieved",
+        tagLabel: "Logrado",
+        title: "Excelente resultado. Considera marcarlo como logrado.",
         text: "El objetivo tuvo alto impacto.",
-        color: RECOMMENDATION_COLORS.scale,
+        color: RECOMMENDATION_COLORS.achieved,
         steps: [
           "Documenta qué funcionó mejor",
           "Repite el proceso con más personas",
@@ -562,11 +570,11 @@ export function calculateNonLandingRecommendation(
       };
     case "medio":
       return {
-        tag: "iterate",
+        tag: "adjust",
         tagLabel: "Ajustando",
         title: "Resultado medio. Hay oportunidad de mejora.",
         text: "Hay potencial, pero se puede mejorar.",
-        color: RECOMMENDATION_COLORS.iterate,
+        color: RECOMMENDATION_COLORS.adjust,
         steps: [
           "Identifica qué acciones tuvieron mejor respuesta",
           "Ajusta el mensaje o enfoque",
@@ -575,11 +583,11 @@ export function calculateNonLandingRecommendation(
       };
     case "bajo":
       return {
-        tag: "kill_or_rethink",
-        tagLabel: "Replantear",
+        tag: "pause",
+        tagLabel: "Pausar",
         title: "Resultado bajo. Considera cambiar de enfoque.",
         text: "El objetivo no dio los resultados esperados.",
-        color: RECOMMENDATION_COLORS.kill_or_rethink,
+        color: RECOMMENDATION_COLORS.pause,
         steps: [
           "Pregunta a 2-3 personas por qué no funcionó",
           "Considera si el problema era el formato o el contenido",
@@ -612,8 +620,8 @@ export function calculateRecommendation(
   if (surfaceType === "landing") {
     const baseRecommendation = calculateLandingRecommendation(metrics);
 
-    // If decision time has come and we're still in "keep_executing" or "keep_testing", nudge to decide
-    if (isDecisionTime && (baseRecommendation.tag === "keep_executing" || baseRecommendation.tag === "keep_testing")) {
+    // If decision time has come and we're still in "keep_building" or "keep_testing", nudge to decide
+    if (isDecisionTime && (baseRecommendation.tag === "keep_building" || baseRecommendation.tag === "keep_testing")) {
       return {
         ...baseRecommendation,
         title: `Han pasado ${decisionDays} días. Es momento de decidir.`,
@@ -632,7 +640,7 @@ export function calculateRecommendation(
   const baseRecommendation = calculateNonLandingRecommendation(metrics, selfResult);
 
   // For rituals/messages, if decision time has come, encourage evaluation
-  if (isDecisionTime && baseRecommendation.tag === "keep_executing") {
+  if (isDecisionTime && baseRecommendation.tag === "keep_building") {
     return {
       ...baseRecommendation,
       title: `Han pasado ${decisionDays} días. Evalúa tu progreso.`,

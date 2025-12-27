@@ -588,33 +588,40 @@ export async function generateInitialSteps(
     }));
   }
 
-  // Stage-specific guidance for step generation
+  // Stage-specific guidance for step generation - MVP cycle states
   const stageGuidance: Record<string, string> = {
-    testing: `ETAPA ACTUAL: Arrancando (testing)
+    queued: `ETAPA ACTUAL: Por empezar (queued)
 Los pasos deben enfocarse en:
-- Quitar fricción inicial y dar el primer paso
-- Validar que el objetivo es claro y alcanzable
-- Hacer algo pequeño AHORA para romper la inercia`,
-    scale: `ETAPA ACTUAL: En marcha (scale)
+- Clarificar el objetivo y hacerlo específico
+- Identificar el primer paso más pequeño posible
+- Preparar lo mínimo necesario para empezar`,
+    building: `ETAPA ACTUAL: Construyendo (building)
 Los pasos deben enfocarse en:
-- Ejecutar con ritmo y constancia
-- Mantener el momentum
-- Medir progreso de forma sencilla`,
-    iterate: `ETAPA ACTUAL: Ajustando (iterate)
+- Crear la primera versión mínima viable (MVP)
+- Quitar fricción y avanzar rápido
+- No buscar perfección, buscar algo funcional`,
+    testing: `ETAPA ACTUAL: Probando (testing)
 Los pasos deben enfocarse en:
-- Revisar qué está funcionando y qué no
-- Hacer ajustes basados en datos reales
-- Optimizar el proceso para mejores resultados`,
-    kill: `ETAPA ACTUAL: Cerrado (kill)
-El objetivo está cerrado, no se necesitan más pasos.`,
-    paused: `ETAPA ACTUAL: En pausa (paused)
+- Lanzar lo que construiste al mundo real
+- Obtener feedback de personas reales
+- Medir resultados concretos`,
+    adjusting: `ETAPA ACTUAL: Ajustando (adjusting)
+Los pasos deben enfocarse en:
+- Analizar qué funcionó y qué no
+- Hacer cambios específicos basados en datos
+- Preparar la siguiente versión para probar`,
+    achieved: `ETAPA ACTUAL: Logrado (achieved)
+El objetivo se cumplió. No se necesitan más pasos.`,
+    paused: `ETAPA ACTUAL: Pausado (paused)
 Los pasos deben enfocarse en:
 - Prepararse para retomar cuando sea el momento
 - Mantener un recordatorio mínimo del objetivo`,
+    discarded: `ETAPA ACTUAL: Descartado (discarded)
+El objetivo fue descartado. No se necesitan más pasos.`,
   };
 
-  const currentStage = objective.for_stage || "testing";
-  const stageContext = stageGuidance[currentStage] || stageGuidance.testing;
+  const currentStage = objective.for_stage || "building";
+  const stageContext = stageGuidance[currentStage] || stageGuidance.building;
 
   // Otherwise, generate contextual steps using AI
   const systemPrompt = `Eres Vicu, un asistente que ayuda a las personas a cumplir sus objetivos.

@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     main_cta: main_cta || null,
     success_goal_number: success_goal_number || null,
     success_goal_unit: success_goal_unit || null,
-    status: "testing",
+    status: "building", // New experiments start in "building" (Construyendo) state
     // New fields
     raw_idea: raw_idea || null,
     deadline: deadline || null,
@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
       first_steps: first_steps && first_steps.length > 0 ? first_steps : null, // Only pass if non-empty
       experiment_type: experiment_type || null,
       surface_type: surface_type || null,
-      for_stage: "testing", // New experiments always start in "testing" (Arrancando)
+      for_stage: "building", // New experiments always start in "building" (Construyendo)
     });
 
     console.log(`[STEPS] Generated ${steps?.length || 0} steps:`, steps?.map(s => s.title));
@@ -145,7 +145,7 @@ export async function POST(request: NextRequest) {
         effort: step.effort || "pequeno",
         user_state: "not_started",
         day_date: new Date().toISOString().split("T")[0],
-        for_stage: "testing",
+        for_stage: "building",
       }));
 
       console.log(`[STEPS] Inserting ${checkinsToInsert.length} checkins for experiment ${experiment.id}`);
@@ -178,7 +178,7 @@ export async function POST(request: NextRequest) {
         effort: step.effort,
         user_state: "not_started",
         day_date: new Date().toISOString().split("T")[0],
-        for_stage: "testing",
+        for_stage: "building",
       }));
 
       const { error: fallbackError } = await supabaseServer
@@ -211,7 +211,7 @@ export async function POST(request: NextRequest) {
           effort: step.effort,
           user_state: "not_started",
           day_date: new Date().toISOString().split("T")[0],
-          for_stage: "testing",
+          for_stage: "building",
         })));
       console.log("[STEPS] Inserted emergency fallback steps after error");
     } catch (emergencyErr) {
