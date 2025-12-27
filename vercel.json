@@ -1,20 +1,2 @@
 {
-  "crons": [
-    {
-      "path": "/api/kapso/run-reminders",
-      "schedule": "0 13 * * *"
-    },
-    {
-      "path": "/api/kapso/run-reminders",
-      "schedule": "30 16 * * *"
-    },
-    {
-      "path": "/api/kapso/run-reminders",
-      "schedule": "30 21 * * *"
-    },
-    {
-      "path": "/api/kapso/run-reminders",
-      "schedule": "30 2 * * *"
-    }
-  ]
 }
