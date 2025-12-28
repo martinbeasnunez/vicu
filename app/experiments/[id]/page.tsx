@@ -1348,7 +1348,27 @@ export default function ExperimentPage() {
       if (error) throw error;
       setExperiment((prev) => prev ? { ...prev, description: objectiveInput } : null);
       setIsEditingObjective(false);
-      setToast("Objetivo actualizado");
+      setToast("Objetivo actualizado, regenerando pasos...");
+
+      // Auto-regenerate steps when objective changes
+      try {
+        const res = await fetch("/api/regenerate-steps", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            experiment_id: experiment.id,
+            for_stage: experiment.status,
+          }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          await fetchCheckins();
+          setToast("Pasos regenerados con el nuevo objetivo");
+        }
+      } catch (regenErr) {
+        console.error("Error regenerating steps:", regenErr);
+        // Don't fail - objective was saved successfully
+      }
     } catch {
       setToast("Error al guardar objetivo");
     } finally {
