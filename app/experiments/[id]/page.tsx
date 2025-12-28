@@ -486,6 +486,9 @@ export default function ExperimentPage() {
   const [stepToDelete, setStepToDelete] = useState<ExperimentCheckin | null>(null);
   const [isDeletingStep, setIsDeletingStep] = useState(false);
 
+  // Regenerate steps state
+  const [isRegeneratingSteps, setIsRegeneratingSteps] = useState(false);
+
   // Vicu recommendation state
   const [vicuRecommendation, setVicuRecommendation] = useState<VicuRecommendationData | null>(null);
   const [vicuRecommendationHistory, setVicuRecommendationHistory] = useState<VicuRecommendationData[]>([]);
@@ -1061,6 +1064,37 @@ export default function ExperimentPage() {
       setToast("Error al eliminar el paso");
     } finally {
       setIsDeletingStep(false);
+      setTimeout(() => setToast(null), 3000);
+    }
+  };
+
+  // Regenerate steps handler - for when AI hallucinated or objective changed
+  const handleRegenerateSteps = async () => {
+    if (!experiment || isRegeneratingSteps) return;
+    setIsRegeneratingSteps(true);
+
+    try {
+      const res = await fetch("/api/regenerate-steps", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          experiment_id: experiment.id,
+          for_stage: experiment.status,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success && data.steps) {
+        setToast(`Pasos regenerados (${data.steps.length})`);
+        await fetchCheckins();
+      } else {
+        setToast("Error al regenerar pasos");
+      }
+    } catch (error) {
+      console.error("Error regenerating steps:", error);
+      setToast("Error al regenerar pasos");
+    } finally {
+      setIsRegeneratingSteps(false);
       setTimeout(() => setToast(null), 3000);
     }
   };
@@ -2252,11 +2286,34 @@ export default function ExperimentPage() {
             {/* Pasos del objetivo - Unified list of pending and completed steps */}
             {checkins.length > 0 && (
               <div className="mt-8">
-                <div className="mb-4">
-                  <h2 className="text-lg font-semibold text-slate-50">Pasos del objetivo</h2>
-                  <p className="text-sm text-slate-400 mt-1">
-                    Lo que viene y lo que ya hiciste
-                  </p>
+                <div className="mb-4 flex items-start justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-50">Pasos del objetivo</h2>
+                    <p className="text-sm text-slate-400 mt-1">
+                      Lo que viene y lo que ya hiciste
+                    </p>
+                  </div>
+                  {/* Regenerate steps button */}
+                  <button
+                    onClick={handleRegenerateSteps}
+                    disabled={isRegeneratingSteps}
+                    className="flex items-center gap-2 px-3 py-1.5 text-xs text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all disabled:opacity-50 disabled:cursor-wait"
+                    title="Regenerar pasos con IA (útil si el objetivo cambió)"
+                  >
+                    {isRegeneratingSteps ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-indigo-400/30 border-t-indigo-400 rounded-full animate-spin" />
+                        <span>Regenerando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        <span>Regenerar pasos</span>
+                      </>
+                    )}
+                  </button>
                 </div>
                 <div className="space-y-3">
                   {/* Sort: pending first, then done (by created_at desc) */}
