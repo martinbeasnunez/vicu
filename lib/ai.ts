@@ -559,14 +559,16 @@ export interface InitialStep {
  * Generates 2-3 initial steps for a newly created objective based on its category, context and stage.
  * These steps help the user get started with their goal.
  */
-// Business context for smarter step generation
-interface BusinessContextInput {
+// Situational context for smarter step generation (ALL categories)
+interface SituationalContextInput {
+  already_has?: string[];      // Things already in place
+  already_doing?: string[];    // Actions already taking
+  tools_in_use?: string[];     // Tools/platforms actively using
+  current_level?: string;      // Where they are now
+  previous_attempts?: string;  // What they've tried before
+  // Business-specific
   is_operating?: boolean;
   has_customers?: boolean;
-  existing_channels?: string[];
-  existing_tools?: string[];
-  current_metrics?: string;
-  growth_goal?: string;
   market_stage?: string;
 }
 
@@ -579,7 +581,8 @@ export async function generateInitialSteps(
     experiment_type?: string | null;
     surface_type?: string | null;
     for_stage?: string | null;
-    business_context?: BusinessContextInput | null;
+    situational_context?: SituationalContextInput | null;
+    business_context?: SituationalContextInput | null; // Legacy support
   }
 ): Promise<InitialStep[]> {
   console.log("[generateInitialSteps] Called with:", {
@@ -635,41 +638,52 @@ El objetivo fue descartado. No se necesitan más pasos.`,
   const currentStage = objective.for_stage || "building";
   const stageContext = stageGuidance[currentStage] || stageGuidance.building;
 
-  // Build business context string if available
-  let businessContextStr = "";
-  if (objective.business_context) {
-    const bc = objective.business_context;
+  // Build situational context string (supports both new and legacy format)
+  let situationalContextStr = "";
+  const ctx = objective.situational_context || objective.business_context;
+  if (ctx) {
     const parts: string[] = [];
 
-    if (bc.is_operating) {
+    // New universal fields
+    if (ctx.already_has && ctx.already_has.length > 0) {
+      parts.push(`- YA TIENE: ${ctx.already_has.join(", ")}`);
+    }
+    if (ctx.already_doing && ctx.already_doing.length > 0) {
+      parts.push(`- YA ESTÁ HACIENDO: ${ctx.already_doing.join(", ")}`);
+    }
+    if (ctx.tools_in_use && ctx.tools_in_use.length > 0) {
+      parts.push(`- HERRAMIENTAS/APPS QUE USA: ${ctx.tools_in_use.join(", ")}`);
+    }
+    if (ctx.current_level) {
+      parts.push(`- Nivel/situación actual: ${ctx.current_level}`);
+    }
+    if (ctx.previous_attempts) {
+      parts.push(`- Intentos previos: ${ctx.previous_attempts}`);
+    }
+
+    // Business-specific fields
+    if (ctx.is_operating) {
       parts.push("- El negocio YA ESTÁ OPERANDO (tiene producto/servicio activo)");
     }
-    if (bc.has_customers) {
+    if (ctx.has_customers) {
       parts.push("- YA TIENE CLIENTES");
     }
-    if (bc.existing_channels && bc.existing_channels.length > 0) {
-      parts.push(`- Canales que YA USA: ${bc.existing_channels.join(", ")}`);
-    }
-    if (bc.existing_tools && bc.existing_tools.length > 0) {
-      parts.push(`- Herramientas que YA TIENE: ${bc.existing_tools.join(", ")}`);
-    }
-    if (bc.current_metrics) {
-      parts.push(`- Métricas actuales: ${bc.current_metrics}`);
-    }
-    if (bc.growth_goal) {
-      parts.push(`- Meta de crecimiento: ${bc.growth_goal}`);
-    }
-    if (bc.market_stage) {
-      parts.push(`- Etapa del negocio: ${bc.market_stage}`);
+    if (ctx.market_stage) {
+      parts.push(`- Etapa del negocio: ${ctx.market_stage}`);
     }
 
     if (parts.length > 0) {
-      businessContextStr = `
+      situationalContextStr = `
 
-CONTEXTO DEL NEGOCIO (MUY IMPORTANTE - NO IGNORAR):
+CONTEXTO DEL USUARIO (MUY IMPORTANTE - NO IGNORAR):
 ${parts.join("\n")}
 
-⚠️ REGLA CRÍTICA: Si el usuario YA tiene app, web, CRM, etc., NO recomiendes crear formularios genéricos, landings básicas, o herramientas que ya tiene. Los pasos deben USAR lo que ya existe, no crear cosas nuevas redundantes.`;
+⚠️ REGLA CRÍTICA: NO recomiendes cosas que el usuario YA TIENE o YA HACE:
+- Si tiene gym/app de ejercicio → NO recomiendes "busca un gimnasio" o "descarga app"
+- Si tiene LinkedIn/CV actualizado → NO recomiendes "actualiza tu LinkedIn"
+- Si tiene app/web/CRM → NO recomiendes "crea un formulario" o "haz una landing"
+- Si ya hace ejercicio/estudia/etc → NO recomiendes "empieza a hacer X"
+Los pasos deben USAR y MEJORAR lo que ya existe, no crear cosas redundantes.`;
     }
   }
 
@@ -678,7 +692,7 @@ ${parts.join("\n")}
 
 Tu tarea es generar 2-3 pasos iniciales MUY CONCRETOS y PEQUEÑOS para un objetivo.
 
-${stageContext}${businessContextStr}
+${stageContext}${situationalContextStr}
 
 REGLAS IMPORTANTES:
 1. Los pasos deben ser ACCIONES ESPECÍFICAS, no genéricos
@@ -687,7 +701,7 @@ REGLAS IMPORTANTES:
 4. Usa verbos de acción: "Escribe", "Define", "Busca", "Contacta", "Revisa", "Mide"
 5. NO uses pasos como "Piensa en...", "Considera...", "Reflexiona..."
 6. Los pasos deben ser coherentes con la etapa actual del objetivo
-7. Si hay CONTEXTO DEL NEGOCIO, los pasos DEBEN adaptarse a lo que el usuario YA TIENE
+7. Si hay CONTEXTO DEL USUARIO, los pasos DEBEN adaptarse a lo que YA TIENE y YA HACE
 
 Responde SOLO con JSON válido (sin markdown):
 {

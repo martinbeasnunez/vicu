@@ -37,16 +37,21 @@ export interface ObjectivePhase {
   exit_criteria: string;
 }
 
-// Business-specific context for smarter recommendations
-export interface BusinessContext {
-  is_operating: boolean; // Already has product/service active
-  has_customers: boolean; // Already has customers
-  current_revenue?: string; // Current revenue/sales level
-  existing_channels?: string[]; // Channels already in use (app, web, whatsapp, etc.)
-  existing_tools?: string[]; // Tools/platforms already using
-  current_metrics?: string; // Current numbers (customers, sales, etc.)
-  growth_goal?: string; // Specific growth target
-  market_stage?: "idea" | "mvp" | "operating" | "scaling"; // Stage of the business
+// Situational context for smarter recommendations (applies to ALL categories)
+export interface SituationalContext {
+  // What the user ALREADY has/does (critical to avoid redundant recommendations)
+  already_has?: string[]; // Things already in place: ["app", "gym membership", "LinkedIn optimizado", "curso activo"]
+  already_doing?: string[]; // Actions already taking: ["ejercicio 3x semana", "publicando en redes", "estudiando 1hr/día"]
+  tools_in_use?: string[]; // Tools/platforms actively using: ["Apple Watch", "Notion", "Duolingo", "CRM"]
+
+  // Current state
+  current_level?: string; // Where they are now: "principiante", "intermedio", "75kg", "10 clientes", etc.
+  previous_attempts?: string; // What they've tried before and results
+
+  // For business specifically (subset of above)
+  is_operating?: boolean; // Already has product/service active
+  has_customers?: boolean; // Already has customers
+  market_stage?: "idea" | "mvp" | "operating" | "scaling";
 }
 
 export interface VicuAnalysis {
@@ -76,8 +81,8 @@ export interface VicuAnalysis {
   search_results?: SearchResult[];
   // Facts discovered from search (to show to user)
   discovered_facts?: string[];
-  // Business-specific context (for business/sales projects)
-  business_context?: BusinessContext;
+  // Situational context for smarter recommendations (ALL categories)
+  situational_context?: SituationalContext;
 }
 
 const ANALYSIS_SYSTEM_PROMPT = `Eres Vicu, una IA de SEGUIMIENTO que ayuda a las personas a CUMPLIR sus metas y proyectos.
@@ -122,11 +127,13 @@ Al recibir la primera idea del usuario, clasifica internamente:
 Según la categoría, haz entre 3 y 6 preguntas MUY ESPECÍFICAS. Estas son guías, adáptalas al caso:
 
 ### Si es HEALTH (salud, peso, fitness):
+**PREGUNTA CRÍTICA**: ¿Qué estás haciendo actualmente? (ejercicio, dieta, apps de tracking, gimnasio, etc.)
 - ¿Cuál es tu situación actual? (peso, nivel de actividad, condición física)
-- ¿Tienes alguna restricción médica o de tiempo que deba considerar?
+- ¿Qué herramientas/apps ya usas? (Apple Watch, MyFitnessPal, gym membership, etc.)
 - ¿Has intentado esto antes? ¿Qué funcionó y qué no?
 - ¿Cuál sería un resultado realista que te haría sentir que valió la pena?
-- ¿Cuánto tiempo/energía puedes dedicar a esto por semana?
+
+**IMPORTANTE**: Si ya hace ejercicio, tiene gym, usa apps de tracking, etc., NO recomiendes "busca un gimnasio" o "descarga una app".
 
 ### Si es BUSINESS (negocio, clientes, ventas):
 **PREGUNTA CRÍTICA PRIMERO**: ¿Ya estás operando/vendiendo o esto es una idea/proyecto nuevo?
@@ -156,22 +163,31 @@ Para AMBOS:
 - ¿Qué recursos (tiempo, dinero, conocimiento) tienes disponibles?
 
 ### Si es LEARNING (aprender algo):
+**PREGUNTA CRÍTICA**: ¿Ya estás estudiando/aprendiendo esto de alguna forma?
+- ¿Qué cursos, apps o recursos ya usas? (Duolingo, Coursera, tutor, libros, etc.)
 - ¿Cuál es tu nivel actual en este tema?
 - ¿Cuánto tiempo puedes dedicar por día/semana?
 - ¿Tienes una fecha límite específica (examen, viaje, trabajo)?
-- ¿Cómo aprenderías mejor: cursos, práctica, tutor, libros?
+
+**IMPORTANTE**: Si ya está en un curso o usa una app de aprendizaje, NO recomiendes "busca un curso" o "descarga Duolingo".
 
 ### Si es HABITS (rutinas, productividad):
+**PREGUNTA CRÍTICA**: ¿Qué sistemas o herramientas ya usas para organizarte?
+- ¿Qué apps de productividad, calendarios o sistemas ya tienes? (Notion, Todoist, Google Calendar, alarmas, etc.)
 - ¿Qué has intentado antes y por qué no funcionó?
 - ¿En qué momento del día quieres incorporar esto?
 - ¿Qué te haría sentir que el hábito está "instalado"?
-- ¿Tienes algo que te bloquee actualmente? (tiempo, motivación, olvido)
+
+**IMPORTANTE**: Si ya usa Notion, tiene sistema de alarmas, etc., NO recomiendes "crea un sistema de recordatorios" o "descarga una app de hábitos".
 
 ### Si es CAREER (trabajo, carrera):
+**PREGUNTA CRÍTICA**: ¿Qué tienes ya preparado? (CV, LinkedIn, portafolio, contactos, etc.)
 - ¿Cuál es tu situación laboral actual?
 - ¿Qué tipo de rol o empresa te interesa?
-- ¿Tienes el CV, portafolio y LinkedIn actualizados?
+- ¿Qué canales ya estás usando para buscar? (LinkedIn, recruiters, contactos, etc.)
 - ¿Para cuándo necesitas o quieres hacer el cambio?
+
+**IMPORTANTE**: Si ya tiene LinkedIn optimizado, CV actualizado, etc., NO recomiendes "actualiza tu LinkedIn" o "crea tu CV".
 
 ### Para CUALQUIER categoría, siempre pregunta:
 - El objetivo concreto (qué quiere lograr)
@@ -278,23 +294,27 @@ Responde SOLO con JSON válido (sin markdown):
   "confidence": 0-100,
   "detected_category": "health" | "business" | "career" | "learning" | "habits" | "personal_admin" | "creative" | "team" | "other",
   "detected_subject": "yo" | "otra_persona" | "equipo" | "clientes",
-  "business_context": {
-    "is_operating": true/false,
-    "has_customers": true/false,
-    "current_revenue": "600k USD" (si aplica),
-    "existing_channels": ["app", "web", "whatsapp"] (canales que YA usa),
-    "existing_tools": ["CRM", "Shopify", etc.] (herramientas que YA tiene),
-    "current_metrics": "10,000 clientes activos" (números actuales),
-    "growth_goal": "Pasar de 600k a 1M USD",
-    "market_stage": "idea" | "mvp" | "operating" | "scaling"
+  "situational_context": {
+    "already_has": ["gym membership", "app propia", "LinkedIn optimizado", "curso activo"],
+    "already_doing": ["ejercicio 3x semana", "estudiando 1hr/día", "publicando en redes"],
+    "tools_in_use": ["Apple Watch", "Notion", "Duolingo", "CRM", "Shopify"],
+    "current_level": "intermedio" | "75kg" | "10 clientes" | "nivel B1",
+    "previous_attempts": "Intenté X pero no funcionó porque Y",
+    "is_operating": true/false (solo para business),
+    "has_customers": true/false (solo para business),
+    "market_stage": "idea" | "mvp" | "operating" | "scaling" (solo para business)
   }
 }
 
-**NOTA sobre business_context**:
-- SOLO incluir si detected_category es "business" o experiment_type es "clientes"
-- is_operating = true si el usuario YA tiene producto/servicio funcionando
-- existing_channels es MUY IMPORTANTE: si tiene "app", NO recomiendes crear Google Form
-- market_stage: "idea" (solo concepto), "mvp" (versión básica), "operating" (funcionando), "scaling" (creciendo)
+**NOTA CRÍTICA sobre situational_context** (APLICA A TODAS LAS CATEGORÍAS):
+- SIEMPRE incluir lo que el usuario YA TIENE o YA HACE
+- already_has: cosas que ya posee (membresías, cuentas, herramientas, etc.)
+- already_doing: acciones que ya realiza regularmente
+- tools_in_use: apps, plataformas o sistemas que ya usa activamente
+- Esta información es CRÍTICA para evitar recomendaciones redundantes
+- Si el usuario tiene "app", NO recomiendes crear Google Form
+- Si el usuario hace "ejercicio 3x semana", NO recomiendes "empieza a hacer ejercicio"
+- Si el usuario usa "Duolingo", NO recomiendes "descarga una app de idiomas"
 
 REGLAS IMPORTANTES:
 - confidence es un NÚMERO de 0 a 100
