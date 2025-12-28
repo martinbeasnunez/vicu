@@ -494,6 +494,8 @@ export default function VicuPage() {
           detected_subject: analysis.detected_subject || null,
           // Project phases for macro breakdown
           phases: analysis.phases || [],
+          // Business context for smarter step generation
+          business_context: analysis.business_context || null,
         }),
       });
 

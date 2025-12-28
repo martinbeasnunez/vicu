@@ -37,6 +37,18 @@ export interface ObjectivePhase {
   exit_criteria: string;
 }
 
+// Business-specific context for smarter recommendations
+export interface BusinessContext {
+  is_operating: boolean; // Already has product/service active
+  has_customers: boolean; // Already has customers
+  current_revenue?: string; // Current revenue/sales level
+  existing_channels?: string[]; // Channels already in use (app, web, whatsapp, etc.)
+  existing_tools?: string[]; // Tools/platforms already using
+  current_metrics?: string; // Current numbers (customers, sales, etc.)
+  growth_goal?: string; // Specific growth target
+  market_stage?: "idea" | "mvp" | "operating" | "scaling"; // Stage of the business
+}
+
 export interface VicuAnalysis {
   summary: string;
   generated_title: string;
@@ -64,6 +76,8 @@ export interface VicuAnalysis {
   search_results?: SearchResult[];
   // Facts discovered from search (to show to user)
   discovered_facts?: string[];
+  // Business-specific context (for business/sales projects)
+  business_context?: BusinessContext;
 }
 
 const ANALYSIS_SYSTEM_PROMPT = `Eres Vicu, una IA de SEGUIMIENTO que ayuda a las personas a CUMPLIR sus metas y proyectos.
@@ -115,11 +129,25 @@ Según la categoría, haz entre 3 y 6 preguntas MUY ESPECÍFICAS. Estas son guí
 - ¿Cuánto tiempo/energía puedes dedicar a esto por semana?
 
 ### Si es BUSINESS (negocio, clientes, ventas):
+**PREGUNTA CRÍTICA PRIMERO**: ¿Ya estás operando/vendiendo o esto es una idea/proyecto nuevo?
+
+Si YA OPERA (tiene producto/servicio activo):
+- ¿Qué producto/servicio vendes y a qué precio aproximado?
+- ¿Cuántos clientes/ventas tienes actualmente?
+- ¿Qué canales usas hoy? (app propia, web, redes, WhatsApp, tienda física, etc.)
+- ¿Qué está funcionando y qué no?
+- ¿Cuál es tu meta específica? (ej: pasar de X a Y clientes, entrar a nuevo mercado)
+
+Si es IDEA/PROYECTO NUEVO:
 - ¿Ya tienes el producto/servicio definido o es solo una idea?
 - ¿Tienes contactos a los que podrías venderles, o partes de cero?
 - ¿Cuál es tu modelo de negocio? (precio aproximado, tipo de cliente)
+
+Para AMBOS:
 - ¿Para cuándo necesitas ver resultados?
-- ¿Tienes presupuesto para marketing o es todo orgánico?
+- ¿Tienes presupuesto para marketing/herramientas o es todo orgánico/manual?
+
+**IMPORTANTE**: Si el usuario menciona que ya tiene app, web, tienda, operación actual, clientes existentes, etc., NO recomiendes crear cosas que ya tiene (como "crear Google Form" cuando ya tiene app).
 
 ### Si es para OTRA_PERSONA (mamá, pareja, etc.):
 - ¿Cuál es la situación específica de esa persona? (edad, habilidades, disponibilidad)
@@ -249,8 +277,24 @@ Responde SOLO con JSON válido (sin markdown):
   "clarifying_questions": ["Pregunta 1", "Pregunta 2"],
   "confidence": 0-100,
   "detected_category": "health" | "business" | "career" | "learning" | "habits" | "personal_admin" | "creative" | "team" | "other",
-  "detected_subject": "yo" | "otra_persona" | "equipo" | "clientes"
+  "detected_subject": "yo" | "otra_persona" | "equipo" | "clientes",
+  "business_context": {
+    "is_operating": true/false,
+    "has_customers": true/false,
+    "current_revenue": "600k USD" (si aplica),
+    "existing_channels": ["app", "web", "whatsapp"] (canales que YA usa),
+    "existing_tools": ["CRM", "Shopify", etc.] (herramientas que YA tiene),
+    "current_metrics": "10,000 clientes activos" (números actuales),
+    "growth_goal": "Pasar de 600k a 1M USD",
+    "market_stage": "idea" | "mvp" | "operating" | "scaling"
+  }
 }
+
+**NOTA sobre business_context**:
+- SOLO incluir si detected_category es "business" o experiment_type es "clientes"
+- is_operating = true si el usuario YA tiene producto/servicio funcionando
+- existing_channels es MUY IMPORTANTE: si tiene "app", NO recomiendes crear Google Form
+- market_stage: "idea" (solo concepto), "mvp" (versión básica), "operating" (funcionando), "scaling" (creciendo)
 
 REGLAS IMPORTANTES:
 - confidence es un NÚMERO de 0 a 100

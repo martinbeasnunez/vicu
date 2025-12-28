@@ -115,12 +115,13 @@ export async function POST(request: NextRequest) {
   // page is never empty. This runs synchronously before returning the response.
   try {
     // Extract additional fields that might be passed for step generation
-    const { detected_category, first_steps } = data;
+    const { detected_category, first_steps, business_context } = data;
 
     console.log(`[STEPS] Generating initial steps for experiment ${experiment.id}:`, {
       title: experiment.title,
       detected_category,
       first_steps_count: first_steps?.length || 0,
+      has_business_context: !!business_context,
     });
 
     const steps = await generateInitialSteps({
@@ -131,6 +132,7 @@ export async function POST(request: NextRequest) {
       experiment_type: experiment_type || null,
       surface_type: surface_type || null,
       for_stage: "building", // New experiments always start in "building" (Construyendo)
+      business_context: business_context || null, // Pass business context for smarter step generation
     });
 
     console.log(`[STEPS] Generated ${steps?.length || 0} steps:`, steps?.map(s => s.title));
