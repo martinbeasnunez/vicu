@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 import { useExperimentStore } from "@/lib/experiment-store";
 import {
@@ -1699,21 +1700,32 @@ export default function ExperimentPage() {
     <div className="min-h-screen">
       {/* Toast - with Vicu logo animation for special states */}
       {toast && (
-        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl shadow-2xl animate-fade-in-down flex items-center gap-3 ${
+        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-2xl animate-fade-in-down flex items-center gap-3 ${
           toastType === "vicu-working" || toastType === "vicu-success"
             ? "bg-gradient-to-r from-indigo-600/95 to-purple-600/95 backdrop-blur-md border border-indigo-400/30"
             : "card-glass"
         }`}>
           {(toastType === "vicu-working" || toastType === "vicu-success") && (
-            <div className={`w-8 h-8 rounded-full bg-white/20 flex items-center justify-center ${
-              toastType === "vicu-working" ? "animate-pulse" : ""
-            }`}>
-              {toastType === "vicu-working" ? (
-                <div className="w-6 h-6 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-              ) : (
-                <svg className="w-5 h-5 text-emerald-300 animate-scale-in" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                </svg>
+            <div className="relative w-10 h-10 flex items-center justify-center">
+              {/* Vicu logo */}
+              <Image
+                src="/vicu-logo.png"
+                alt="Vicu"
+                width={32}
+                height={32}
+                className={`w-8 h-8 ${toastType === "vicu-working" ? "animate-bounce" : "animate-scale-in"}`}
+              />
+              {/* Spinning ring around logo when working */}
+              {toastType === "vicu-working" && (
+                <div className="absolute inset-0 w-10 h-10 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+              )}
+              {/* Success checkmark overlay */}
+              {toastType === "vicu-success" && (
+                <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center animate-scale-in shadow-lg">
+                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
               )}
             </div>
           )}
