@@ -431,6 +431,7 @@ export default function ExperimentPage() {
   });
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<"default" | "vicu-working" | "vicu-success">("default");
   const [isStatusUpdating, setIsStatusUpdating] = useState(false);
   const [generatingChannel, setGeneratingChannel] = useState<string | null>(null);
 
@@ -1073,6 +1074,10 @@ export default function ExperimentPage() {
     if (!experiment || isRegeneratingSteps) return;
     setIsRegeneratingSteps(true);
 
+    // Show animated Vicu working toast
+    setToastType("vicu-working");
+    setToast("Regenerando pasos...");
+
     try {
       const res = await fetch("/api/regenerate-steps", {
         method: "POST",
@@ -1085,17 +1090,23 @@ export default function ExperimentPage() {
 
       const data = await res.json();
       if (data.success && data.steps) {
-        setToast(`Pasos regenerados (${data.steps.length})`);
         await fetchCheckins();
+        setToastType("vicu-success");
+        setToast(`${data.steps.length} pasos nuevos`);
       } else {
+        setToastType("default");
         setToast("Error al regenerar pasos");
       }
     } catch (error) {
       console.error("Error regenerating steps:", error);
+      setToastType("default");
       setToast("Error al regenerar pasos");
     } finally {
       setIsRegeneratingSteps(false);
-      setTimeout(() => setToast(null), 3000);
+      setTimeout(() => {
+        setToast(null);
+        setToastType("default");
+      }, 3000);
     }
   };
 
@@ -1348,7 +1359,10 @@ export default function ExperimentPage() {
       if (error) throw error;
       setExperiment((prev) => prev ? { ...prev, description: objectiveInput } : null);
       setIsEditingObjective(false);
-      setToast("Objetivo actualizado, regenerando pasos...");
+
+      // Show animated Vicu working toast
+      setToastType("vicu-working");
+      setToast("Regenerando pasos...");
 
       // Auto-regenerate steps when objective changes
       try {
@@ -1363,17 +1377,23 @@ export default function ExperimentPage() {
         const data = await res.json();
         if (data.success) {
           await fetchCheckins();
-          setToast("Pasos regenerados con el nuevo objetivo");
+          setToastType("vicu-success");
+          setToast("Pasos actualizados");
         }
       } catch (regenErr) {
         console.error("Error regenerating steps:", regenErr);
-        // Don't fail - objective was saved successfully
+        setToastType("default");
+        setToast("Objetivo guardado");
       }
     } catch {
+      setToastType("default");
       setToast("Error al guardar objetivo");
     } finally {
       setIsSavingObjective(false);
-      setTimeout(() => setToast(null), 3000);
+      setTimeout(() => {
+        setToast(null);
+        setToastType("default");
+      }, 3000);
     }
   };
 
@@ -1677,10 +1697,31 @@ export default function ExperimentPage() {
 
   return (
     <div className="min-h-screen">
-      {/* Toast */}
+      {/* Toast - with Vicu logo animation for special states */}
       {toast && (
-        <div className="fixed top-6 right-6 z-50 px-5 py-3 card-glass text-slate-50 rounded-xl shadow-lg animate-fade-in-down">
-          {toast}
+        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl shadow-2xl animate-fade-in-down flex items-center gap-3 ${
+          toastType === "vicu-working" || toastType === "vicu-success"
+            ? "bg-gradient-to-r from-indigo-600/95 to-purple-600/95 backdrop-blur-md border border-indigo-400/30"
+            : "card-glass"
+        }`}>
+          {(toastType === "vicu-working" || toastType === "vicu-success") && (
+            <div className={`w-8 h-8 rounded-full bg-white/20 flex items-center justify-center ${
+              toastType === "vicu-working" ? "animate-pulse" : ""
+            }`}>
+              {toastType === "vicu-working" ? (
+                <div className="w-6 h-6 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+              ) : (
+                <svg className="w-5 h-5 text-emerald-300 animate-scale-in" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </div>
+          )}
+          <span className={`font-medium ${
+            toastType === "vicu-working" || toastType === "vicu-success" ? "text-white" : "text-slate-50"
+          }`}>
+            {toast}
+          </span>
         </div>
       )}
 
