@@ -1,2 +1,20 @@
 {
+  "crons": [
+    {
+      "path": "/api/kapso/run-daily-reminders?slot=MORNING_KICKOFF",
+      "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/kapso/run-daily-reminders?slot=MIDDAY_NUDGE",
+      "schedule": "0 17 * * *"
+    },
+    {
+      "path": "/api/kapso/run-daily-reminders?slot=AFTERNOON_PUSH",
+      "schedule": "0 22 * * *"
+    },
+    {
+      "path": "/api/kapso/run-daily-reminders?slot=NIGHT_RECAP",
+      "schedule": "0 2 * * *"
+    }
+  ]
 }
