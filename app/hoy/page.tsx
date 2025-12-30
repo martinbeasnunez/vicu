@@ -14,6 +14,7 @@ import type { CurrentState, EffortLevel, NextStepResponse } from "@/app/api/next
 import { useUserStats } from "@/lib/useUserStats";
 import { Badge, getLevelName } from "@/lib/gamification";
 import { XpGainAnimation, BadgeUnlockAnimation, LevelUpAnimation } from "@/components/GamificationPanel";
+import LoadingScreen from "@/components/LoadingScreen";
 
 // All statuses for filtering (including inactive ones)
 const ALL_STATUSES: ExperimentStatus[] = ["queued", "building", "testing", "adjusting", "achieved", "paused", "discarded"];
@@ -110,22 +111,6 @@ function formatLastCheckin(dateString: string | null): string {
   if (diffDays < 7) return `Hace ${diffDays} días`;
   if (diffDays < 30) return `Hace ${Math.floor(diffDays / 7)} semana${Math.floor(diffDays / 7) > 1 ? "s" : ""}`;
   return `Hace ${Math.floor(diffDays / 30)} mes${Math.floor(diffDays / 30) > 1 ? "es" : ""}`;
-}
-
-function calculateDeadlineProgress(deadline: string | null, createdAt: string): number | null {
-  if (!deadline) return null;
-
-  const start = new Date(createdAt).getTime();
-  const end = new Date(deadline).getTime();
-  const now = new Date().getTime();
-
-  if (end <= start) return 100;
-
-  const total = end - start;
-  const elapsed = now - start;
-  const progress = Math.min(100, Math.max(0, (elapsed / total) * 100));
-
-  return progress;
 }
 
 export default function HoyPage() {
@@ -755,14 +740,7 @@ export default function HoyPage() {
   }, {} as Record<ExperimentStatus, number>);
 
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-2 border-slate-700 border-t-indigo-500 rounded-full animate-spin" />
-          <p className="text-slate-400">Cargando tu día...</p>
-        </div>
-      </div>
-    );
+    return <LoadingScreen text="Cargando tu día..." />;
   }
 
   return (
@@ -774,36 +752,60 @@ export default function HoyPage() {
         </div>
       )}
 
-      <main className="max-w-3xl mx-auto px-3 xs:px-4 sm:px-6 pt-4 sm:pt-6 pb-6 sm:pb-8 flex flex-col gap-4 sm:gap-6 mt-4 sm:mt-8">
+      <main className="max-w-3xl mx-auto px-3 xs:px-4 sm:px-6 pt-2 sm:pt-4 pb-6 sm:pb-8 flex flex-col gap-4 sm:gap-6 mt-2 sm:mt-4">
         {/* Minimal Header */}
         <header className="flex items-center justify-between">
           <div className="flex items-center gap-2 sm:gap-3">
-            <Image src="/vicu-logo.png" alt="Vicu" width={28} height={28} className="h-6 w-6 sm:h-7 sm:w-7" priority />
-            <span className="text-base sm:text-lg font-semibold text-slate-200">VICU</span>
+            <Image src="/vicu-logo.png" alt="Vicu" width={36} height={36} className="h-8 w-8 sm:h-9 sm:w-9" priority />
+            <span className="text-lg sm:text-xl font-semibold text-slate-200">VICU</span>
           </div>
 
-          {/* Right side: WhatsApp toggle + new button */}
+          {/* Right side: Streak + WhatsApp toggle + new button */}
           <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Streak indicator */}
+            {userStats && (
+              <div className="relative group">
+                <div className={`flex items-center gap-1 px-2 py-1 rounded-lg cursor-default ${userStats.streak_days > 0 ? "bg-orange-500/10 text-orange-400" : "bg-slate-800 text-slate-500"}`}>
+                  <span className="text-sm">🔥</span>
+                  <span className="text-xs font-medium">{userStats.streak_days}</span>
+                </div>
+                {/* Tooltip */}
+                <div className="absolute right-0 top-full mt-2 w-48 p-2 bg-slate-800 border border-slate-700 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 text-xs text-slate-300">
+                  {userStats.streak_days > 0
+                    ? `Llevas ${userStats.streak_days} día${userStats.streak_days > 1 ? "s" : ""} seguido${userStats.streak_days > 1 ? "s" : ""} avanzando. ¡No pierdas la racha!`
+                    : "Marca un avance hoy para iniciar tu racha."}
+                </div>
+              </div>
+            )}
+
             {/* WhatsApp notification toggle */}
             {whatsappEnabled !== null && (
-              <button
-                onClick={handleToggleWhatsapp}
-                disabled={whatsappLoading}
-                className={`p-1.5 sm:p-2 rounded-lg transition-all disabled:opacity-50 ${
-                  whatsappEnabled
-                    ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
-                    : "bg-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-700"
-                }`}
-                title={whatsappEnabled ? "Recordatorios WhatsApp activos (click para pausar)" : "Activar recordatorios WhatsApp"}
-              >
-                {whatsappLoading ? (
-                  <div className="w-4 h-4 border-2 border-slate-600 border-t-slate-300 rounded-full animate-spin" />
-                ) : (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                  </svg>
-                )}
-              </button>
+              <div className="relative group">
+                <button
+                  onClick={handleToggleWhatsapp}
+                  disabled={whatsappLoading}
+                  className={`p-1.5 sm:p-2 rounded-lg transition-all disabled:opacity-50 ${
+                    whatsappEnabled
+                      ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                      : "bg-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-700"
+                  }`}
+                  title={whatsappEnabled ? "Recordatorios activos" : "Activar recordatorios"}
+                >
+                  {whatsappLoading ? (
+                    <div className="w-4 h-4 border-2 border-slate-600 border-t-slate-300 rounded-full animate-spin" />
+                  ) : (
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                    </svg>
+                  )}
+                </button>
+                {/* Tooltip */}
+                <div className="absolute right-0 top-full mt-2 w-48 p-2 bg-slate-800 border border-slate-700 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 text-xs text-slate-300">
+                  {whatsappEnabled
+                    ? "Vicu te envía recordatorios por WhatsApp. Click para pausar."
+                    : "Activa recordatorios por WhatsApp para que Vicu te motive a avanzar."}
+                </div>
+              </div>
             )}
 
             <Link
@@ -817,102 +819,6 @@ export default function HoyPage() {
             </Link>
           </div>
         </header>
-
-        {/* Stats Bar - Responsive: stacked on mobile, inline on desktop */}
-        {userStats && !statsLoading && (
-          <div className="relative flex flex-wrap items-center gap-3 sm:gap-6 text-sm">
-            {/* Level & XP */}
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-[10px] sm:text-xs font-bold">
-                {userStats.level}
-              </div>
-              <div className="flex flex-col">
-                <span className="text-slate-400 text-[10px] sm:text-xs leading-tight">{getLevelName(userStats.level)}</span>
-                <span className="text-slate-200 text-xs sm:text-sm font-medium leading-tight">{userStats.xp} pts</span>
-              </div>
-            </div>
-
-            {/* Divider - hidden on very small screens */}
-            <div className="hidden xs:block w-px h-5 sm:h-6 bg-slate-700" />
-
-            {/* Streak */}
-            <div className="flex items-center gap-1">
-              <span className="text-base sm:text-lg">🔥</span>
-              <span className="text-orange-400 text-sm sm:text-base font-semibold">{userStats.streak_days}</span>
-              <span className="text-slate-500 text-[10px] sm:text-xs">días</span>
-            </div>
-
-            {/* Divider - hidden on very small screens */}
-            <div className="hidden xs:block w-px h-5 sm:h-6 bg-slate-700" />
-
-            {/* Daily progress */}
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <span className="text-slate-400 text-[10px] sm:text-xs">Hoy</span>
-              <div className="flex items-center gap-1 sm:gap-1.5">
-                <div className="w-10 sm:w-12 h-1 sm:h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${userStats.daily_checkins >= userStats.daily_goal ? "bg-emerald-500" : "bg-indigo-500"}`}
-                    style={{ width: `${Math.min(100, (userStats.daily_checkins / userStats.daily_goal) * 100)}%` }}
-                  />
-                </div>
-                <span className={`text-[10px] sm:text-xs font-medium ${userStats.daily_checkins >= userStats.daily_goal ? "text-emerald-400" : "text-slate-300"}`}>
-                  {userStats.daily_checkins}/{userStats.daily_goal}
-                </span>
-              </div>
-            </div>
-
-            {/* Help button */}
-            <button
-              onClick={() => setShowStatsHelp(!showStatsHelp)}
-              className="p-1 text-slate-500 hover:text-slate-300 transition-colors ml-auto sm:ml-0"
-              title="¿Qué significa esto?"
-            >
-              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </button>
-
-            {/* Stats explanation dropdown */}
-            {showStatsHelp && (
-              <div className="absolute top-full left-0 right-0 sm:right-auto mt-2 sm:w-72 p-3 sm:p-4 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-50">
-                <div className="flex justify-between items-start mb-3">
-                  <h4 className="text-sm font-semibold text-slate-200">¿Cómo funciona?</h4>
-                  <button onClick={() => setShowStatsHelp(false)} className="text-slate-500 hover:text-slate-300">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-                <div className="space-y-3 text-xs text-slate-400">
-                  <div className="flex gap-2">
-                    <div className="w-5 h-5 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex-shrink-0 flex items-center justify-center text-white text-[10px] font-bold">7</div>
-                    <div>
-                      <span className="text-slate-300 font-medium">Nivel:</span> Sube de nivel marcando avances. Cada nivel necesita más XP.
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <span className="text-base">🔥</span>
-                    <div>
-                      <span className="text-slate-300 font-medium">Racha:</span> Días consecutivos con al menos 1 avance. Si no avanzas un día, se reinicia.
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <span className="text-slate-300 font-medium">Puntos:</span>
-                    <div>
-                      Ganas 10 XP por cada avance marcado. Bonus por rachas largas.
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <span className="text-slate-300 font-medium">Hoy:</span>
-                    <div>
-                      Tu meta diaria es {userStats.daily_goal} avances. ¡Complétala para mantener la racha!
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Status Filter Chips */}
         {experiments.length > 0 && (
@@ -987,8 +893,8 @@ export default function HoyPage() {
           ) : (
             <div className="flex flex-col gap-2.5 sm:gap-3">
               {filteredExperiments.slice(0, visibleCount).map((exp) => {
-                const deadlineInfo = exp.deadline ? formatDeadline(exp.deadline, null) : null;
-                const deadlineProgress = calculateDeadlineProgress(exp.deadline, exp.created_at);
+                const isFinished = exp.status === "achieved" || exp.status === "discarded";
+                const deadlineInfo = !isFinished && exp.deadline ? formatDeadline(exp.deadline, null) : null;
                 const checkedToday = exp.last_checkin_at && new Date(exp.last_checkin_at).toDateString() === new Date().toDateString();
 
                 return (
@@ -996,9 +902,11 @@ export default function HoyPage() {
                     key={exp.id}
                     onClick={() => router.push(`/experiments/${exp.id}`)}
                     className={`group relative rounded-xl sm:rounded-2xl border px-3 py-3 sm:px-4 sm:py-4 md:px-5 flex flex-col gap-2 sm:gap-2.5 shadow-md transition cursor-pointer ${
-                      checkedToday
-                        ? "border-emerald-500/30 bg-emerald-950/20 hover:border-emerald-500/50"
-                        : "border-slate-800 bg-slate-950/60 hover:border-slate-700 hover:bg-slate-900/60"
+                      isFinished
+                        ? "border-slate-700/50 bg-slate-900/40 hover:border-slate-600"
+                        : checkedToday
+                          ? "border-emerald-500/30 bg-emerald-950/20 hover:border-emerald-500/50"
+                          : "border-slate-800 bg-slate-950/60 hover:border-slate-700 hover:bg-slate-900/60"
                     }`}
                   >
                     {/* Delete button - appears on hover (always visible on mobile via tap) */}
@@ -1017,7 +925,7 @@ export default function HoyPage() {
 
                     {/* Title + Arrow */}
                     <div className="flex items-start justify-between gap-2 pr-6 sm:pr-8">
-                      <h3 className="text-sm sm:text-base font-semibold text-slate-50 group-hover:text-indigo-300 transition-colors line-clamp-2 sm:line-clamp-1">
+                      <h3 className={`text-sm sm:text-base font-semibold group-hover:text-indigo-300 transition-colors line-clamp-2 sm:line-clamp-1 ${isFinished ? "text-slate-400" : "text-slate-50"}`}>
                         {exp.title}
                       </h3>
                       <svg className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600 group-hover:text-indigo-400 transition-colors flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1025,7 +933,7 @@ export default function HoyPage() {
                       </svg>
                     </div>
 
-                    {/* Meta badges - Surface type (Ritual/Landing/Mensajes) hidden from UI */}
+                    {/* Meta badges */}
                     <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs">
                       <span className={`px-1.5 sm:px-2 py-0.5 rounded-full ${STATUS_BADGE_COLORS[exp.status]}`}>
                         {STATUS_LABELS[exp.status]}
@@ -1035,41 +943,29 @@ export default function HoyPage() {
                       )}
                     </div>
 
-                    {/* Deadline progress bar */}
-                    {deadlineProgress !== null && (
-                      <div className="w-full">
-                        <div className="w-full h-0.5 sm:h-1 bg-white/5 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all ${
-                              deadlineProgress > 80 ? "bg-amber-500" : "bg-indigo-500"
-                            }`}
-                            style={{ width: `${deadlineProgress}%` }}
-                          />
+                    {/* Check-in info + streak - only for active objectives */}
+                    {!isFinished && (
+                      <div className="flex items-center justify-between text-[10px] sm:text-sm">
+                        <span className="text-slate-500">
+                          Último avance: <span className="text-slate-400">{formatLastCheckin(exp.last_checkin_at)}</span>
+                        </span>
+                        <div className="flex items-center gap-2 sm:gap-3">
+                          {exp.streak_days > 0 && (
+                            <span className="text-orange-400 flex items-center gap-1 text-[10px] sm:text-xs">
+                              <span>{exp.streak_days} días</span>
+                            </span>
+                          )}
+                          {checkedToday && (
+                            <span className="flex items-center gap-0.5 sm:gap-1 text-emerald-400 text-[10px] sm:text-xs">
+                              <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span>Hoy</span>
+                            </span>
+                          )}
                         </div>
                       </div>
                     )}
-
-                    {/* Check-in info + streak */}
-                    <div className="flex items-center justify-between text-[10px] sm:text-sm">
-                      <span className="text-slate-500">
-                        Último avance: <span className="text-slate-400">{formatLastCheckin(exp.last_checkin_at)}</span>
-                      </span>
-                      <div className="flex items-center gap-2 sm:gap-3">
-                        {exp.streak_days > 0 && (
-                          <span className="text-orange-400 flex items-center gap-1 text-[10px] sm:text-xs">
-                            <span>{exp.streak_days} días</span>
-                          </span>
-                        )}
-                        {checkedToday && (
-                          <span className="flex items-center gap-0.5 sm:gap-1 text-emerald-400 text-[10px] sm:text-xs">
-                            <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                            <span>Hoy</span>
-                          </span>
-                        )}
-                      </div>
-                    </div>
                   </div>
                 );
               })}

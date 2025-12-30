@@ -37,7 +37,19 @@ Reglas:
 - Si el paso pide investigación o lista, genera puntos claros
 - Mantén el tono cercano y profesional
 - El contenido debe ser práctico y listo para usar (con pequeños ajustes del usuario)
-- Máximo 300 palabras`,
+- Máximo 300 palabras
+
+IMPORTANTE - ENLACES REALES:
+- NUNCA inventes URLs de videos o artículos específicos
+- NUNCA inventes nombres de videos, cursos o canales específicos
+- NUNCA inventes estadísticas o datos numéricos específicos
+- Si recomiendas buscar en YouTube, USA ESTE FORMATO EXACTO para el enlace:
+  https://www.youtube.com/results?search_query=TERMINOS+DE+BUSQUEDA
+  Ejemplo: "Busca aquí: https://www.youtube.com/results?search_query=como+mejorar+productividad"
+- Si recomiendas buscar en Google, USA ESTE FORMATO:
+  https://www.google.com/search?q=TERMINOS+DE+BUSQUEDA
+- Reemplaza espacios con + en la URL
+- Estos enlaces de búsqueda SÍ son válidos porque llevan a resultados reales`,
         },
         {
           role: "user",

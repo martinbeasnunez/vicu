@@ -20,8 +20,48 @@ import {
 } from "@/lib/experiment-helpers";
 import AttackPlanSection from "@/components/AttackPlanSection";
 import MessagesBankModal from "@/components/MessagesBankModal";
+import LoadingScreen from "@/components/LoadingScreen";
 import type { CurrentState, EffortLevel, NextStepResponse } from "@/app/api/next-step/route";
 import type { VicuRecommendationData, ExperimentStage } from "@/app/api/generate-recommendation/route";
+
+// Helper component to render text with clickable links
+function LinkifiedText({ text }: { text: string }) {
+  // Match URLs
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (urlRegex.test(part)) {
+          urlRegex.lastIndex = 0;
+          const isYouTube = part.includes("youtube.com") || part.includes("youtu.be");
+          return (
+            <a
+              key={i}
+              href={part}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`inline-flex items-center gap-1 ${isYouTube ? "text-red-400 hover:text-red-300" : "text-indigo-400 hover:text-indigo-300"} underline underline-offset-2 transition-colors`}
+            >
+              {isYouTube ? (
+                <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                </svg>
+              ) : (
+                <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              )}
+              {isYouTube ? "Buscar en YouTube" : "Abrir enlace"}
+            </a>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </>
+  );
+}
 
 // Modal state types for "Mover proyecto"
 interface MoverModalState {
@@ -115,6 +155,13 @@ interface ExperimentAction {
   suggested_due_date: string | null;
 }
 
+// Type for individual user note
+interface UserNote {
+  id: string;
+  content: string;
+  created_at: string;
+}
+
 interface ExperimentCheckin {
   id: string;
   experiment_id: string;
@@ -128,6 +175,7 @@ interface ExperimentCheckin {
   day_date: string;
   created_at: string;
   user_content: string | null;
+  user_notes: UserNote[];
   for_stage: ExperimentStage | null;
 }
 
@@ -480,9 +528,13 @@ export default function ExperimentPage() {
 
   // Step detail modal state
   const [selectedStep, setSelectedStep] = useState<ExperimentCheckin | null>(null);
-  const [stepUserContent, setStepUserContent] = useState("");
-  const [isSavingStepContent, setIsSavingStepContent] = useState(false);
+  const [stepUserNotes, setStepUserNotes] = useState<UserNote[]>([]);
+  const [newNoteInput, setNewNoteInput] = useState("");
+  const [stepSaveStatus, setStepSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [isGeneratingIdeas, setIsGeneratingIdeas] = useState(false);
+  const [vicuSuggestion, setVicuSuggestion] = useState<string | null>(null);
+  const [savedVicuSuggestions, setSavedVicuSuggestions] = useState<string[]>([]);
+  const [isVicuHelpExpanded, setIsVicuHelpExpanded] = useState(false);
 
   // Delete step confirmation modal state
   const [stepToDelete, setStepToDelete] = useState<ExperimentCheckin | null>(null);
@@ -1114,22 +1166,29 @@ export default function ExperimentPage() {
   // Step detail modal handlers
   const openStepDetail = (step: ExperimentCheckin) => {
     setSelectedStep(step);
-    setStepUserContent(step.user_content || "");
+    setStepUserNotes(step.user_notes || []);
+    setNewNoteInput("");
   };
 
   const closeStepDetail = () => {
     setSelectedStep(null);
-    setStepUserContent("");
+    setStepUserNotes([]);
+    setNewNoteInput("");
+    setVicuSuggestion(null);
+    setSavedVicuSuggestions([]);
+    setIsVicuHelpExpanded(false);
+    setStepSaveStatus("idle");
   };
 
-  const handleSaveStepContent = async () => {
+  // Save notes to database
+  const handleSaveNotes = async (notes: UserNote[]) => {
     if (!selectedStep) return;
-    setIsSavingStepContent(true);
+    setStepSaveStatus("saving");
 
     try {
       const { error } = await supabase
         .from("experiment_checkins")
-        .update({ user_content: stepUserContent })
+        .update({ user_notes: notes })
         .eq("id", selectedStep.id);
 
       if (error) throw error;
@@ -1137,24 +1196,50 @@ export default function ExperimentPage() {
       // Update local state
       setCheckins((prev) =>
         prev.map((c) =>
-          c.id === selectedStep.id ? { ...c, user_content: stepUserContent } : c
+          c.id === selectedStep.id ? { ...c, user_notes: notes } : c
         )
       );
       setSelectedStep((prev) =>
-        prev ? { ...prev, user_content: stepUserContent } : null
+        prev ? { ...prev, user_notes: notes } : null
       );
-      setToast("Contenido guardado");
+      setStepSaveStatus("saved");
+      setTimeout(() => setStepSaveStatus("idle"), 2000);
     } catch {
-      setToast("Error al guardar contenido");
-    } finally {
-      setIsSavingStepContent(false);
+      setStepSaveStatus("idle");
+      setToast("Error al guardar");
       setTimeout(() => setToast(null), 3000);
     }
+  };
+
+  // Add a new note
+  const handleAddNote = async () => {
+    if (!selectedStep || !newNoteInput.trim()) return;
+
+    const newNote: UserNote = {
+      id: crypto.randomUUID(),
+      content: newNoteInput.trim(),
+      created_at: new Date().toISOString(),
+    };
+
+    const updatedNotes = [...stepUserNotes, newNote];
+    setStepUserNotes(updatedNotes);
+    setNewNoteInput("");
+    await handleSaveNotes(updatedNotes);
+  };
+
+  // Delete a note
+  const handleDeleteNote = async (noteId: string) => {
+    if (!selectedStep) return;
+
+    const updatedNotes = stepUserNotes.filter((n) => n.id !== noteId);
+    setStepUserNotes(updatedNotes);
+    await handleSaveNotes(updatedNotes);
   };
 
   const handleGenerateIdeas = async () => {
     if (!selectedStep || !experiment) return;
     setIsGeneratingIdeas(true);
+    setIsVicuHelpExpanded(true);
 
     try {
       const res = await fetch("/api/generate-step-ideas", {
@@ -1170,17 +1255,45 @@ export default function ExperimentPage() {
 
       const data = await res.json();
       if (data.success && data.content) {
-        setStepUserContent(data.content);
-        setToast("Borrador generado. ¡Edítalo a tu gusto!");
+        // Store suggestion separately - NEVER overwrite user notes
+        setVicuSuggestion(data.content);
       } else {
-        setToast("No se pudo generar el borrador");
+        setToast("No se pudo generar ideas");
+        setTimeout(() => setToast(null), 3000);
       }
     } catch {
       setToast("Error al generar ideas");
+      setTimeout(() => setToast(null), 3000);
     } finally {
       setIsGeneratingIdeas(false);
-      setTimeout(() => setToast(null), 3000);
     }
+  };
+
+  // Copy Vicu suggestion to clipboard
+  const handleCopySuggestion = async () => {
+    if (!vicuSuggestion) return;
+    try {
+      await navigator.clipboard.writeText(vicuSuggestion);
+      setToast("Copiado al portapapeles");
+      setTimeout(() => setToast(null), 2000);
+    } catch {
+      setToast("Error al copiar");
+      setTimeout(() => setToast(null), 2000);
+    }
+  };
+
+  // Save current Vicu suggestion and generate another
+  const handleSaveSuggestion = () => {
+    if (!vicuSuggestion) return;
+    setSavedVicuSuggestions((prev) => [...prev, vicuSuggestion]);
+    setVicuSuggestion(null);
+    setToast("Idea guardada");
+    setTimeout(() => setToast(null), 2000);
+  };
+
+  // Delete a saved Vicu suggestion
+  const handleDeleteSavedSuggestion = (index: number) => {
+    setSavedVicuSuggestions((prev) => prev.filter((_, i) => i !== index));
   };
 
   // Handler to generate Vicu recommendation
@@ -1667,14 +1780,7 @@ export default function ExperimentPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-2 border-slate-700 border-t-indigo-500 rounded-full animate-spin" />
-          <p className="text-slate-400">Cargando experimento...</p>
-        </div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (!experiment) {
@@ -3079,19 +3185,40 @@ export default function ExperimentPage() {
         actionsError={actionsError}
       />
 
-      {/* Step Detail Modal - Improved design with better hierarchy and spacing */}
+      {/* Step Detail Modal - Clear separation between user notes and AI assistance */}
       {selectedStep && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
           {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
             onClick={closeStepDetail}
           />
 
-          {/* Modal - Increased max-width and padding for more air */}
-          <div className="relative bg-slate-800 rounded-2xl w-full max-w-xl max-h-[90vh] overflow-hidden shadow-2xl border border-slate-700/50 flex flex-col">
-            {/* Header with close button only */}
-            <div className="absolute top-4 right-4 z-10">
+          {/* Modal - Bottom sheet on mobile, centered on desktop */}
+          <div className="relative bg-slate-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-2xl max-h-[85vh] sm:max-h-[90vh] overflow-hidden shadow-2xl border border-slate-700/50 flex flex-col sm:mx-4">
+            {/* Header with status and close */}
+            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-700/50">
+              <span className={`inline-flex items-center gap-1.5 text-xs sm:text-sm px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full font-medium ${
+                selectedStep.status === "done"
+                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                  : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+              }`}>
+                {selectedStep.status === "done" ? (
+                  <>
+                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Completado
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Pendiente
+                  </>
+                )}
+              </span>
               <button
                 onClick={closeStepDetail}
                 className="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-colors"
@@ -3102,139 +3229,258 @@ export default function ExperimentPage() {
               </button>
             </div>
 
-            {/* Content with generous padding */}
-            <div className="flex-1 overflow-y-auto p-8 space-y-6">
-              {/* 1. Status Badge at top */}
-              <div className="flex items-center gap-2">
-                <span className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-full font-medium ${
-                  selectedStep.status === "done"
-                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                    : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                }`}>
-                  {selectedStep.status === "done" ? (
-                    <>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      Completado
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      Pendiente
-                    </>
-                  )}
-                </span>
-              </div>
-
-              {/* Completed step message */}
-              {selectedStep.status === "done" && (
-                <p className="text-sm text-emerald-400/80 -mt-2">
-                  Este paso ya cuenta para tu progreso.
-                </p>
-              )}
-
-              {/* 2. Title - Strong H2 */}
-              <h2 className="text-2xl font-bold text-white leading-tight pr-10">
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5">
+              {/* Step Title */}
+              <h2 className="text-lg sm:text-xl font-bold text-white leading-tight">
                 {selectedStep.step_title || "Paso del objetivo"}
               </h2>
 
-              {/* 3. Description Block */}
+              {/* Step Description - What to do */}
               {selectedStep.step_description && (
-                <div className="bg-slate-700/30 rounded-xl p-5 border border-slate-600/30">
-                  <p className="text-slate-200 leading-relaxed">{selectedStep.step_description}</p>
+                <div className="bg-slate-700/30 rounded-xl p-4 border border-slate-600/30">
+                  <p className="text-sm sm:text-base text-slate-200 leading-relaxed">{selectedStep.step_description}</p>
                 </div>
               )}
 
-              {/* 4. Notes/Draft Section */}
-              <div className="space-y-3">
-                <label className="block text-sm font-medium text-slate-300">
-                  Tus notas o borrador
-                </label>
-                <textarea
-                  value={stepUserContent}
-                  onChange={(e) => setStepUserContent(e.target.value)}
-                  placeholder="Escribe aquí tu contenido, notas o borrador para este paso..."
-                  className="w-full h-48 px-5 py-4 bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 text-base leading-relaxed"
-                />
-              </div>
-
-              {/* 5. Generate Button - Full width below textarea */}
-              <button
-                onClick={handleGenerateIdeas}
-                disabled={isGeneratingIdeas}
-                className="w-full px-5 py-4 rounded-xl bg-gradient-to-r from-purple-600/20 to-indigo-600/20 border border-purple-500/30 text-purple-300 hover:from-purple-600/30 hover:to-indigo-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50 font-medium"
-              >
-                {isGeneratingIdeas ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-purple-400/30 border-t-purple-400 rounded-full animate-spin" />
-                    <span>Generando borrador...</span>
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                    </svg>
-                    <span>Generar borrador con Vicu</span>
-                  </>
-                )}
-              </button>
-
-              {/* 6. Meta info - Discrete at bottom */}
-              <div className="flex flex-wrap items-center gap-4 pt-2 text-xs text-slate-500 border-t border-slate-700/30">
-                <span className="flex items-center gap-1.5">
+              {/* Meta info - Compact */}
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs text-slate-500">
+                <span className="flex items-center gap-1">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
-                  {new Date(selectedStep.created_at).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })}
+                  {new Date(selectedStep.created_at).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
                 </span>
                 {selectedStep.effort && (
-                  <span className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full ${
+                  <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${
                     selectedStep.effort === "muy_pequeno" ? "bg-emerald-500/10 text-emerald-400" :
                     selectedStep.effort === "pequeno" ? "bg-amber-500/10 text-amber-400" :
                     "bg-orange-500/10 text-orange-400"
                   }`}>
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     {selectedStep.effort === "muy_pequeno" ? "~5 min" : selectedStep.effort === "pequeno" ? "~20 min" : "~1 hora"}
                   </span>
                 )}
-                {selectedStep.user_state && (
-                  <span className="flex items-center gap-1.5">
-                    {selectedStep.user_state === "not_started" ? "Arrancando" :
-                     selectedStep.user_state === "stuck" ? "Destrabando" : "Avanzando"}
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-slate-700/50" />
+
+              {/* User Notes Section - Multiple notes system */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 text-sm font-medium text-slate-300">
+                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    Mis notas
+                  </label>
+                  {/* Save status indicator */}
+                  <span className={`text-xs transition-all ${
+                    stepSaveStatus === "saving" ? "text-slate-400" :
+                    stepSaveStatus === "saved" ? "text-emerald-400" :
+                    "text-slate-500"
+                  }`}>
+                    {stepSaveStatus === "saving" && (
+                      <span className="flex items-center gap-1">
+                        <div className="w-2 h-2 border border-slate-400 border-t-transparent rounded-full animate-spin" />
+                        Guardando...
+                      </span>
+                    )}
+                    {stepSaveStatus === "saved" && (
+                      <span className="flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Guardado
+                      </span>
+                    )}
+                    {stepSaveStatus === "idle" && stepUserNotes.length > 0 && `${stepUserNotes.length} nota${stepUserNotes.length > 1 ? "s" : ""}`}
                   </span>
+                </div>
+
+                {/* Add note input */}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newNoteInput}
+                    onChange={(e) => setNewNoteInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newNoteInput.trim()) {
+                        handleAddNote();
+                      }
+                    }}
+                    placeholder="Escribe una nota..."
+                    className="flex-1 px-4 py-2.5 bg-slate-900/50 border border-slate-600/50 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50"
+                  />
+                  <button
+                    onClick={handleAddNote}
+                    disabled={!newNoteInput.trim() || stepSaveStatus === "saving"}
+                    className="px-4 py-2.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 text-sm font-medium"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    <span className="hidden sm:inline">Agregar</span>
+                  </button>
+                </div>
+
+                {/* Notes list */}
+                {stepUserNotes.length > 0 && (
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {stepUserNotes.map((note) => (
+                      <div
+                        key={note.id}
+                        className="flex items-start gap-2 p-3 bg-slate-900/50 border border-slate-700/50 rounded-lg group"
+                      >
+                        <svg className="w-4 h-4 text-indigo-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <p className="flex-1 text-sm text-slate-200 leading-relaxed break-words">{note.content}</p>
+                        <button
+                          onClick={() => handleDeleteNote(note.id)}
+                          disabled={stepSaveStatus === "saving"}
+                          className="p-1 text-slate-500 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
+                          title="Eliminar nota"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Empty state */}
+                {stepUserNotes.length === 0 && (
+                  <p className="text-xs text-slate-500 text-center py-2">
+                    Agrega notas para recordar ideas o avances
+                  </p>
+                )}
+              </div>
+
+              {/* Vicu Help Section - Collapsible */}
+              <div className="border border-slate-700/50 rounded-xl overflow-hidden">
+                {/* Collapsible header */}
+                <button
+                  onClick={() => !isGeneratingIdeas && setIsVicuHelpExpanded(!isVicuHelpExpanded)}
+                  className="w-full px-4 py-3 flex items-center justify-between bg-slate-700/20 hover:bg-slate-700/30 transition-colors"
+                >
+                  <span className="flex items-center gap-2 text-sm font-medium text-slate-300">
+                    <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    Ayuda de Vicu
+                  </span>
+                  <svg className={`w-4 h-4 text-slate-400 transition-transform ${isVicuHelpExpanded ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {/* Expanded content */}
+                {isVicuHelpExpanded && (
+                  <div className="p-4 border-t border-slate-700/50 space-y-3">
+                    {/* Generate button or loading */}
+                    {!vicuSuggestion && (
+                      <button
+                        onClick={handleGenerateIdeas}
+                        disabled={isGeneratingIdeas}
+                        className="w-full px-4 py-2.5 rounded-lg bg-purple-600/20 border border-purple-500/30 text-purple-300 hover:bg-purple-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50 text-sm"
+                      >
+                        {isGeneratingIdeas ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-purple-400/30 border-t-purple-400 rounded-full animate-spin" />
+                            <span>Generando ideas...</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                            <span>Generar ideas</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+
+                    {/* Vicu suggestion display */}
+                    {vicuSuggestion && (
+                      <div className="space-y-3">
+                        <div className="bg-slate-900/50 rounded-lg p-3 border border-purple-500/20">
+                          <p className="text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">
+                            <LinkifiedText text={vicuSuggestion} />
+                          </p>
+                        </div>
+
+                        {/* Action buttons for suggestion */}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleSaveSuggestion}
+                            className="flex-1 px-3 py-2 rounded-lg bg-emerald-600/20 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-600/30 transition-all flex items-center justify-center gap-1.5 text-xs"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            Guardar
+                          </button>
+                          <button
+                            onClick={handleGenerateIdeas}
+                            disabled={isGeneratingIdeas}
+                            className="flex-1 px-3 py-2 rounded-lg bg-slate-700/50 border border-slate-600/50 text-slate-400 hover:bg-slate-700 hover:text-slate-200 transition-all flex items-center justify-center gap-1.5 text-xs disabled:opacity-50"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            Otra idea
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Saved Vicu suggestions */}
+                    {savedVicuSuggestions.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs text-slate-400 font-medium">Ideas guardadas ({savedVicuSuggestions.length})</p>
+                        <div className="space-y-2 max-h-32 overflow-y-auto">
+                          {savedVicuSuggestions.map((suggestion, index) => (
+                            <div key={index} className="flex items-start gap-2 p-2.5 bg-emerald-900/20 rounded-lg border border-emerald-500/20 group">
+                              <svg className="w-3.5 h-3.5 text-emerald-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                              </svg>
+                              <p className="flex-1 text-xs text-slate-300 leading-relaxed line-clamp-3">{suggestion}</p>
+                              <button
+                                onClick={() => handleDeleteSavedSuggestion(index)}
+                                className="p-0.5 text-slate-500 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <p className="text-[10px] text-slate-500 text-center">
+                      Guarda las ideas que te sirvan
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
 
-            {/* 7. Footer with action buttons */}
-            <div className="p-6 border-t border-slate-700/50 bg-slate-800/80">
-              <div className="flex gap-4">
-                <button
-                  onClick={closeStepDetail}
-                  className="flex-1 px-5 py-3 rounded-xl bg-transparent border border-slate-600 text-slate-300 hover:bg-slate-700/50 hover:border-slate-500 transition-colors font-medium"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleSaveStepContent}
-                  disabled={isSavingStepContent}
-                  className="flex-1 px-5 py-3 rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 font-medium"
-                >
-                  {isSavingStepContent ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      <span>Guardando...</span>
-                    </>
-                  ) : (
-                    <span>Guardar</span>
-                  )}
-                </button>
-              </div>
+            {/* Footer - Single clear action */}
+            <div className="p-4 sm:p-5 border-t border-slate-700/50 bg-slate-800/80">
+              <button
+                onClick={closeStepDetail}
+                className="w-full px-4 py-2.5 sm:py-3 rounded-xl bg-slate-700 text-white hover:bg-slate-600 transition-colors font-medium text-sm sm:text-base"
+              >
+                Cerrar
+              </button>
             </div>
           </div>
         </div>
