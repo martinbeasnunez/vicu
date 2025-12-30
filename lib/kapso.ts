@@ -139,12 +139,9 @@ export async function sendWhatsAppMessage(
     return { success: false, error: "KAPSO_API_KEY not configured" };
   }
 
-  // Clean phone number: remove spaces and dashes, but keep the + prefix
-  // Ensure it starts with + for country code
-  let cleanPhone = to.replace(/[\s-]/g, "");
-  if (!cleanPhone.startsWith("+")) {
-    cleanPhone = "+" + cleanPhone;
-  }
+  // Clean phone number: remove spaces, dashes, and the + prefix
+  // WhatsApp Cloud API expects numbers WITHOUT the + prefix (e.g., "51965450086")
+  let cleanPhone = to.replace(/[\s\-+]/g, "");
 
   const payload: KapsoSendMessageRequest = {
     messaging_product: "whatsapp",
