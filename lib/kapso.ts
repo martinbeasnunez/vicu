@@ -106,7 +106,7 @@ export type UserResponseAction = "done" | "later" | "stuck";
 // =============================================================================
 
 const KAPSO_API_BASE = "https://api.kapso.ai/meta/whatsapp/v24.0";
-const DEFAULT_PHONE_NUMBER_ID = "12083619224";
+const DEFAULT_PHONE_NUMBER_ID = "996277176894864";
 
 function getKapsoConfig() {
   const apiKey = process.env.KAPSO_API_KEY;
