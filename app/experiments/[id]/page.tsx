@@ -1700,36 +1700,36 @@ export default function ExperimentPage() {
     <div className="min-h-screen">
       {/* Toast - with Vicu logo animation for special states */}
       {toast && (
-        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-2xl animate-fade-in-down flex items-center gap-3 ${
+        <div className={`fixed top-4 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:max-w-sm z-50 px-4 py-3 sm:px-5 rounded-2xl shadow-2xl animate-fade-in-down flex items-center gap-3 ${
           toastType === "vicu-working" || toastType === "vicu-success"
             ? "bg-gradient-to-r from-indigo-600/95 to-purple-600/95 backdrop-blur-md border border-indigo-400/30"
             : "card-glass"
         }`}>
           {(toastType === "vicu-working" || toastType === "vicu-success") && (
-            <div className="relative w-10 h-10 flex items-center justify-center">
+            <div className="relative w-9 h-9 sm:w-10 sm:h-10 flex-shrink-0 flex items-center justify-center">
               {/* Vicu logo */}
               <Image
                 src="/vicu-logo.png"
                 alt="Vicu"
                 width={32}
                 height={32}
-                className={`w-8 h-8 ${toastType === "vicu-working" ? "animate-bounce" : "animate-scale-in"}`}
+                className={`w-7 h-7 sm:w-8 sm:h-8 ${toastType === "vicu-working" ? "animate-bounce" : "animate-scale-in"}`}
               />
               {/* Spinning ring around logo when working */}
               {toastType === "vicu-working" && (
-                <div className="absolute inset-0 w-10 h-10 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                <div className="absolute inset-0 w-9 h-9 sm:w-10 sm:h-10 border-2 border-white/20 border-t-white rounded-full animate-spin" />
               )}
               {/* Success checkmark overlay */}
               {toastType === "vicu-success" && (
-                <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center animate-scale-in shadow-lg">
-                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="absolute -bottom-0.5 -right-0.5 sm:-bottom-1 sm:-right-1 w-4 h-4 sm:w-5 sm:h-5 bg-emerald-500 rounded-full flex items-center justify-center animate-scale-in shadow-lg">
+                  <svg className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
               )}
             </div>
           )}
-          <span className={`font-medium ${
+          <span className={`font-medium text-sm sm:text-base ${
             toastType === "vicu-working" || toastType === "vicu-success" ? "text-white" : "text-slate-50"
           }`}>
             {toast}
