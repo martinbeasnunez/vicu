@@ -303,10 +303,190 @@ async function handleContextualResponse(
         .eq("id", reminder.experiment_id);
       return "✅ Registrado, ¡bien hecho!";
 
+    // === SMART REMINDERS - New system responses ===
+    case "start_urgent":
+      // User wants to start with most urgent - show first step
+      return await getNextStepMessage(reminder.experiment_id);
+
+    case "mark_done": {
+      // Mark the current step as done and show next
+      // First, find and mark the pending step as done
+      const { data: pendingStep } = await getSupabase()
+        .from("experiment_checkins")
+        .select("id, step_title")
+        .eq("experiment_id", reminder.experiment_id)
+        .eq("status", "pending")
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .single();
+
+      if (pendingStep) {
+        await getSupabase()
+          .from("experiment_checkins")
+          .update({ status: "done", source: "whatsapp" })
+          .eq("id", pendingStep.id);
+      } else {
+        // No pending step, create a done checkin
+        await getSupabase()
+          .from("experiment_checkins")
+          .insert({
+            experiment_id: reminder.experiment_id,
+            status: "done",
+            step_title: reminder.step_title || "Paso completado",
+            source: "whatsapp",
+            day_date: today,
+          });
+      }
+
+      // Update experiment
+      await getSupabase()
+        .from("experiments")
+        .update({
+          last_checkin_at: now.toISOString(),
+          checkins_count: (await getSupabase()
+            .from("experiment_checkins")
+            .select("id", { count: "exact" })
+            .eq("experiment_id", reminder.experiment_id)
+            .eq("status", "done")).count || 0,
+        })
+        .eq("id", reminder.experiment_id);
+
+      // Get next step
+      return await getNextStepMessage(reminder.experiment_id, true);
+    }
+
+    case "different_step":
+      // User wants a different step - for now just acknowledge
+      // TODO: Generate with AI
+      return "🔄 Entendido. En el siguiente mensaje te propongo algo diferente.";
+
+    case "list_steps":
+      // Show all pending steps
+      return await getAllStepsMessage(reminder.experiment_id);
+
+    case "rest_today":
+      return "😴 Perfecto, descansa hoy. Mañana seguimos. ¡Cuídate!";
+
+    case "next_objective":
+      // User wants to switch to next objective
+      return await getNextObjectiveMessage(reminder.experiment_id);
+
     default:
       console.log(`[Kapso Webhook] Unknown action: ${action}`);
       return "👍 Recibido.";
   }
+}
+
+/**
+ * Get the next step message for an objective
+ */
+async function getNextStepMessage(experimentId: string, justCompleted: boolean = false): Promise<string> {
+  // Get experiment title
+  const { data: exp } = await getSupabase()
+    .from("experiments")
+    .select("title, streak_days")
+    .eq("id", experimentId)
+    .single();
+
+  // Get next pending step
+  const { data: nextStep } = await getSupabase()
+    .from("experiment_checkins")
+    .select("step_title, step_description, effort")
+    .eq("experiment_id", experimentId)
+    .eq("status", "pending")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .single();
+
+  const prefix = justCompleted ? "✅ ¡Paso completado!\n\n" : "";
+  const streakText = exp?.streak_days && exp.streak_days >= 2 ? ` 🔥${exp.streak_days}` : "";
+
+  if (!nextStep) {
+    return `${prefix}🎉 *¡Increíble!*
+
+Completaste todos los pasos de *${exp?.title || "tu objetivo"}*${streakText}
+
+¿Qué sigue? Entra a Vicu para agregar más pasos o marcar el objetivo como logrado.`;
+  }
+
+  const effort = nextStep.effort === "muy_pequeno" ? "~5min" :
+    nextStep.effort === "pequeno" ? "~20min" : "~1hr";
+
+  return `${prefix}📌 *${exp?.title || "Tu objetivo"}*${streakText}
+
+Siguiente paso:
+➡️ *${nextStep.step_title}* (${effort})
+${nextStep.step_description ? `\n${nextStep.step_description}` : ""}
+
+Responde:
+1️⃣ ✅ Listo
+2️⃣ 🔄 Otro paso
+3️⃣ ⏰ Más tarde`;
+}
+
+/**
+ * Get all pending steps for an objective
+ */
+async function getAllStepsMessage(experimentId: string): Promise<string> {
+  const { data: exp } = await getSupabase()
+    .from("experiments")
+    .select("title")
+    .eq("id", experimentId)
+    .single();
+
+  const { data: steps } = await getSupabase()
+    .from("experiment_checkins")
+    .select("step_title, effort")
+    .eq("experiment_id", experimentId)
+    .eq("status", "pending")
+    .order("created_at", { ascending: true })
+    .limit(5);
+
+  if (!steps || steps.length === 0) {
+    return `📋 *${exp?.title || "Tu objetivo"}*
+
+No tienes pasos pendientes. ¡Entra a Vicu para agregar más!`;
+  }
+
+  const list = steps.map((s, i) => {
+    const effort = s.effort === "muy_pequeno" ? "5min" :
+      s.effort === "pequeno" ? "20min" : "1hr";
+    return `${i + 1}. ${s.step_title} (${effort})`;
+  }).join("\n");
+
+  return `📋 *${exp?.title || "Tu objetivo"}*
+
+Tus pasos pendientes:
+${list}
+
+Responde con el número del paso que quieres hacer.`;
+}
+
+/**
+ * Get message for switching to next objective
+ */
+async function getNextObjectiveMessage(currentExpId: string): Promise<string> {
+  // Get other active objectives
+  const { data: objectives } = await getSupabase()
+    .from("experiments")
+    .select("id, title")
+    .is("deleted_at", null)
+    .in("status", ["queued", "building", "testing", "adjusting"])
+    .neq("id", currentExpId)
+    .order("created_at", { ascending: false })
+    .limit(3);
+
+  if (!objectives || objectives.length === 0) {
+    return "📌 Este es tu único objetivo activo. ¡Enfócate en él!";
+  }
+
+  const list = objectives.map((o, i) => `${i + 1}. ${o.title}`).join("\n");
+
+  return `🔄 *Otros objetivos activos:*
+
+${list}
+
+Responde con el número para ver sus pasos.`;
 }
 
 /**
