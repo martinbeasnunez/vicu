@@ -1804,21 +1804,21 @@ export default function ExperimentPage() {
 
       {/* Surface Type Modal - HIDDEN from UI (functionality kept in backend) */}
 
-      <main className="max-w-5xl mx-auto px-4 py-8 md:py-10">
+      <main className="max-w-5xl mx-auto px-3 sm:px-4 py-4 sm:py-6 md:py-10">
         {/* Header with navigation - Vicu now uses /hoy as main home */}
-        <div className="flex items-center justify-between mb-6">
-          <Link href="/hoy" className="text-sm text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="flex items-center justify-between mb-4 sm:mb-6">
+          <Link href="/hoy" className="text-xs sm:text-sm text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1">
+            <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            Volver a Hoy
+            <span className="hidden xs:inline">Volver a</span> Hoy
           </Link>
           <button
             onClick={() => setIsDeleteModalOpen(true)}
-            className="text-sm text-slate-500 hover:text-red-400 transition-colors flex items-center gap-1"
+            className="text-xs sm:text-sm text-slate-500 hover:text-red-400 transition-colors flex items-center gap-1"
             title="Eliminar objetivo"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
             <span className="hidden sm:inline">Eliminar</span>
@@ -1826,26 +1826,26 @@ export default function ExperimentPage() {
         </div>
 
         {/* Grid layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
           {/* Left Column (2/3) */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-4 sm:space-y-6">
             {/* Header Card - Surface type (Ritual/Landing/Mensajes) hidden from UI */}
-            <div className="card-premium px-5 py-4">
-              <h1 className="text-2xl md:text-3xl font-semibold text-slate-50 tracking-tight mb-3">{experiment.title}</h1>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${STATUS_BADGE_COLORS[experiment.status || "testing"]}`}>
+            <div className="card-premium px-3 sm:px-5 py-3 sm:py-4">
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold text-slate-50 tracking-tight mb-2 sm:mb-3">{experiment.title}</h1>
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <span className={`px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium border ${STATUS_BADGE_COLORS[experiment.status || "testing"]}`}>
                   {STATUS_LABELS[experiment.status || "testing"]}
                 </span>
                 {deadlineInfo && (
-                  <button onClick={openDeadlineModal} className="px-2.5 py-1 rounded-full text-xs font-medium bg-white/5 text-slate-400 border border-white/10 hover:border-indigo-500/50 transition-colors flex items-center gap-1">
+                  <button onClick={openDeadlineModal} className="px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium bg-white/5 text-slate-400 border border-white/10 hover:border-indigo-500/50 transition-colors flex items-center gap-1">
                     {deadlineInfo.textShort}
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-2.5 h-2.5 sm:w-3 sm:h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                     </svg>
                   </button>
                 )}
                 {!deadlineInfo && (
-                  <button onClick={openDeadlineModal} className="px-2.5 py-1 rounded-full text-xs font-medium bg-white/5 text-slate-400 border border-white/10 hover:border-indigo-500/50 transition-colors">
+                  <button onClick={openDeadlineModal} className="px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium bg-white/5 text-slate-400 border border-white/10 hover:border-indigo-500/50 transition-colors">
                     + Deadline
                   </button>
                 )}
@@ -1853,21 +1853,21 @@ export default function ExperimentPage() {
             </div>
 
             {/* Objetivo del proyecto - Collapsible by default, now includes Brief */}
-            <div className="card-premium px-5 py-4">
+            <div className="card-premium px-3 sm:px-5 py-3 sm:py-4">
               <div className="flex items-center justify-between">
                 <button
                   onClick={() => !isEditingObjective && setIsObjectiveExpanded(!isObjectiveExpanded)}
-                  className="flex items-center gap-2 text-left flex-1 min-w-0"
+                  className="flex items-center gap-1.5 sm:gap-2 text-left flex-1 min-w-0"
                 >
                   <svg
-                    className={`w-4 h-4 text-slate-500 transition-transform duration-200 flex-shrink-0 ${isObjectiveExpanded ? "rotate-90" : ""}`}
+                    className={`w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500 transition-transform duration-200 flex-shrink-0 ${isObjectiveExpanded ? "rotate-90" : ""}`}
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
-                  <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider">Objetivo</h3>
+                  <h3 className="text-xs sm:text-sm font-medium text-slate-400 uppercase tracking-wider">Objetivo</h3>
                 </button>
                 {!isEditingObjective && (
                   <button
@@ -1876,10 +1876,10 @@ export default function ExperimentPage() {
                       setIsEditingObjective(true);
                       setIsObjectiveExpanded(true);
                     }}
-                    className="text-slate-500 hover:text-indigo-400 transition-colors flex-shrink-0"
+                    className="text-slate-500 hover:text-indigo-400 transition-colors flex-shrink-0 p-1"
                     title="Editar objetivo"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                     </svg>
                   </button>
@@ -1888,7 +1888,7 @@ export default function ExperimentPage() {
 
               {/* Collapsed preview - show first ~80 chars */}
               {!isObjectiveExpanded && !isEditingObjective && experiment.description && (
-                <p className="text-slate-400 text-sm mt-2 line-clamp-1">
+                <p className="text-slate-400 text-xs sm:text-sm mt-1.5 sm:mt-2 line-clamp-1">
                   {experiment.description.length > 80
                     ? experiment.description.slice(0, 80) + "..."
                     : experiment.description}
@@ -2001,7 +2001,7 @@ export default function ExperimentPage() {
 
             {/* Progress Card - Moved here, right after Objetivo */}
             {totalSteps > 0 && (
-              <div className="card-premium px-5 py-4">
+              <div className="card-premium px-3 sm:px-5 py-3 sm:py-4">
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-sm font-medium text-slate-400 uppercase tracking-wider">Progreso del plan</p>
                   <p className="text-lg font-semibold text-slate-50">{completedSteps} / {totalSteps}</p>
@@ -2022,7 +2022,7 @@ export default function ExperimentPage() {
 
             {/* Fases del proyecto - Shows macro phases */}
             {experiment.phases && experiment.phases.length > 0 && (
-              <div className="card-premium px-5 py-4">
+              <div className="card-premium px-3 sm:px-5 py-3 sm:py-4">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider">Fases del proyecto</h3>
                   <span className="text-xs text-slate-500">
@@ -2104,7 +2104,7 @@ export default function ExperimentPage() {
               // Achieved/Discarded state: show summary only
               if (currentStage === "achieved" || currentStage === "discarded") {
                 return (
-                  <div className="card-premium px-5 py-5 border-slate-500/20">
+                  <div className="card-premium px-3 sm:px-5 py-4 sm:py-5 border-slate-500/20">
                     <div className="flex items-center gap-3 mb-4">
                       <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-500 to-slate-600 flex items-center justify-center shadow-lg shadow-slate-500/25">
                         <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2132,7 +2132,7 @@ export default function ExperimentPage() {
               // Paused state: show paused message
               if (currentStage === "paused") {
                 return (
-                  <div className="card-premium px-5 py-5 border-slate-500/20">
+                  <div className="card-premium px-3 sm:px-5 py-4 sm:py-5 border-slate-500/20">
                     <div className="flex items-center gap-3 mb-4">
                       <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-500 to-slate-600 flex items-center justify-center shadow-lg shadow-slate-500/25">
                         <span className="text-white text-lg">⏸️</span>
@@ -2152,7 +2152,7 @@ export default function ExperimentPage() {
               // Plan complete + transition available: show transition card
               if (stageTransition) {
                 return (
-                  <div className="card-premium px-5 py-5 border-indigo-500/20">
+                  <div className="card-premium px-3 sm:px-5 py-4 sm:py-5 border-indigo-500/20">
                     <div className="flex items-center gap-3 mb-4">
                       <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
                         <span className="text-white text-lg font-bold">v</span>
@@ -2258,7 +2258,7 @@ export default function ExperimentPage() {
               // Plan in progress: show minimal progress indicator
               if (completedSteps >= 2 && totalSteps > 0) {
                 return (
-                  <div className="card-premium px-4 py-3 border-white/5">
+                  <div className="card-premium px-3 sm:px-4 py-2.5 sm:py-3 border-white/5">
                     <div className="flex items-center gap-3">
                       <div className="w-5 h-5 rounded-full bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center flex-shrink-0">
                         <span className="text-white text-[10px] font-bold">v</span>
@@ -2407,7 +2407,7 @@ export default function ExperimentPage() {
                     return (
                       <div
                         key={checkin.id}
-                        className={`card-premium px-4 py-3 cursor-pointer hover:border-white/20 transition-all group/card ${isPending ? "border-indigo-500/20" : ""}`}
+                        className={`card-premium px-3 sm:px-4 py-2.5 sm:py-3 cursor-pointer hover:border-white/20 transition-all group/card ${isPending ? "border-indigo-500/20" : ""}`}
                         onClick={() => openStepDetail(checkin)}
                       >
                         <div className="flex items-start gap-3">
@@ -2525,7 +2525,7 @@ export default function ExperimentPage() {
             {/* HOY CON ESTE PROYECTO - Bloque principal con copy dinámico según estado */}
             {/* Hide this block when objective is finished (achieved/discarded) */}
             {experiment.status !== "achieved" && experiment.status !== "discarded" && (
-            <div className="card-accent px-5 py-5 border-indigo-500/30">
+            <div className="card-accent px-3 sm:px-5 py-4 sm:py-5 border-indigo-500/30">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
                   <span className="text-white text-lg font-bold">v</span>
@@ -2689,13 +2689,13 @@ export default function ExperimentPage() {
 
             {/* Mobile-only Metrics - HIDDEN for now (not functional) */}
             {/*
-            <div className="lg:hidden card-premium px-5 py-4">
+            <div className="lg:hidden card-premium px-3 sm:px-5 py-3 sm:py-4">
               ... metrics content hidden ...
             </div>
             */}
 
             {/* Mobile-only Progress Tracking */}
-            <div className="lg:hidden card-premium px-5 py-4">
+            <div className="lg:hidden card-premium px-3 sm:px-5 py-3 sm:py-4">
               <h3 className="text-sm font-medium text-slate-400 mb-3">Seguimiento</h3>
               <div className="flex items-center justify-between mb-4">
                 <div className="grid grid-cols-2 gap-4 flex-1">
@@ -2734,7 +2734,7 @@ export default function ExperimentPage() {
 
             {/* Self Result Selector - shows after completing 50% of actions */}
             {doneActions >= totalActions * 0.5 && totalActions > 0 && (
-              <div className="card-premium px-5 py-4">
+              <div className="card-premium px-3 sm:px-5 py-3 sm:py-4">
                 <p className="text-sm font-medium text-slate-400 mb-3">¿Cómo sientes que fue el resultado?</p>
                 <div className="flex flex-wrap gap-2">
                   {(["alto", "medio", "bajo"] as const).map((result) => (
@@ -2761,7 +2761,7 @@ export default function ExperimentPage() {
 
             {/* Goal Status - Only show when goal is reached (yellow "Aún no llegas a la meta" message removed) */}
             {hasGoal && goalReached && (
-              <div className="card-premium px-5 py-4 border-emerald-500/30">
+              <div className="card-premium px-3 sm:px-5 py-3 sm:py-4 border-emerald-500/30">
                 <p className="font-medium text-emerald-400">
                   Meta alcanzada. Considera escalar este experimento.
                 </p>
@@ -2774,14 +2774,14 @@ export default function ExperimentPage() {
           <div className="hidden lg:block space-y-6">
             {/* Metrics Card - HIDDEN for now (not functional) */}
             {/*
-            <div className="card-premium px-5 py-4">
+            <div className="card-premium px-3 sm:px-5 py-3 sm:py-4">
               <h3 className="text-sm font-medium text-slate-400 mb-4 uppercase tracking-wider">Métricas</h3>
               ... content hidden ...
             </div>
             */}
 
             {/* Status Selector */}
-            <div className="card-premium px-5 py-4">
+            <div className="card-premium px-3 sm:px-5 py-3 sm:py-4">
               <h3 className="text-sm font-medium text-slate-400 mb-3 uppercase tracking-wider">Estado</h3>
               <div className="flex flex-wrap gap-2">
                 {(Object.keys(STATUS_LABELS) as ExperimentStatus[]).map((status) => (
@@ -2800,7 +2800,7 @@ export default function ExperimentPage() {
             </div>
 
             {/* Progress Tracking Card */}
-            <div className="card-premium px-5 py-4">
+            <div className="card-premium px-3 sm:px-5 py-3 sm:py-4">
               <h3 className="text-sm font-medium text-slate-400 mb-4 uppercase tracking-wider">Seguimiento</h3>
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5 text-center">

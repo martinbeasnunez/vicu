@@ -774,22 +774,22 @@ export default function HoyPage() {
         </div>
       )}
 
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 pt-6 pb-8 flex flex-col gap-6 mt-6 sm:mt-8">
+      <main className="max-w-3xl mx-auto px-3 xs:px-4 sm:px-6 pt-4 sm:pt-6 pb-6 sm:pb-8 flex flex-col gap-4 sm:gap-6 mt-4 sm:mt-8">
         {/* Minimal Header */}
         <header className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Image src="/vicu-logo.png" alt="Vicu" width={28} height={28} className="h-7 w-7" priority />
-            <span className="text-lg font-semibold text-slate-200">VICU</span>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Image src="/vicu-logo.png" alt="Vicu" width={28} height={28} className="h-6 w-6 sm:h-7 sm:w-7" priority />
+            <span className="text-base sm:text-lg font-semibold text-slate-200">VICU</span>
           </div>
 
           {/* Right side: WhatsApp toggle + new button */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             {/* WhatsApp notification toggle */}
             {whatsappEnabled !== null && (
               <button
                 onClick={handleToggleWhatsapp}
                 disabled={whatsappLoading}
-                className={`p-2 rounded-lg transition-all disabled:opacity-50 ${
+                className={`p-1.5 sm:p-2 rounded-lg transition-all disabled:opacity-50 ${
                   whatsappEnabled
                     ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
                     : "bg-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-700"
@@ -808,54 +808,54 @@ export default function HoyPage() {
 
             <Link
               href="/vicu"
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-500 text-white text-sm font-medium hover:bg-indigo-400 transition-all"
+              className="inline-flex items-center gap-1 sm:gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-indigo-500 text-white text-sm font-medium hover:bg-indigo-400 transition-all"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              <span>Nuevo</span>
+              <span className="hidden xs:inline">Nuevo</span>
             </Link>
           </div>
         </header>
 
-        {/* Stats Bar - Inline, minimal */}
+        {/* Stats Bar - Responsive: stacked on mobile, inline on desktop */}
         {userStats && !statsLoading && (
-          <div className="relative flex items-center gap-6 text-sm">
+          <div className="relative flex flex-wrap items-center gap-3 sm:gap-6 text-sm">
             {/* Level & XP */}
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">
+              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-[10px] sm:text-xs font-bold">
                 {userStats.level}
               </div>
               <div className="flex flex-col">
-                <span className="text-slate-400 text-xs leading-tight">{getLevelName(userStats.level)}</span>
-                <span className="text-slate-200 font-medium leading-tight">{userStats.xp} pts</span>
+                <span className="text-slate-400 text-[10px] sm:text-xs leading-tight">{getLevelName(userStats.level)}</span>
+                <span className="text-slate-200 text-xs sm:text-sm font-medium leading-tight">{userStats.xp} pts</span>
               </div>
             </div>
 
-            {/* Divider */}
-            <div className="w-px h-6 bg-slate-700" />
+            {/* Divider - hidden on very small screens */}
+            <div className="hidden xs:block w-px h-5 sm:h-6 bg-slate-700" />
 
             {/* Streak */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-lg">🔥</span>
-              <span className="text-orange-400 font-semibold">{userStats.streak_days}</span>
-              <span className="text-slate-500 text-xs">días</span>
+            <div className="flex items-center gap-1">
+              <span className="text-base sm:text-lg">🔥</span>
+              <span className="text-orange-400 text-sm sm:text-base font-semibold">{userStats.streak_days}</span>
+              <span className="text-slate-500 text-[10px] sm:text-xs">días</span>
             </div>
 
-            {/* Divider */}
-            <div className="w-px h-6 bg-slate-700" />
+            {/* Divider - hidden on very small screens */}
+            <div className="hidden xs:block w-px h-5 sm:h-6 bg-slate-700" />
 
             {/* Daily progress */}
-            <div className="flex items-center gap-2">
-              <span className="text-slate-400 text-xs">Hoy</span>
-              <div className="flex items-center gap-1.5">
-                <div className="w-12 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <span className="text-slate-400 text-[10px] sm:text-xs">Hoy</span>
+              <div className="flex items-center gap-1 sm:gap-1.5">
+                <div className="w-10 sm:w-12 h-1 sm:h-1.5 bg-slate-700 rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all ${userStats.daily_checkins >= userStats.daily_goal ? "bg-emerald-500" : "bg-indigo-500"}`}
                     style={{ width: `${Math.min(100, (userStats.daily_checkins / userStats.daily_goal) * 100)}%` }}
                   />
                 </div>
-                <span className={`text-xs font-medium ${userStats.daily_checkins >= userStats.daily_goal ? "text-emerald-400" : "text-slate-300"}`}>
+                <span className={`text-[10px] sm:text-xs font-medium ${userStats.daily_checkins >= userStats.daily_goal ? "text-emerald-400" : "text-slate-300"}`}>
                   {userStats.daily_checkins}/{userStats.daily_goal}
                 </span>
               </div>
@@ -864,17 +864,17 @@ export default function HoyPage() {
             {/* Help button */}
             <button
               onClick={() => setShowStatsHelp(!showStatsHelp)}
-              className="p-1 text-slate-500 hover:text-slate-300 transition-colors"
+              className="p-1 text-slate-500 hover:text-slate-300 transition-colors ml-auto sm:ml-0"
               title="¿Qué significa esto?"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </button>
 
             {/* Stats explanation dropdown */}
             {showStatsHelp && (
-              <div className="absolute top-full left-0 mt-2 w-72 p-4 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-50">
+              <div className="absolute top-full left-0 right-0 sm:right-auto mt-2 sm:w-72 p-3 sm:p-4 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-50">
                 <div className="flex justify-between items-start mb-3">
                   <h4 className="text-sm font-semibold text-slate-200">¿Cómo funciona?</h4>
                   <button onClick={() => setShowStatsHelp(false)} className="text-slate-500 hover:text-slate-300">
@@ -916,10 +916,10 @@ export default function HoyPage() {
 
         {/* Status Filter Chips */}
         {experiments.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5 sm:gap-2 -mx-1 px-1 overflow-x-auto pb-1 scrollbar-hide">
             <button
               onClick={() => setStatusFilter("all")}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+              className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${
                 statusFilter === "all"
                   ? FILTER_CHIP_COLORS.all.active
                   : FILTER_CHIP_COLORS.all.inactive
@@ -934,7 +934,7 @@ export default function HoyPage() {
                 <button
                   key={status}
                   onClick={() => setStatusFilter(status)}
-                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                  className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${
                     statusFilter === status
                       ? FILTER_CHIP_COLORS[status].active
                       : FILTER_CHIP_COLORS[status].inactive
@@ -949,32 +949,32 @@ export default function HoyPage() {
 
         {/* Objectives list */}
         <section>
-          <h2 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-4">
+          <h2 className="text-xs sm:text-sm font-medium text-slate-400 uppercase tracking-wider mb-3 sm:mb-4">
             Tus objetivos
           </h2>
 
           {experiments.length === 0 ? (
-            <div className="card-premium px-5 py-8 text-center">
+            <div className="card-premium px-4 sm:px-5 py-6 sm:py-8 text-center">
               {hasAnyExperiments ? (
                 <>
-                  <p className="text-slate-400 mb-4">
+                  <p className="text-slate-400 text-sm sm:text-base mb-4">
                     No tienes objetivos activos para hoy. Activa alguno o crea uno nuevo.
                   </p>
                   <Link
                     href="/vicu"
-                    className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full bg-indigo-500 text-white font-medium hover:bg-indigo-400 transition-all"
+                    className="inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 rounded-full bg-indigo-500 text-white text-sm sm:text-base font-medium hover:bg-indigo-400 transition-all"
                   >
                     Crear nuevo objetivo
                   </Link>
                 </>
               ) : (
                 <>
-                  <p className="text-slate-400 mb-4">
+                  <p className="text-slate-400 text-sm sm:text-base mb-4">
                     Aún no tienes objetivos. Crea el primero con Vicu.
                   </p>
                   <Link
                     href="/vicu"
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-indigo-500 text-white font-medium hover:bg-indigo-400 transition-all"
+                    className="inline-flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 rounded-full bg-indigo-500 text-white text-sm sm:text-base font-medium hover:bg-indigo-400 transition-all"
                   >
                     Crear mi primer objetivo
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -985,7 +985,7 @@ export default function HoyPage() {
               )}
             </div>
           ) : (
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2.5 sm:gap-3">
               {filteredExperiments.slice(0, visibleCount).map((exp) => {
                 const deadlineInfo = exp.deadline ? formatDeadline(exp.deadline, null) : null;
                 const deadlineProgress = calculateDeadlineProgress(exp.deadline, exp.created_at);
@@ -995,39 +995,39 @@ export default function HoyPage() {
                   <div
                     key={exp.id}
                     onClick={() => router.push(`/experiments/${exp.id}`)}
-                    className={`group relative rounded-2xl border px-4 py-4 md:px-5 md:py-4 flex flex-col gap-2.5 shadow-md transition cursor-pointer ${
+                    className={`group relative rounded-xl sm:rounded-2xl border px-3 py-3 sm:px-4 sm:py-4 md:px-5 flex flex-col gap-2 sm:gap-2.5 shadow-md transition cursor-pointer ${
                       checkedToday
                         ? "border-emerald-500/30 bg-emerald-950/20 hover:border-emerald-500/50"
                         : "border-slate-800 bg-slate-950/60 hover:border-slate-700 hover:bg-slate-900/60"
                     }`}
                   >
-                    {/* Delete button - appears on hover */}
+                    {/* Delete button - appears on hover (always visible on mobile via tap) */}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         setDeleteConfirm({ isOpen: true, experiment: exp });
                       }}
-                      className="absolute top-3 right-3 p-1.5 rounded-full opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                      className="absolute top-2.5 sm:top-3 right-2.5 sm:right-3 p-1 sm:p-1.5 rounded-full sm:opacity-0 sm:group-hover:opacity-100 text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
                       title="Eliminar objetivo"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                       </svg>
                     </button>
 
                     {/* Title + Arrow */}
-                    <div className="flex items-start justify-between gap-2 pr-8">
-                      <h3 className="text-base font-semibold text-slate-50 group-hover:text-indigo-300 transition-colors line-clamp-1">
+                    <div className="flex items-start justify-between gap-2 pr-6 sm:pr-8">
+                      <h3 className="text-sm sm:text-base font-semibold text-slate-50 group-hover:text-indigo-300 transition-colors line-clamp-2 sm:line-clamp-1">
                         {exp.title}
                       </h3>
-                      <svg className="w-5 h-5 text-slate-600 group-hover:text-indigo-400 transition-colors flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600 group-hover:text-indigo-400 transition-colors flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
                     </div>
 
                     {/* Meta badges - Surface type (Ritual/Landing/Mensajes) hidden from UI */}
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className={`px-2 py-0.5 rounded-full ${STATUS_BADGE_COLORS[exp.status]}`}>
+                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs">
+                      <span className={`px-1.5 sm:px-2 py-0.5 rounded-full ${STATUS_BADGE_COLORS[exp.status]}`}>
                         {STATUS_LABELS[exp.status]}
                       </span>
                       {deadlineInfo && (
@@ -1038,7 +1038,7 @@ export default function HoyPage() {
                     {/* Deadline progress bar */}
                     {deadlineProgress !== null && (
                       <div className="w-full">
-                        <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
+                        <div className="w-full h-0.5 sm:h-1 bg-white/5 rounded-full overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all ${
                               deadlineProgress > 80 ? "bg-amber-500" : "bg-indigo-500"
@@ -1050,19 +1050,19 @@ export default function HoyPage() {
                     )}
 
                     {/* Check-in info + streak */}
-                    <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center justify-between text-[10px] sm:text-sm">
                       <span className="text-slate-500">
                         Último avance: <span className="text-slate-400">{formatLastCheckin(exp.last_checkin_at)}</span>
                       </span>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 sm:gap-3">
                         {exp.streak_days > 0 && (
-                          <span className="text-orange-400 flex items-center gap-1 text-xs">
+                          <span className="text-orange-400 flex items-center gap-1 text-[10px] sm:text-xs">
                             <span>{exp.streak_days} días</span>
                           </span>
                         )}
                         {checkedToday && (
-                          <span className="flex items-center gap-1 text-emerald-400 text-xs">
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <span className="flex items-center gap-0.5 sm:gap-1 text-emerald-400 text-[10px] sm:text-xs">
+                            <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                             </svg>
                             <span>Hoy</span>
@@ -1078,7 +1078,7 @@ export default function HoyPage() {
               {filteredExperiments.length > visibleCount && (
                 <button
                   onClick={() => setVisibleCount((prev) => prev + EXPERIMENTS_PER_PAGE)}
-                  className="w-full py-3 rounded-xl border border-slate-700 text-slate-400 text-sm font-medium hover:border-slate-500 hover:text-slate-200 hover:bg-white/5 transition-all"
+                  className="w-full py-2.5 sm:py-3 rounded-xl border border-slate-700 text-slate-400 text-xs sm:text-sm font-medium hover:border-slate-500 hover:text-slate-200 hover:bg-white/5 transition-all"
                 >
                   Cargar más ({filteredExperiments.length - visibleCount} restantes)
                 </button>
@@ -1091,7 +1091,7 @@ export default function HoyPage() {
 
       {/* Mover Proyecto Modal */}
       {moverModal.isOpen && moverModal.experiment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
           {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
@@ -1099,19 +1099,19 @@ export default function HoyPage() {
           />
 
           {/* Modal content */}
-          <div className="relative w-full max-w-lg bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden">
+          <div className="relative w-full sm:max-w-lg bg-slate-900 border-t sm:border border-slate-700 rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] sm:max-h-[85vh] overflow-y-auto">
             {/* Header */}
-            <div className="px-6 py-4 border-b border-slate-800">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-800 sticky top-0 bg-slate-900 z-10">
               <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-50">Mover proyecto</h2>
-                  <p className="text-sm text-slate-400 mt-0.5 truncate max-w-[280px]">
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-base sm:text-lg font-semibold text-slate-50">Mover proyecto</h2>
+                  <p className="text-xs sm:text-sm text-slate-400 mt-0.5 truncate">
                     {moverModal.experiment.title}
                   </p>
                 </div>
                 <button
                   onClick={closeMoverModal}
-                  className="p-2 text-slate-400 hover:text-slate-200 transition-colors"
+                  className="p-1.5 sm:p-2 text-slate-400 hover:text-slate-200 transition-colors flex-shrink-0 ml-2"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1121,28 +1121,28 @@ export default function HoyPage() {
             </div>
 
             {/* Body */}
-            <div className="px-6 py-5">
+            <div className="px-4 sm:px-6 py-4 sm:py-5">
               {/* Step 1: Select state */}
               {moverModal.step === "select_state" && (
-                <div className="space-y-4">
-                  <p className="text-sm text-slate-300">
+                <div className="space-y-3 sm:space-y-4">
+                  <p className="text-xs sm:text-sm text-slate-300">
                     ¿Cómo vas con este proyecto hoy?
                   </p>
-                  <div className="space-y-3">
+                  <div className="space-y-2 sm:space-y-3">
                     {STATE_OPTIONS.map((option) => (
                       <button
                         key={option.value}
                         onClick={() => handleStateSelect(option.value)}
-                        className="w-full flex items-center gap-4 p-4 rounded-xl border border-slate-700 bg-slate-800/50 hover:border-indigo-500/50 hover:bg-slate-800 transition-all text-left group"
+                        className="w-full flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl border border-slate-700 bg-slate-800/50 hover:border-indigo-500/50 hover:bg-slate-800 transition-all text-left group"
                       >
-                        <span className="text-2xl">{option.icon}</span>
-                        <div className="flex-1">
-                          <p className="font-medium text-slate-100 group-hover:text-indigo-300 transition-colors">
+                        <span className="text-xl sm:text-2xl">{option.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm sm:text-base font-medium text-slate-100 group-hover:text-indigo-300 transition-colors">
                             {option.label}
                           </p>
-                          <p className="text-sm text-slate-500">{option.description}</p>
+                          <p className="text-xs sm:text-sm text-slate-500 truncate">{option.description}</p>
                         </div>
-                        <svg className="w-5 h-5 text-slate-600 group-hover:text-indigo-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600 group-hover:text-indigo-400 transition-colors flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>
                       </button>
@@ -1153,48 +1153,48 @@ export default function HoyPage() {
 
               {/* Loading state */}
               {moverModal.step === "loading" && (
-                <div className="py-8 flex flex-col items-center gap-4">
-                  <div className="w-10 h-10 border-2 border-slate-700 border-t-indigo-500 rounded-full animate-spin" />
-                  <p className="text-slate-400">Vicu está pensando el mejor paso para ti...</p>
+                <div className="py-6 sm:py-8 flex flex-col items-center gap-3 sm:gap-4">
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 border-2 border-slate-700 border-t-indigo-500 rounded-full animate-spin" />
+                  <p className="text-xs sm:text-sm text-slate-400 text-center">Vicu está pensando el mejor paso para ti...</p>
                 </div>
               )}
 
               {/* Step 2: Show suggested step */}
               {moverModal.step === "show_step" && moverModal.nextStep && (
-                <div className="space-y-5">
-                  <div className="flex items-start gap-3">
-                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center">
-                      <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="space-y-4 sm:space-y-5">
+                  <div className="flex items-start gap-2.5 sm:gap-3">
+                    <div className="flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-indigo-500/20 flex items-center justify-center">
+                      <svg className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
                     </div>
-                    <div className="flex-1">
-                      <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Tu siguiente paso</p>
-                      <h3 className="text-lg font-semibold text-slate-50">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] sm:text-xs text-slate-500 uppercase tracking-wider mb-0.5 sm:mb-1">Tu siguiente paso</p>
+                      <h3 className="text-base sm:text-lg font-semibold text-slate-50">
                         {moverModal.nextStep.next_step_title}
                       </h3>
                     </div>
                   </div>
 
-                  <p className="text-slate-300 leading-relaxed">
+                  <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
                     {moverModal.nextStep.next_step_description}
                   </p>
 
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-500">Esfuerzo estimado:</span>
-                    <span className={`text-sm font-medium ${EFFORT_LABELS[moverModal.nextStep.effort].color}`}>
+                    <span className="text-[10px] sm:text-xs text-slate-500">Esfuerzo estimado:</span>
+                    <span className={`text-xs sm:text-sm font-medium ${EFFORT_LABELS[moverModal.nextStep.effort].color}`}>
                       {EFFORT_LABELS[moverModal.nextStep.effort].text}
                     </span>
                   </div>
 
                   {/* Actions - Two primary buttons + one secondary */}
-                  <div className="space-y-3 pt-2">
+                  <div className="space-y-2.5 sm:space-y-3 pt-1 sm:pt-2">
                     {/* Primary buttons row */}
-                    <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                       <button
                         onClick={handleWillDoStep}
                         disabled={processingId !== null}
-                        className="flex-1 px-5 py-3 rounded-xl bg-indigo-500 text-white font-medium hover:bg-indigo-400 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                        className="flex-1 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl bg-indigo-500 text-white text-sm sm:text-base font-medium hover:bg-indigo-400 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                       >
                         {processingId ? (
                           <>
@@ -1203,7 +1203,7 @@ export default function HoyPage() {
                           </>
                         ) : (
                           <>
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                             </svg>
                             <span>Lo haré</span>
@@ -1213,7 +1213,7 @@ export default function HoyPage() {
                       <button
                         onClick={handleDidItStep}
                         disabled={processingId !== null}
-                        className="flex-1 px-5 py-3 rounded-xl bg-emerald-600 text-white font-medium hover:bg-emerald-500 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                        className="flex-1 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl bg-emerald-600 text-white text-sm sm:text-base font-medium hover:bg-emerald-500 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                       >
                         {processingId ? (
                           <>
@@ -1222,7 +1222,7 @@ export default function HoyPage() {
                           </>
                         ) : (
                           <>
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                             </svg>
                             <span>Ya lo hice</span>
@@ -1234,9 +1234,9 @@ export default function HoyPage() {
                     <button
                       onClick={handleRegenerateStep}
                       disabled={processingId !== null}
-                      className="w-full px-4 py-2 text-sm text-slate-400 hover:text-slate-200 transition-colors flex items-center justify-center gap-2"
+                      className="w-full px-4 py-1.5 sm:py-2 text-xs sm:text-sm text-slate-400 hover:text-slate-200 transition-colors flex items-center justify-center gap-2"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
                       <span>Otra idea</span>
@@ -1246,7 +1246,7 @@ export default function HoyPage() {
                   {/* Back to state selection */}
                   <button
                     onClick={() => setMoverModal((prev) => ({ ...prev, step: "select_state", nextStep: null }))}
-                    className="w-full text-center text-sm text-slate-500 hover:text-slate-300 transition-colors"
+                    className="w-full text-center text-xs sm:text-sm text-slate-500 hover:text-slate-300 transition-colors"
                   >
                     ← Cambiar mi estado
                   </button>
@@ -1259,7 +1259,7 @@ export default function HoyPage() {
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm.isOpen && deleteConfirm.experiment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
           {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
@@ -1267,35 +1267,35 @@ export default function HoyPage() {
           />
 
           {/* Modal content */}
-          <div className="relative w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden">
-            <div className="px-6 py-5">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
-                  <svg className="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="relative w-full sm:max-w-sm bg-slate-900 border-t sm:border border-slate-700 rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden">
+            <div className="px-4 sm:px-6 py-4 sm:py-5">
+              <div className="flex items-center gap-3 sm:gap-4 mb-3 sm:mb-4">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
                 </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-50">Eliminar objetivo</h3>
-                  <p className="text-sm text-slate-400">Esta acción se puede deshacer</p>
+                <div className="min-w-0">
+                  <h3 className="text-base sm:text-lg font-semibold text-slate-50">Eliminar objetivo</h3>
+                  <p className="text-xs sm:text-sm text-slate-400">Esta acción se puede deshacer</p>
                 </div>
               </div>
 
-              <p className="text-slate-300 mb-6">
+              <p className="text-xs sm:text-sm text-slate-300 mb-4 sm:mb-6">
                 ¿Estás seguro de que quieres eliminar <span className="font-medium text-slate-100">&ldquo;{deleteConfirm.experiment.title}&rdquo;</span>?
               </p>
 
-              <div className="flex gap-3">
+              <div className="flex gap-2 sm:gap-3">
                 <button
                   onClick={() => setDeleteConfirm({ isOpen: false, experiment: null })}
-                  className="flex-1 px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 font-medium hover:border-slate-500 hover:text-slate-100 transition-all"
+                  className="flex-1 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl border border-slate-700 text-slate-300 text-sm sm:text-base font-medium hover:border-slate-500 hover:text-slate-100 transition-all"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleDeleteExperiment}
                   disabled={processingId !== null}
-                  className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 text-white font-medium hover:bg-red-500 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="flex-1 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-red-600 text-white text-sm sm:text-base font-medium hover:bg-red-500 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {processingId ? (
                     <>
