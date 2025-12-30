@@ -143,6 +143,8 @@ export async function sendWhatsAppMessage(
   // WhatsApp Cloud API expects numbers WITHOUT the + prefix (e.g., "51965450086")
   let cleanPhone = to.replace(/[\s\-+]/g, "");
 
+  console.log("[Kapso] Sending to:", { original: to, cleaned: cleanPhone, phoneNumberId });
+
   const payload: KapsoSendMessageRequest = {
     messaging_product: "whatsapp",
     recipient_type: "individual",

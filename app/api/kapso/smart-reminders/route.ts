@@ -530,6 +530,9 @@ export async function POST(request: NextRequest) {
       message_id: sendResult.messageId,
       target_objective: result.targetExp,
       objectives_count: ctx.objectives.length,
+      debug: {
+        phone_sent_to: whatsappConfig.phone_number,
+      },
     });
   } catch (error) {
     console.error("[Smart Reminders] Error:", error);
