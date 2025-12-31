@@ -551,6 +551,8 @@ export default function ExperimentPage() {
   const [acceptedStatus, setAcceptedStatus] = useState<ExperimentStatus | null>(null);
   const [lastRecommendationStage, setLastRecommendationStage] = useState<ExperimentStage | null>(null);
   const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
+  const [newStepsGenerated, setNewStepsGenerated] = useState<number>(0); // Track when new steps are generated
+  const [transitionPhase, setTransitionPhase] = useState<"idle" | "updating" | "generating_steps" | "generating_recommendation">("idle");
 
   // Mover proyecto modal state (kept for compatibility)
   const [moverModal, setMoverModal] = useState<MoverModalState>({
@@ -1361,6 +1363,7 @@ export default function ExperimentPage() {
     const previousNextFocus = vicuRecommendation?.suggested_next_focus;
 
     setIsStatusUpdating(true);
+    setTransitionPhase("updating");
     try {
       const { error } = await supabase
         .from("experiments")
@@ -1381,9 +1384,10 @@ export default function ExperimentPage() {
 
       // Generate new steps for the new stage (except for finished states)
       if (newStatus !== "achieved" && newStatus !== "discarded") {
+        setTransitionPhase("generating_steps");
         const stepsDescription = previousNextFocus || `Pasos para la etapa ${STAGE_LABELS[newStatus]}`;
         try {
-          await fetch("/api/generate-initial-steps", {
+          const stepsRes = await fetch("/api/generate-initial-steps", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1395,13 +1399,21 @@ export default function ExperimentPage() {
               for_stage: newStatus,
             }),
           });
+          const stepsData = await stepsRes.json();
           // Refresh checkins to show new steps
           await fetchCheckins();
+          // Track that new steps were generated
+          if (stepsData.count) {
+            setNewStepsGenerated(stepsData.count);
+            // Clear the indicator after 5 seconds
+            setTimeout(() => setNewStepsGenerated(0), 5000);
+          }
         } catch (err) {
           console.error("Error generating stage steps:", err);
         }
 
         // Generate NEW recommendation for the new stage
+        setTransitionPhase("generating_recommendation");
         setIsLoadingRecommendation(true);
         try {
           const res = await fetch("/api/generate-recommendation", {
@@ -1445,6 +1457,7 @@ export default function ExperimentPage() {
       setToast("Error al actualizar estado");
     } finally {
       setIsStatusUpdating(false);
+      setTransitionPhase("idle");
       setTimeout(() => setToast(null), 3000);
     }
   };
@@ -2309,6 +2322,23 @@ export default function ExperimentPage() {
                       }
                     </p>
 
+                    {/* Next stage info - what will happen */}
+                    {stageTransition.nextStage !== "achieved" && stageTransition.nextStage !== "discarded" && (
+                      <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5 mb-4">
+                        <p className="text-xs text-slate-500 uppercase tracking-wider mb-2 font-medium">Al aceptar</p>
+                        <ul className="space-y-1.5 text-sm text-slate-400">
+                          <li className="flex items-start gap-2">
+                            <span className="text-emerald-400 mt-0.5">✓</span>
+                            El estado cambiará a {STAGE_LABELS[stageTransition.nextStage]}
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <span className="text-emerald-400 mt-0.5">✓</span>
+                            Se generarán nuevos pasos para esta etapa
+                          </li>
+                        </ul>
+                      </div>
+                    )}
+
                     {/* AI recommendation details if available */}
                     {vicuRecommendation && (
                       <>
@@ -2339,15 +2369,19 @@ export default function ExperimentPage() {
                     {!hasAcceptedRecommendation && (
                       <button
                         onClick={() => handleAcceptStageTransition(stageTransition)}
-                        disabled={isStatusUpdating || isLoadingRecommendation}
+                        disabled={transitionPhase !== "idle"}
                         className={`w-full px-4 py-3 rounded-xl font-medium transition-all flex items-center justify-center gap-2 text-white active:scale-[0.98] ${
-                          isStatusUpdating || isLoadingRecommendation ? "opacity-70 cursor-wait" : stageTransition.buttonColor
+                          transitionPhase !== "idle" ? "opacity-70 cursor-wait" : stageTransition.buttonColor
                         }`}
                       >
-                        {isStatusUpdating || isLoadingRecommendation ? (
+                        {transitionPhase !== "idle" ? (
                           <>
                             <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            <span>{isLoadingRecommendation ? "Pensando..." : "Actualizando..."}</span>
+                            <span>
+                              {transitionPhase === "updating" && "Cambiando estado..."}
+                              {transitionPhase === "generating_steps" && "Generando nuevos pasos..."}
+                              {transitionPhase === "generating_recommendation" && "Preparando siguiente etapa..."}
+                            </span>
                           </>
                         ) : (
                           <>
@@ -2465,6 +2499,19 @@ export default function ExperimentPage() {
             {/* Pasos del objetivo - Unified list of pending and completed steps */}
             {checkins.length > 0 && (
               <div className="mt-8">
+                {/* New steps indicator */}
+                {newStepsGenerated > 0 && (
+                  <div className="mb-4 p-3 rounded-xl bg-indigo-500/20 border border-indigo-500/30 animate-pulse">
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      <span className="text-sm font-medium text-indigo-400">
+                        ¡{newStepsGenerated} nuevos pasos generados para esta etapa!
+                      </span>
+                    </div>
+                  </div>
+                )}
                 <div className="mb-4 flex items-start justify-between">
                   <div>
                     <h2 className="text-lg font-semibold text-slate-50">Pasos del objetivo</h2>
