@@ -2,11 +2,13 @@
  * POST /api/kapso/smart-reminders
  *
  * Sistema de recordatorios WhatsApp para Vicu.
- * 3 resúmenes diarios con contexto de todos los objetivos.
+ * 5 resúmenes diarios con contexto de todos los objetivos.
  *
  * HORARIOS (Bogotá/Lima UTC-5):
  * - 08:00 → MORNING - Plan del día
- * - 15:00 → AFTERNOON - Check-in de mitad de día
+ * - 11:00 → MIDMORNING - Check-in de media mañana
+ * - 14:00 → AFTERNOON - Check-in de tarde
+ * - 17:00 → EVENING - Último empujón del día
  * - 21:00 → NIGHT - Resumen del día
  *
  * Usa ?slot=MORNING para forzar un slot.
@@ -20,7 +22,7 @@ import { sendWhatsAppMessage, isKapsoConfigured, WhatsAppConfig } from "@/lib/ka
 // Types
 // =============================================================================
 
-type SlotType = "MORNING" | "AFTERNOON" | "NIGHT";
+type SlotType = "MORNING" | "MIDMORNING" | "AFTERNOON" | "EVENING" | "NIGHT";
 
 interface ObjectiveWithContext {
   id: string;
@@ -56,7 +58,9 @@ const DEFAULT_USER_ID = "demo-user";
 
 const SLOT_SCHEDULE: Record<SlotType, [number, number]> = {
   MORNING: [8, 0],
-  AFTERNOON: [15, 0],
+  MIDMORNING: [11, 0],
+  AFTERNOON: [14, 0],
+  EVENING: [17, 0],
   NIGHT: [21, 0],
 };
 
@@ -278,6 +282,53 @@ ${list}${insight}${suggestion}
   };
 }
 
+function buildMidmorningMessage(ctx: DayContext): { message: string; targetExp: string | null } {
+  if (ctx.objectives.length === 0) {
+    return {
+      message: `☕ *Media mañana*
+
+No tienes objetivos activos en Vicu.
+
+¿Qué te gustaría lograr? Cuéntame en la app.`,
+      targetExp: null,
+    };
+  }
+
+  const withProgress = ctx.objectives.filter(o => o.done_today > 0);
+  const withoutProgress = ctx.objectives.filter(o => o.done_today === 0);
+
+  let message = `☕ *Media mañana*\n`;
+
+  if (withProgress.length > 0) {
+    message += `\n¡Ya arrancaste! Llevas ${ctx.total_done_today} paso${ctx.total_done_today > 1 ? "s" : ""} hoy.`;
+
+    if (withoutProgress.length > 0) {
+      const next = withoutProgress[0];
+      message += `\n\n¿Seguimos con *${next.title}*?`;
+      if (next.pending_steps[0]) {
+        message += `\n→ ${next.pending_steps[0].step_title}`;
+      }
+    }
+  } else {
+    message += `\nLa mañana avanza y aún no empezaste.`;
+
+    const suggested = ctx.objectives[0];
+    if (suggested) {
+      message += `\n\n¿Arrancamos con *${suggested.title}*?`;
+      if (suggested.pending_steps[0]) {
+        message += `\n→ ${suggested.pending_steps[0].step_title}`;
+      }
+    }
+
+    message += `\n\n5 minutos bastan para empezar ⚡`;
+  }
+
+  return {
+    message,
+    targetExp: withoutProgress[0]?.id || withProgress[0]?.id || null,
+  };
+}
+
 function buildAfternoonMessage(ctx: DayContext): { message: string; targetExp: string | null } {
   if (ctx.objectives.length === 0) {
     return {
@@ -293,41 +344,97 @@ No tienes objetivos activos.
   const withProgress = ctx.objectives.filter(o => o.done_today > 0);
   const withoutProgress = ctx.objectives.filter(o => o.done_today === 0);
 
-  let message = `🌤️ *Check-in de la tarde*\n`;
+  let message = `🌤️ *Tarde*\n`;
 
   if (withProgress.length > 0) {
-    // Some progress made
     const progressList = withProgress
-      .map(o => `✅ ${o.title} (${o.done_today} paso${o.done_today > 1 ? "s" : ""})`)
+      .map(o => `✅ ${o.title}`)
       .join("\n");
 
-    message += `\n¡Buen trabajo! Ya avanzaste en:\n${progressList}`;
+    message += `\nVas bien:\n${progressList}`;
 
     if (withoutProgress.length > 0) {
       const remaining = withoutProgress.slice(0, 3);
-      message += `\n\nAún puedes avanzar en:\n${remaining.map(o => `• ${o.title}`).join("\n")}`;
+      message += `\n\nPendientes:\n${remaining.map(o => `• ${o.title}`).join("\n")}`;
 
       if (withoutProgress.length > 3) {
         message += `\n...y ${withoutProgress.length - 3} más`;
       }
     } else {
-      message += `\n\n🎉 ¡Avanzaste en todos! Sigue así.`;
+      message += `\n\n🎉 ¡Día productivo! Ya avanzaste en todo.`;
     }
   } else {
-    // No progress yet
-    message += `\nAún no registras avances hoy.`;
+    message += `\nAún sin avances hoy.`;
 
     const mostUrgent = ctx.objectives[0];
     const step = mostUrgent?.pending_steps[0];
 
     if (mostUrgent) {
-      message += `\n\nAún hay tiempo. ¿Qué tal *${mostUrgent.title}*?`;
+      message += `\n\nTodavía hay tiempo. ¿*${mostUrgent.title}*?`;
       if (step) {
         message += `\n→ ${step.step_title}`;
       }
     }
 
-    message += `\n\nUn paso pequeño cuenta 💪`;
+    message += `\n\nUn paso pequeño > ninguno 💪`;
+  }
+
+  return {
+    message,
+    targetExp: withoutProgress[0]?.id || withProgress[0]?.id || null,
+  };
+}
+
+function buildEveningMessage(ctx: DayContext): { message: string; targetExp: string | null } {
+  if (ctx.objectives.length === 0) {
+    return {
+      message: `🌅 *Último empujón*
+
+No tienes objetivos activos.
+
+¿Hay algo que quieras lograr? Entra a Vicu.`,
+      targetExp: null,
+    };
+  }
+
+  const withProgress = ctx.objectives.filter(o => o.done_today > 0);
+  const withoutProgress = ctx.objectives.filter(o => o.done_today === 0);
+
+  let message = `🌅 *Último empujón*\n`;
+
+  if (withProgress.length > 0 && withoutProgress.length === 0) {
+    // All done!
+    message += `\n¡Increíble! Hoy avanzaste en todos tus objetivos.`;
+    message += `\n\nTotal: ${ctx.total_done_today} paso${ctx.total_done_today > 1 ? "s" : ""} 🔥`;
+    message += `\n\nPuedes descansar tranquilo.`;
+  } else if (withProgress.length > 0) {
+    // Some progress
+    message += `\nLlevas ${ctx.total_done_today} paso${ctx.total_done_today > 1 ? "s" : ""} hoy.`;
+
+    const urgent = withoutProgress.filter(o => o.days_without_progress >= 3);
+    if (urgent.length > 0) {
+      message += `\n\n⚠️ ${urgent.length} objetivo${urgent.length > 1 ? "s llevan" : " lleva"} días sin avance:`;
+      message += `\n${urgent.slice(0, 2).map(o => `• ${o.title}`).join("\n")}`;
+    } else {
+      const next = withoutProgress[0];
+      if (next) {
+        message += `\n\n¿Un paso más antes de cerrar el día?`;
+        message += `\n→ *${next.title}*`;
+      }
+    }
+  } else {
+    // No progress today
+    message += `\nEl día casi termina y no has avanzado.`;
+
+    const mostUrgent = ctx.objectives[0];
+    if (mostUrgent) {
+      message += `\n\nÚltima oportunidad: *${mostUrgent.title}*`;
+      if (mostUrgent.pending_steps[0]) {
+        message += `\n→ ${mostUrgent.pending_steps[0].step_title}`;
+      }
+    }
+
+    message += `\n\n¿10 minutos antes de descansar?`;
   }
 
   return {
@@ -478,8 +585,14 @@ export async function POST(request: NextRequest) {
       case "MORNING":
         result = buildMorningMessage(ctx);
         break;
+      case "MIDMORNING":
+        result = buildMidmorningMessage(ctx);
+        break;
       case "AFTERNOON":
         result = buildAfternoonMessage(ctx);
+        break;
+      case "EVENING":
+        result = buildEveningMessage(ctx);
         break;
       case "NIGHT":
         result = buildNightMessage(ctx);
