@@ -348,6 +348,48 @@ const ACTION_TO_STAGE: Record<string, ExperimentStage> = {
   descartar: "discarded",
 };
 
+// Valid forward transitions in the MVP cycle
+const VALID_TRANSITIONS: Record<ExperimentStage, ExperimentStage[]> = {
+  queued: ["building", "paused", "discarded"],
+  building: ["testing", "paused", "discarded"],
+  testing: ["adjusting", "achieved", "paused", "discarded"],
+  adjusting: ["achieved", "testing", "paused", "discarded"], // Can go back to testing or forward to achieved
+  achieved: [],
+  paused: ["building", "testing", "adjusting", "discarded"], // Resume to any active state
+  discarded: [],
+};
+
+// Default next stage in the MVP cycle (when plan is complete)
+const DEFAULT_NEXT_STAGE: Record<ExperimentStage, ExperimentStage | null> = {
+  queued: "building",
+  building: "testing",
+  testing: "adjusting",
+  adjusting: "achieved",
+  achieved: null,
+  paused: "building",
+  discarded: null,
+};
+
+const STAGE_EMOJIS: Record<ExperimentStage, string> = {
+  queued: "📋",
+  building: "🔨",
+  testing: "🧪",
+  adjusting: "🔄",
+  achieved: "🎉",
+  paused: "⏸️",
+  discarded: "🗑️",
+};
+
+const STAGE_COLORS: Record<ExperimentStage, string> = {
+  queued: "bg-slate-500 hover:bg-slate-400",
+  building: "bg-blue-500 hover:bg-blue-400",
+  testing: "bg-purple-500 hover:bg-purple-400",
+  adjusting: "bg-amber-500 hover:bg-amber-400",
+  achieved: "bg-green-500 hover:bg-green-400",
+  paused: "bg-zinc-500 hover:bg-zinc-400",
+  discarded: "bg-red-500 hover:bg-red-400",
+};
+
 function getRecommendationAction(
   currentStage: ExperimentStage,
   stageProgress: { isComplete: boolean },
@@ -363,83 +405,42 @@ function getRecommendationAction(
     return null;
   }
 
-  // If we have a recommendation action, use it to determine the next stage
+  // If we have a recommendation action, check if it's a valid transition
   if (recommendationAction && ACTION_TO_STAGE[recommendationAction]) {
     const nextStage = ACTION_TO_STAGE[recommendationAction];
 
     // Don't transition to the same stage
     if (nextStage === currentStage) {
-      return null;
+      // "seguir_construyendo" means keep working, use default progression
+      // Fall through to default logic below
     }
-
-    const stageEmojis: Record<ExperimentStage, string> = {
-      queued: "📋",
-      building: "🔨",
-      testing: "🧪",
-      adjusting: "🔄",
-      achieved: "🎉",
-      paused: "⏸️",
-      discarded: "🗑️",
-    };
-
-    const stageColors: Record<ExperimentStage, string> = {
-      queued: "bg-slate-500 hover:bg-slate-400",
-      building: "bg-blue-500 hover:bg-blue-400",
-      testing: "bg-purple-500 hover:bg-purple-400",
-      adjusting: "bg-amber-500 hover:bg-amber-400",
-      achieved: "bg-green-500 hover:bg-green-400",
-      paused: "bg-zinc-500 hover:bg-zinc-400",
-      discarded: "bg-red-500 hover:bg-red-400",
-    };
-
-    return {
-      nextStage,
-      label: `Aceptar: Cambiar a ${STAGE_LABELS[nextStage]}`,
-      emoji: stageEmojis[nextStage],
-      buttonColor: stageColors[nextStage],
-    };
+    // Check if this is a valid transition
+    else if (VALID_TRANSITIONS[currentStage]?.includes(nextStage)) {
+      return {
+        nextStage,
+        label: `Aceptar: Cambiar a ${STAGE_LABELS[nextStage]}`,
+        emoji: STAGE_EMOJIS[nextStage],
+        buttonColor: STAGE_COLORS[nextStage],
+      };
+    }
+    // Invalid transition (e.g., adjusting -> building), fall through to default
   }
 
-  // Default MVP cycle progression if no recommendation action
-  switch (currentStage) {
-    case "queued": // Por empezar -> Construyendo
-      return {
-        nextStage: "building",
-        label: "Aceptar: Cambiar a Construyendo",
-        emoji: "🔨",
-        buttonColor: "bg-blue-500 hover:bg-blue-400",
-      };
-    case "building": // Construyendo -> Probando
-      return {
-        nextStage: "testing",
-        label: "Aceptar: Cambiar a Probando",
-        emoji: "🧪",
-        buttonColor: "bg-purple-500 hover:bg-purple-400",
-      };
-    case "testing": // Probando -> Ajustando
-      return {
-        nextStage: "adjusting",
-        label: "Aceptar: Cambiar a Ajustando",
-        emoji: "🔄",
-        buttonColor: "bg-amber-500 hover:bg-amber-400",
-      };
-    case "adjusting": // Ajustando -> Logrado (o vuelve a Probando)
-      return {
-        nextStage: "achieved",
-        label: "Aceptar: Cambiar a Logrado",
-        emoji: "🎉",
-        buttonColor: "bg-green-500 hover:bg-green-400",
-      };
-    case "paused": // Pausado -> Construyendo (retomar)
-      return {
-        nextStage: "building",
-        label: "Retomar: Cambiar a Construyendo",
-        emoji: "🔨",
-        buttonColor: "bg-blue-500 hover:bg-blue-400",
-      };
-    default:
-      return null;
+  // Default MVP cycle progression
+  const defaultNext = DEFAULT_NEXT_STAGE[currentStage];
+  if (!defaultNext) {
+    return null;
   }
+
+  const isResume = currentStage === "paused";
+  return {
+    nextStage: defaultNext,
+    label: isResume
+      ? `Retomar: Cambiar a ${STAGE_LABELS[defaultNext]}`
+      : `Aceptar: Cambiar a ${STAGE_LABELS[defaultNext]}`,
+    emoji: STAGE_EMOJIS[defaultNext],
+    buttonColor: STAGE_COLORS[defaultNext],
+  };
 }
 
 // Fallback description for steps without one
