@@ -1,17 +1,15 @@
 /**
  * POST /api/kapso/smart-reminders
  *
- * Sistema inteligente de recordatorios WhatsApp para Vicu.
- * Rota entre los objetivos más importantes del usuario.
+ * Sistema de recordatorios WhatsApp para Vicu.
+ * 3 resúmenes diarios con contexto de todos los objetivos.
  *
- * HORARIOS (Lima UTC-5):
- * - 08:00 → MORNING_SUMMARY - Resumen de todos los objetivos
- * - 11:00 → PUSH_1 - Objetivo más urgente
- * - 14:00 → PUSH_2 - Segundo objetivo (o seguimiento del primero)
- * - 17:00 → PUSH_3 - Tercer objetivo o micro-paso
- * - 21:00 → NIGHT_RECAP - Resumen del día + plan mañana
+ * HORARIOS (Bogotá/Lima UTC-5):
+ * - 08:00 → MORNING - Plan del día
+ * - 15:00 → AFTERNOON - Check-in de mitad de día
+ * - 21:00 → NIGHT - Resumen del día
  *
- * Usa ?slot=MORNING_SUMMARY para forzar un slot.
+ * Usa ?slot=MORNING para forzar un slot.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -22,7 +20,7 @@ import { sendWhatsAppMessage, isKapsoConfigured, WhatsAppConfig } from "@/lib/ka
 // Types
 // =============================================================================
 
-type SlotType = "MORNING_SUMMARY" | "PUSH_1" | "PUSH_2" | "PUSH_3" | "NIGHT_RECAP";
+type SlotType = "MORNING" | "AFTERNOON" | "NIGHT";
 
 interface ObjectiveWithContext {
   id: string;
@@ -32,7 +30,6 @@ interface ObjectiveWithContext {
   deadline: string | null;
   streak_days: number;
   last_checkin_at: string | null;
-  // Computed
   days_without_progress: number;
   urgency_score: number;
   pending_steps: PendingStep[];
@@ -49,7 +46,6 @@ interface PendingStep {
 interface DayContext {
   objectives: ObjectiveWithContext[];
   total_done_today: number;
-  already_pushed_today: string[]; // IDs de objetivos ya empujados hoy
 }
 
 // =============================================================================
@@ -59,11 +55,9 @@ interface DayContext {
 const DEFAULT_USER_ID = "demo-user";
 
 const SLOT_SCHEDULE: Record<SlotType, [number, number]> = {
-  MORNING_SUMMARY: [8, 0],
-  PUSH_1: [11, 0],
-  PUSH_2: [14, 0],
-  PUSH_3: [17, 0],
-  NIGHT_RECAP: [21, 0],
+  MORNING: [8, 0],
+  AFTERNOON: [15, 0],
+  NIGHT: [21, 0],
 };
 
 // =============================================================================
@@ -72,10 +66,10 @@ const SLOT_SCHEDULE: Record<SlotType, [number, number]> = {
 
 function getCurrentSlot(): SlotType | null {
   const now = new Date();
-  const limaOffset = -5 * 60;
-  const limaTime = new Date(now.getTime() + (limaOffset - now.getTimezoneOffset()) * 60000);
-  const currentHour = limaTime.getHours();
-  const currentMinute = limaTime.getMinutes();
+  const bogotaOffset = -5 * 60;
+  const bogotaTime = new Date(now.getTime() + (bogotaOffset - now.getTimezoneOffset()) * 60000);
+  const currentHour = bogotaTime.getHours();
+  const currentMinute = bogotaTime.getMinutes();
   const currentTimeMinutes = currentHour * 60 + currentMinute;
 
   let matchedSlot: SlotType | null = null;
@@ -93,7 +87,7 @@ function getCurrentSlot(): SlotType | null {
 }
 
 function calculateDaysWithoutProgress(lastCheckinAt: string | null): number {
-  if (!lastCheckinAt) return 0; // Nuevo objetivo, no "999 días"
+  if (!lastCheckinAt) return 0;
 
   const lastDate = new Date(lastCheckinAt);
   const today = new Date();
@@ -114,7 +108,6 @@ function calculateUrgencyScore(obj: {
 }): number {
   let score = 0;
 
-  // Deadline cercano = muy urgente
   if (obj.deadline) {
     const daysUntilDeadline = Math.floor(
       (new Date(obj.deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
@@ -124,16 +117,13 @@ function calculateUrgencyScore(obj: {
     else if (daysUntilDeadline <= 14) score += 15;
   }
 
-  // Días sin avance = necesita atención
   if (obj.days_without_progress >= 7) score += 40;
   else if (obj.days_without_progress >= 3) score += 25;
   else if (obj.days_without_progress >= 1) score += 10;
 
-  // Racha activa = no perderla
   if (obj.streak_days >= 7) score += 20;
   else if (obj.streak_days >= 3) score += 10;
 
-  // Ya avanzó hoy = menos urgente
   if (obj.done_today > 0) score -= 30;
 
   return score;
@@ -144,7 +134,6 @@ async function getDayContext(): Promise<DayContext> {
   today.setHours(0, 0, 0, 0);
   const todayStr = today.toISOString();
 
-  // Get active objectives
   const { data: experiments } = await supabaseServer
     .from("experiments")
     .select("id, title, status, created_at, deadline, streak_days, last_checkin_at")
@@ -154,12 +143,11 @@ async function getDayContext(): Promise<DayContext> {
     .limit(10);
 
   if (!experiments || experiments.length === 0) {
-    return { objectives: [], total_done_today: 0, already_pushed_today: [] };
+    return { objectives: [], total_done_today: 0 };
   }
 
   const experimentIds = experiments.map(e => e.id);
 
-  // Get pending steps for each objective
   const { data: pendingSteps } = await supabaseServer
     .from("experiment_checkins")
     .select("id, experiment_id, step_title, step_description, effort")
@@ -167,7 +155,6 @@ async function getDayContext(): Promise<DayContext> {
     .eq("status", "pending")
     .order("created_at", { ascending: true });
 
-  // Get done today
   const { data: doneToday } = await supabaseServer
     .from("experiment_checkins")
     .select("experiment_id")
@@ -175,15 +162,6 @@ async function getDayContext(): Promise<DayContext> {
     .eq("status", "done")
     .gte("created_at", todayStr);
 
-  // Get already pushed objectives today
-  const { data: todayReminders } = await supabaseServer
-    .from("whatsapp_reminders")
-    .select("experiment_id, slot_type")
-    .eq("user_id", DEFAULT_USER_ID)
-    .gte("sent_at", todayStr)
-    .in("slot_type", ["PUSH_1", "PUSH_2", "PUSH_3"]);
-
-  // Group data
   const stepsByExp: Record<string, PendingStep[]> = {};
   const doneByExp: Record<string, number> = {};
 
@@ -201,11 +179,6 @@ async function getDayContext(): Promise<DayContext> {
     doneByExp[s.experiment_id] = (doneByExp[s.experiment_id] || 0) + 1;
   });
 
-  const alreadyPushed = new Set(
-    todayReminders?.map(r => r.experiment_id).filter(Boolean) || []
-  );
-
-  // Build objectives with context
   const objectives: ObjectiveWithContext[] = experiments.map(exp => {
     const daysWithout = calculateDaysWithoutProgress(exp.last_checkin_at);
     const doneCount = doneByExp[exp.id] || 0;
@@ -228,13 +201,11 @@ async function getDayContext(): Promise<DayContext> {
     return obj;
   });
 
-  // Sort by urgency
   objectives.sort((a, b) => b.urgency_score - a.urgency_score);
 
   return {
     objectives,
     total_done_today: doneToday?.length || 0,
-    already_pushed_today: Array.from(alreadyPushed),
   };
 }
 
@@ -242,141 +213,179 @@ async function getDayContext(): Promise<DayContext> {
 // Message Builders
 // =============================================================================
 
-function buildMorningSummary(ctx: DayContext): { message: string; targetExp: string | null } {
+function buildMorningMessage(ctx: DayContext): { message: string; targetExp: string | null } {
   if (ctx.objectives.length === 0) {
     return {
       message: `☀️ *Buenos días*
 
 No tienes objetivos activos en Vicu.
 
-Entra a la app y cuéntame qué quieres lograr.`,
+¿Qué te gustaría lograr? Entra a la app y cuéntame.`,
       targetExp: null,
     };
   }
 
-  const top5 = ctx.objectives.slice(0, 5);
-  const list = top5.map((obj, i) => {
-    const emoji = obj.done_today > 0 ? "✅" : obj.days_without_progress >= 3 ? "⚠️" : "📌";
-    const steps = obj.pending_steps.length > 0 ? ` (${obj.pending_steps.length} pasos)` : "";
-    const streak = obj.streak_days >= 3 ? ` 🔥${obj.streak_days}` : "";
-    return `${emoji} ${obj.title}${steps}${streak}`;
+  // Build list with status indicators
+  const list = ctx.objectives.slice(0, 5).map(obj => {
+    let emoji = "📌";
+    let extra = "";
+
+    if (obj.days_without_progress >= 7) {
+      emoji = "🔴";
+      extra = ` (${obj.days_without_progress} días)`;
+    } else if (obj.days_without_progress >= 3) {
+      emoji = "🟡";
+      extra = ` (${obj.days_without_progress} días)`;
+    } else if (obj.streak_days >= 3) {
+      emoji = "🔥";
+      extra = ` (racha ${obj.streak_days}d)`;
+    }
+
+    return `${emoji} ${obj.title}${extra}`;
   }).join("\n");
 
-  const totalPending = ctx.objectives.reduce((sum, o) => sum + o.pending_steps.length, 0);
-  const needsAttention = ctx.objectives.filter(o => o.days_without_progress >= 3).length;
+  const needsAttention = ctx.objectives.filter(o => o.days_without_progress >= 3);
+  const withStreaks = ctx.objectives.filter(o => o.streak_days >= 3);
 
-  let footer = "";
-  if (needsAttention > 0) {
-    footer = `\n⚠️ ${needsAttention} objetivo${needsAttention > 1 ? "s" : ""} necesita${needsAttention > 1 ? "n" : ""} atención`;
+  let insight = "";
+  if (needsAttention.length > 0) {
+    insight = `\n\n⚠️ ${needsAttention.length} objetivo${needsAttention.length > 1 ? "s necesitan" : " necesita"} atención`;
+  } else if (withStreaks.length > 0) {
+    insight = `\n\n🔥 ${withStreaks.length} racha${withStreaks.length > 1 ? "s" : ""} activa${withStreaks.length > 1 ? "s" : ""}`;
+  }
+
+  // Suggest where to start
+  const suggested = ctx.objectives[0];
+  const suggestedStep = suggested?.pending_steps[0];
+
+  let suggestion = "";
+  if (suggested) {
+    suggestion = `\n\n💡 *Empieza por:* ${suggested.title}`;
+    if (suggestedStep) {
+      suggestion += `\n→ ${suggestedStep.step_title}`;
+    }
   }
 
   return {
     message: `☀️ *Buenos días*
 
-Tus objetivos activos:
+Tus ${ctx.objectives.length} objetivos activos:
 
-${list}
-${footer}
-${totalPending > 0 ? `\nTotal: ${totalPending} pasos pendientes` : ""}
+${list}${insight}${suggestion}
 
-Responde:
-1️⃣ Empezar con el más urgente
-2️⃣ Ver todos mis pasos
-3️⃣ Hoy descanso`,
-    targetExp: top5[0]?.id || null,
+¡Hoy es un buen día para avanzar!`,
+    targetExp: suggested?.id || null,
   };
 }
 
-function buildPushMessage(ctx: DayContext, pushNumber: 1 | 2 | 3): { message: string; targetExp: string | null } {
-  // Filter objectives not yet pushed today (for rotation)
-  const notPushedYet = ctx.objectives.filter(
-    o => !ctx.already_pushed_today.includes(o.id) && o.done_today === 0
-  );
-
-  // If all were pushed, use the most urgent without progress today
-  const candidates = notPushedYet.length > 0
-    ? notPushedYet
-    : ctx.objectives.filter(o => o.done_today === 0);
-
-  if (candidates.length === 0) {
-    // All objectives have progress today!
+function buildAfternoonMessage(ctx: DayContext): { message: string; targetExp: string | null } {
+  if (ctx.objectives.length === 0) {
     return {
-      message: `💪 *¡Vas increíble!*
+      message: `🌤️ *Check-in de la tarde*
 
-Ya avanzaste en todos tus objetivos hoy.
+No tienes objetivos activos.
 
-Sigue así 🔥`,
+¿Hay algo que quieras lograr? Entra a Vicu.`,
       targetExp: null,
     };
   }
 
-  const target = candidates[0];
-  const step = target.pending_steps[0];
-
-  // Build contextual message based on push number and objective state
-  let intro = "";
-  if (pushNumber === 1) {
-    if (target.days_without_progress >= 3) {
-      intro = `⚠️ *${target.title}* lleva ${target.days_without_progress} días sin avance.`;
-    } else if (target.streak_days >= 3) {
-      intro = `🔥 *${target.title}* - Racha de ${target.streak_days} días. ¡No la pierdas!`;
-    } else {
-      intro = `📌 *${target.title}*`;
-    }
-  } else if (pushNumber === 2) {
-    intro = `🔄 Segundo objetivo del día: *${target.title}*`;
-  } else {
-    intro = `🌅 Último push: *${target.title}*`;
-  }
-
-  const stepText = step
-    ? `\nTu siguiente paso:\n➡️ *${step.step_title}*${step.effort ? ` (${step.effort === "muy_pequeno" ? "~5min" : step.effort === "pequeno" ? "~20min" : "~1hr"})` : ""}`
-    : "\nAvanza un paso pequeño.";
-
-  return {
-    message: `${intro}
-${stepText}
-
-Responde:
-1️⃣ ✅ Listo, lo hice
-2️⃣ 🔄 Dame otro paso
-3️⃣ ⏰ Más tarde
-4️⃣ ➡️ Siguiente objetivo`,
-    targetExp: target.id,
-  };
-}
-
-function buildNightRecap(ctx: DayContext): { message: string; targetExp: string | null } {
   const withProgress = ctx.objectives.filter(o => o.done_today > 0);
   const withoutProgress = ctx.objectives.filter(o => o.done_today === 0);
 
-  // Always show a real summary of all objectives
+  let message = `🌤️ *Check-in de la tarde*\n`;
+
+  if (withProgress.length > 0) {
+    // Some progress made
+    const progressList = withProgress
+      .map(o => `✅ ${o.title} (${o.done_today} paso${o.done_today > 1 ? "s" : ""})`)
+      .join("\n");
+
+    message += `\n¡Buen trabajo! Ya avanzaste en:\n${progressList}`;
+
+    if (withoutProgress.length > 0) {
+      const remaining = withoutProgress.slice(0, 3);
+      message += `\n\nAún puedes avanzar en:\n${remaining.map(o => `• ${o.title}`).join("\n")}`;
+
+      if (withoutProgress.length > 3) {
+        message += `\n...y ${withoutProgress.length - 3} más`;
+      }
+    } else {
+      message += `\n\n🎉 ¡Avanzaste en todos! Sigue así.`;
+    }
+  } else {
+    // No progress yet
+    message += `\nAún no registras avances hoy.`;
+
+    const mostUrgent = ctx.objectives[0];
+    const step = mostUrgent?.pending_steps[0];
+
+    if (mostUrgent) {
+      message += `\n\nAún hay tiempo. ¿Qué tal *${mostUrgent.title}*?`;
+      if (step) {
+        message += `\n→ ${step.step_title}`;
+      }
+    }
+
+    message += `\n\nUn paso pequeño cuenta 💪`;
+  }
+
+  return {
+    message,
+    targetExp: withoutProgress[0]?.id || withProgress[0]?.id || null,
+  };
+}
+
+function buildNightMessage(ctx: DayContext): { message: string; targetExp: string | null } {
+  if (ctx.objectives.length === 0) {
+    return {
+      message: `🌙 *Buenas noches*
+
+No tienes objetivos activos en Vicu.
+
+Mañana es un buen día para empezar algo nuevo.
+
+Descansa bien 😴`,
+      targetExp: null,
+    };
+  }
+
+  const withProgress = ctx.objectives.filter(o => o.done_today > 0);
+  const withoutProgress = ctx.objectives.filter(o => o.done_today === 0);
+
   let message = `🌙 *Resumen del día*\n`;
 
   if (ctx.total_done_today > 0) {
-    // Show what was accomplished
     const progressList = withProgress
       .map(o => `✅ ${o.title} (${o.done_today} paso${o.done_today > 1 ? "s" : ""})`)
       .join("\n");
     message += `\nHoy avanzaste en ${withProgress.length} objetivo${withProgress.length > 1 ? "s" : ""}:\n${progressList}`;
+
+    // Celebrate streaks
+    const newStreaks = withProgress.filter(o => o.streak_days > 1);
+    if (newStreaks.length > 0) {
+      const best = newStreaks.sort((a, b) => b.streak_days - a.streak_days)[0];
+      message += `\n\n🔥 Racha en *${best.title}*: ${best.streak_days} días`;
+    }
   } else {
-    message += `\nHoy fue un día de descanso - no registraste avances.`;
+    message += `\nHoy fue un día de descanso.`;
   }
 
-  // Show objectives without progress (max 5)
+  // Show what didn't get attention
   if (withoutProgress.length > 0) {
-    const withoutList = withoutProgress.slice(0, 5).map(o => {
+    const withoutList = withoutProgress.slice(0, 4).map(o => {
       const days = o.days_without_progress;
-      const daysText = days === 0 ? "nuevo" : days === 1 ? "1 día sin avance" : `${days} días sin avance`;
-      return `• ${o.title} (${daysText})`;
+      const daysText = days === 0 ? "" : days === 1 ? " · 1 día" : ` · ${days} días`;
+      return `• ${o.title}${daysText}`;
     }).join("\n");
+
     message += `\n\nSin avance hoy:\n${withoutList}`;
-    if (withoutProgress.length > 5) {
-      message += `\n...y ${withoutProgress.length - 5} más`;
+    if (withoutProgress.length > 4) {
+      message += `\n...y ${withoutProgress.length - 4} más`;
     }
   }
 
-  // Suggest tomorrow's focus (most urgent without progress)
+  // Tomorrow suggestion
   const tomorrowFocus = withoutProgress
     .sort((a, b) => b.urgency_score - a.urgency_score)[0];
 
@@ -462,24 +471,18 @@ export async function POST(request: NextRequest) {
     // Get context
     const ctx = await getDayContext();
 
-    // Build message
+    // Build message based on slot
     let result: { message: string; targetExp: string | null };
 
     switch (slot) {
-      case "MORNING_SUMMARY":
-        result = buildMorningSummary(ctx);
+      case "MORNING":
+        result = buildMorningMessage(ctx);
         break;
-      case "PUSH_1":
-        result = buildPushMessage(ctx, 1);
+      case "AFTERNOON":
+        result = buildAfternoonMessage(ctx);
         break;
-      case "PUSH_2":
-        result = buildPushMessage(ctx, 2);
-        break;
-      case "PUSH_3":
-        result = buildPushMessage(ctx, 3);
-        break;
-      case "NIGHT_RECAP":
-        result = buildNightRecap(ctx);
+      case "NIGHT":
+        result = buildNightMessage(ctx);
         break;
     }
 
@@ -493,10 +496,6 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // Get the target objective's first pending step for webhook context
-    const targetObj = ctx.objectives.find(o => o.id === result.targetExp);
-    const firstStep = targetObj?.pending_steps[0];
-
     // Record reminder
     await supabaseServer
       .from("whatsapp_reminders")
@@ -504,17 +503,9 @@ export async function POST(request: NextRequest) {
         user_id: DEFAULT_USER_ID,
         experiment_id: result.targetExp,
         message_content: result.message,
-        step_title: firstStep?.step_title || null,
-        step_description: firstStep?.step_description || null,
         status: "sent",
         kapso_message_id: sendResult.messageId,
         slot_type: slot,
-        response_options: {
-          "1": slot === "MORNING_SUMMARY" ? "start_urgent" : "mark_done",
-          "2": slot === "MORNING_SUMMARY" ? "list_steps" : "different_step",
-          "3": slot === "MORNING_SUMMARY" ? "rest_today" : "later",
-          "4": "next_objective",
-        },
       });
 
     return NextResponse.json({
@@ -523,9 +514,7 @@ export async function POST(request: NextRequest) {
       message_id: sendResult.messageId,
       target_objective: result.targetExp,
       objectives_count: ctx.objectives.length,
-      debug: {
-        phone_sent_to: whatsappConfig.phone_number,
-      },
+      done_today: ctx.total_done_today,
     });
   } catch (error) {
     console.error("[Smart Reminders] Error:", error);
@@ -541,12 +530,12 @@ export async function GET() {
   const currentSlot = getCurrentSlot();
 
   const now = new Date();
-  const limaOffset = -5 * 60;
-  const limaTime = new Date(now.getTime() + (limaOffset - now.getTimezoneOffset()) * 60000);
+  const bogotaOffset = -5 * 60;
+  const bogotaTime = new Date(now.getTime() + (bogotaOffset - now.getTimezoneOffset()) * 60000);
 
   return NextResponse.json({
     current_slot: currentSlot,
-    lima_time: limaTime.toISOString(),
+    bogota_time: bogotaTime.toISOString(),
     schedule: SLOT_SCHEDULE,
     objectives: ctx.objectives.map(o => ({
       id: o.id,
@@ -557,7 +546,6 @@ export async function GET() {
       pending_steps: o.pending_steps.length,
       done_today: o.done_today,
     })),
-    already_pushed_today: ctx.already_pushed_today,
     total_done_today: ctx.total_done_today,
   });
 }
