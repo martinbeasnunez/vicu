@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useExperimentStore } from "@/lib/experiment-store";
 import type { VicuAnalysis } from "@/lib/vicu-analyzer";
+import { AuthGuard } from "@/components/auth-guard";
 
 type MessageRole = "vicu" | "user";
 
@@ -51,7 +52,7 @@ const LOADING_MESSAGES = [
   { main: "Casi listo...", sub: "Últimos detalles" },
 ];
 
-export default function VicuPage() {
+function VicuPageContent() {
   const router = useRouter();
   const { setExperiment, setCopy } = useExperimentStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -908,5 +909,14 @@ export default function VicuPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// Wrap with AuthGuard
+export default function VicuPage() {
+  return (
+    <AuthGuard>
+      <VicuPageContent />
+    </AuthGuard>
   );
 }

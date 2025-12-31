@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase-server";
 import { computeDefaultRhythm, type SurfaceType } from "@/lib/experiment-helpers";
 import { generateInitialSteps } from "@/lib/ai";
+import { getAuthUserIdOrDemo } from "@/lib/auth-server";
 
 // Helper para generar un título corto a partir de la descripción (fallback)
 function generateFallbackTitle(description: string): string {
@@ -10,6 +11,9 @@ function generateFallbackTitle(description: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  // Get authenticated user ID
+  const userId = await getAuthUserIdOrDemo();
+
   const data = await request.json();
 
   const {
@@ -51,6 +55,7 @@ export async function POST(request: NextRequest) {
 
   // Build insert payload - rhythm and phases fields are optional until migration is run
   const insertPayload: Record<string, unknown> = {
+    user_id: userId,
     title,
     description,
     project_type: project_type || "external",

@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 import { useExperimentStore } from "@/lib/experiment-store";
+import { AuthGuard } from "@/components/auth-guard";
 import {
   ExperimentStatus,
   STATUS_LABELS,
@@ -456,7 +457,7 @@ function ensureStepDescription(description: string | null | undefined, title?: s
   return DESCRIPTION_FALLBACK;
 }
 
-export default function ExperimentPage() {
+function ExperimentPageContent() {
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
@@ -3836,5 +3837,14 @@ export default function ExperimentPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// Wrap with AuthGuard
+export default function ExperimentPage() {
+  return (
+    <AuthGuard>
+      <ExperimentPageContent />
+    </AuthGuard>
   );
 }

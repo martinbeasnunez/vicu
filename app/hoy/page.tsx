@@ -15,6 +15,8 @@ import { useUserStats } from "@/lib/useUserStats";
 import { Badge, getLevelName } from "@/lib/gamification";
 import { XpGainAnimation, BadgeUnlockAnimation, LevelUpAnimation } from "@/components/GamificationPanel";
 import LoadingScreen from "@/components/LoadingScreen";
+import { useAuth, getUserId } from "@/lib/auth-context";
+import { AuthGuard } from "@/components/auth-guard";
 
 // All statuses for filtering (including inactive ones)
 const ALL_STATUSES: ExperimentStatus[] = ["queued", "building", "testing", "adjusting", "achieved", "paused", "discarded"];
@@ -113,8 +115,10 @@ function formatLastCheckin(dateString: string | null): string {
   return `Hace ${Math.floor(diffDays / 30)} mes${Math.floor(diffDays / 30) > 1 ? "es" : ""}`;
 }
 
-export default function HoyPage() {
+function HoyPageContent() {
   const router = useRouter();
+  const { user, signOut } = useAuth();
+  const userId = getUserId(user);
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
@@ -224,12 +228,13 @@ export default function HoyPage() {
 
   // Check WhatsApp notification status on mount
   useEffect(() => {
+    if (!userId) return;
     const checkWhatsappStatus = async () => {
       try {
         const { data } = await supabase
           .from("whatsapp_config")
           .select("is_active")
-          .eq("user_id", "demo-user")
+          .eq("user_id", userId)
           .single();
         setWhatsappEnabled(data?.is_active ?? false);
       } catch {
@@ -237,7 +242,7 @@ export default function HoyPage() {
       }
     };
     checkWhatsappStatus();
-  }, []);
+  }, [userId]);
 
   // Handler to activate push notifications
   // Web Push Flow:
@@ -350,7 +355,7 @@ export default function HoyPage() {
       const { error } = await supabase
         .from("whatsapp_config")
         .update({ is_active: newStatus })
-        .eq("user_id", "demo-user");
+        .eq("user_id", userId);
 
       if (error) {
         showToast("Error al cambiar configuración");
@@ -366,11 +371,14 @@ export default function HoyPage() {
   };
 
   const fetchData = useCallback(async () => {
+    if (!userId) return;
+
     try {
       // First check if user has any experiments at all (excluding deleted)
       const { count: totalCount } = await supabase
         .from("experiments")
         .select("*", { count: "exact", head: true })
+        .eq("user_id", userId)
         .is("deleted_at", null);
 
       setHasAnyExperiments((totalCount || 0) > 0);
@@ -383,6 +391,7 @@ export default function HoyPage() {
       const result1 = await supabase
         .from("experiments")
         .select("id, title, status, surface_type, deadline, created_at, last_checkin_at, checkins_count, streak_days")
+        .eq("user_id", userId)
         .is("deleted_at", null)
         .order("created_at", { ascending: false }); // newest first
 
@@ -392,6 +401,7 @@ export default function HoyPage() {
         const result2 = await supabase
           .from("experiments")
           .select("id, title, status, surface_type, deadline, created_at")
+          .eq("user_id", userId)
           .order("created_at", { ascending: false }); // newest first
 
         if (result2.error) {
@@ -439,7 +449,7 @@ export default function HoyPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     fetchData();
@@ -807,6 +817,23 @@ export default function HoyPage() {
                 </div>
               </div>
             )}
+
+            {/* Sign out button */}
+            <div className="relative group">
+              <button
+                onClick={() => signOut()}
+                className="p-1.5 sm:p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-700 transition-all"
+                title="Cerrar sesión"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+              </button>
+              {/* Tooltip */}
+              <div className="absolute right-0 top-full mt-2 w-32 p-2 bg-slate-800 border border-slate-700 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 text-xs text-slate-300 text-center">
+                Cerrar sesión
+              </div>
+            </div>
 
             <Link
               href="/vicu"
@@ -1230,5 +1257,14 @@ export default function HoyPage() {
         />
       )}
     </div>
+  );
+}
+
+// Wrap with AuthGuard
+export default function HoyPage() {
+  return (
+    <AuthGuard>
+      <HoyPageContent />
+    </AuthGuard>
   );
 }
