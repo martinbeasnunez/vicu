@@ -350,41 +350,34 @@ function buildNightRecap(ctx: DayContext): { message: string; targetExp: string 
   const withProgress = ctx.objectives.filter(o => o.done_today > 0);
   const withoutProgress = ctx.objectives.filter(o => o.done_today === 0);
 
-  if (ctx.total_done_today === 0) {
-    const mostUrgent = ctx.objectives[0];
-    return {
-      message: `🌙 *Resumen del día*
+  // Always show a real summary of all objectives
+  let message = `🌙 *Resumen del día*\n`;
 
-Hoy no registraste avances.
-
-${mostUrgent ? `Mañana empezamos con *${mostUrgent.title}*` : ""}
-
-No pasa nada - mañana es un nuevo día 💪
-
-Responde:
-1️⃣ Mañana sí arranco
-2️⃣ Necesito ajustar mis objetivos`,
-      targetExp: mostUrgent?.id || null,
-    };
+  if (ctx.total_done_today > 0) {
+    // Show what was accomplished
+    const progressList = withProgress
+      .map(o => `✅ ${o.title} (${o.done_today} paso${o.done_today > 1 ? "s" : ""})`)
+      .join("\n");
+    message += `\nHoy avanzaste en ${withProgress.length} objetivo${withProgress.length > 1 ? "s" : ""}:\n${progressList}`;
+  } else {
+    message += `\nHoy fue un día de descanso - no registraste avances.`;
   }
 
-  const progressList = withProgress
-    .map(o => `✅ ${o.title} (${o.done_today} paso${o.done_today > 1 ? "s" : ""})`)
-    .join("\n");
-
-  let message = `🌙 *Resumen del día*
-
-${progressList}
-
-Total: ${ctx.total_done_today} paso${ctx.total_done_today > 1 ? "s" : ""} completado${ctx.total_done_today > 1 ? "s" : ""} 🎉`;
-
-  if (withoutProgress.length > 0 && withoutProgress.length <= 3) {
-    message += `\n\nSin avance hoy:\n${withoutProgress.map(o => `• ${o.title}`).join("\n")}`;
+  // Show objectives without progress (max 5)
+  if (withoutProgress.length > 0) {
+    const withoutList = withoutProgress.slice(0, 5).map(o => {
+      const days = o.days_without_progress;
+      const daysText = days === 0 ? "nuevo" : days === 1 ? "1 día sin avance" : `${days} días sin avance`;
+      return `• ${o.title} (${daysText})`;
+    }).join("\n");
+    message += `\n\nSin avance hoy:\n${withoutList}`;
+    if (withoutProgress.length > 5) {
+      message += `\n...y ${withoutProgress.length - 5} más`;
+    }
   }
 
-  // Suggest tomorrow's focus
-  const tomorrowFocus = ctx.objectives
-    .filter(o => o.done_today === 0)
+  // Suggest tomorrow's focus (most urgent without progress)
+  const tomorrowFocus = withoutProgress
     .sort((a, b) => b.urgency_score - a.urgency_score)[0];
 
   if (tomorrowFocus) {
