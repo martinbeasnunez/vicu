@@ -537,6 +537,12 @@ export default function ExperimentPage() {
   const [savedVicuSuggestions, setSavedVicuSuggestions] = useState<string[]>([]);
   const [isVicuHelpExpanded, setIsVicuHelpExpanded] = useState(false);
 
+  // Mini-chat state for step help
+  const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+
   // Delete step confirmation modal state
   const [stepToDelete, setStepToDelete] = useState<ExperimentCheckin | null>(null);
   const [isDeletingStep, setIsDeletingStep] = useState(false);
@@ -1181,6 +1187,10 @@ export default function ExperimentPage() {
     setSavedVicuSuggestions([]);
     setIsVicuHelpExpanded(false);
     setStepSaveStatus("idle");
+    // Clear chat state
+    setChatMessages([]);
+    setChatInput("");
+    setIsChatOpen(false);
   };
 
   // Save notes to database
@@ -1269,6 +1279,46 @@ export default function ExperimentPage() {
       setTimeout(() => setToast(null), 3000);
     } finally {
       setIsGeneratingIdeas(false);
+    }
+  };
+
+  // Send message to Vicu mini-chat
+  const handleSendChatMessage = async () => {
+    if (!chatInput.trim() || !selectedStep || !experiment || isChatLoading) return;
+
+    const userMessage = chatInput.trim();
+    setChatInput("");
+    setChatMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+    setIsChatLoading(true);
+
+    try {
+      const res = await fetch("/api/step-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectTitle: experiment.title,
+          projectDescription: experiment.description,
+          stepTitle: selectedStep.step_title,
+          stepDescription: selectedStep.step_description,
+          currentSuggestion: vicuSuggestion,
+          userNotes: stepUserNotes.map((n) => n.content),
+          messages: chatMessages,
+          userMessage,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success && data.content) {
+        setChatMessages((prev) => [...prev, { role: "assistant", content: data.content }]);
+      } else {
+        setToast("No se pudo obtener respuesta");
+        setTimeout(() => setToast(null), 3000);
+      }
+    } catch {
+      setToast("Error al enviar mensaje");
+      setTimeout(() => setToast(null), 3000);
+    } finally {
+      setIsChatLoading(false);
     }
   };
 
@@ -3587,6 +3637,152 @@ export default function ExperimentPage() {
                     <p className="text-[10px] text-slate-500 text-center">
                       Guarda las ideas que te sirvan
                     </p>
+
+                    {/* Mini-chat for contextual help */}
+                    <div className="mt-4 pt-4 border-t border-slate-700/50">
+                      {!isChatOpen ? (
+                        <button
+                          onClick={() => setIsChatOpen(true)}
+                          className="w-full px-4 py-2.5 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 hover:bg-indigo-600/30 transition-all flex items-center justify-center gap-2 text-sm"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                          </svg>
+                          <span>Ayúdame con esto</span>
+                        </button>
+                      ) : (
+                        <div className="space-y-3">
+                          {/* Chat messages */}
+                          {chatMessages.length > 0 && (
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {chatMessages.map((msg, index) => (
+                                <div
+                                  key={index}
+                                  className={`p-2.5 rounded-lg text-sm ${
+                                    msg.role === "user"
+                                      ? "bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 ml-4"
+                                      : "bg-slate-700/50 border border-slate-600/50 text-slate-200 mr-4"
+                                  }`}
+                                >
+                                  {msg.role === "assistant" && (
+                                    <div className="flex items-center gap-1.5 mb-1.5">
+                                      <div className="w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center">
+                                        <span className="text-[8px] text-white font-bold">v</span>
+                                      </div>
+                                      <span className="text-[10px] text-indigo-400 font-medium">Vicu</span>
+                                    </div>
+                                  )}
+                                  <p className="whitespace-pre-wrap leading-relaxed">
+                                    <LinkifiedText text={msg.content} />
+                                  </p>
+                                </div>
+                              ))}
+                              {isChatLoading && (
+                                <div className="p-2.5 rounded-lg bg-slate-700/50 border border-slate-600/50 mr-4">
+                                  <div className="flex items-center gap-1.5 mb-1.5">
+                                    <div className="w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center">
+                                      <span className="text-[8px] text-white font-bold">v</span>
+                                    </div>
+                                    <span className="text-[10px] text-indigo-400 font-medium">Vicu</span>
+                                  </div>
+                                  <div className="flex items-center gap-2 text-sm text-slate-400">
+                                    <div className="w-3 h-3 border-2 border-indigo-400/30 border-t-indigo-400 rounded-full animate-spin" />
+                                    <span>Pensando...</span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Chat input */}
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={chatInput}
+                              onChange={(e) => setChatInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && !e.shiftKey) {
+                                  e.preventDefault();
+                                  handleSendChatMessage();
+                                }
+                              }}
+                              placeholder={chatMessages.length === 0 ? "¿En qué necesitas ayuda?" : "Escribe tu mensaje..."}
+                              className="flex-1 px-3 py-2 bg-slate-900/50 border border-slate-600/50 rounded-lg text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50"
+                              disabled={isChatLoading}
+                            />
+                            <button
+                              onClick={handleSendChatMessage}
+                              disabled={!chatInput.trim() || isChatLoading}
+                              className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg transition-colors"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                              </svg>
+                            </button>
+                          </div>
+
+                          {/* Quick suggestions */}
+                          {chatMessages.length === 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {["Simplifícalo", "Dame un ejemplo", "No entiendo", "Primer paso"].map((quickSuggestion) => (
+                                <button
+                                  key={quickSuggestion}
+                                  onClick={async () => {
+                                    if (!selectedStep || !experiment || isChatLoading) return;
+                                    setChatMessages([{ role: "user", content: quickSuggestion }]);
+                                    setIsChatLoading(true);
+                                    try {
+                                      const res = await fetch("/api/step-chat", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({
+                                          projectTitle: experiment.title,
+                                          projectDescription: experiment.description,
+                                          stepTitle: selectedStep.step_title,
+                                          stepDescription: selectedStep.step_description,
+                                          currentSuggestion: vicuSuggestion,
+                                          userNotes: stepUserNotes.map((n) => n.content),
+                                          messages: [],
+                                          userMessage: quickSuggestion,
+                                        }),
+                                      });
+                                      const data = await res.json();
+                                      if (data.success && data.content) {
+                                        setChatMessages([
+                                          { role: "user", content: quickSuggestion },
+                                          { role: "assistant", content: data.content },
+                                        ]);
+                                      }
+                                    } catch {
+                                      setToast("Error al enviar mensaje");
+                                      setTimeout(() => setToast(null), 3000);
+                                    } finally {
+                                      setIsChatLoading(false);
+                                    }
+                                  }}
+                                  disabled={isChatLoading}
+                                  className="px-2 py-1 text-xs bg-slate-700/50 border border-slate-600/50 text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded-full transition-colors disabled:opacity-50"
+                                >
+                                  {quickSuggestion}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Close chat button */}
+                          <button
+                            onClick={() => {
+                              setIsChatOpen(false);
+                              setChatMessages([]);
+                              setChatInput("");
+                            }}
+                            className="w-full text-xs text-slate-500 hover:text-slate-400 transition-colors"
+                          >
+                            Cerrar chat
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
