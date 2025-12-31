@@ -1,14 +1,10 @@
-import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 // Get authenticated user ID from the request
 // Returns null if not authenticated
 export async function getAuthUserId(): Promise<string | null> {
   try {
-    const cookieStore = await cookies();
-
-    // Get the auth token from cookies
-    // Supabase stores the session in cookies with the project ref
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -17,16 +13,27 @@ export async function getAuthUserId(): Promise<string | null> {
       return null;
     }
 
-    // Create client with the cookies
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: {
-        headers: {
-          cookie: cookieStore.toString(),
+    const cookieStore = await cookies();
+
+    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          // In route handlers, we can set cookies
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options);
+            });
+          } catch {
+            // This can fail in middleware/server components
+          }
         },
       },
     });
 
-    // Try to get the session
+    // Try to get the user
     const { data: { user }, error } = await supabase.auth.getUser();
 
     if (error) {
