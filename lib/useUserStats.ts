@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "./supabase";
+import { useAuth } from "./auth-context";
 import {
   UserStats,
   Badge,
@@ -11,8 +12,6 @@ import {
   XP_REWARDS,
   isDailyGoalMet,
 } from "./gamification";
-
-const DEFAULT_USER_ID = "demo-user";
 
 interface UseUserStatsReturn {
   stats: UserStats | null;
@@ -28,41 +27,93 @@ interface UseUserStatsReturn {
 }
 
 export function useUserStats(): UseUserStatsReturn {
+  const { user, loading: authLoading } = useAuth();
+  // Only use the actual user ID, never fallback to demo-user for stats
+  const userId = user?.id;
+
   const [stats, setStats] = useState<UserStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchStats = useCallback(async () => {
+    // Wait for auth to finish loading and ensure we have a real user
+    if (authLoading) {
+      console.log("[useUserStats] Auth still loading, waiting...");
+      return;
+    }
+
+    if (!userId) {
+      console.log("[useUserStats] No userId, returning empty stats");
+      setStats({
+        id: "",
+        user_id: "none",
+        xp: 0,
+        level: 1,
+        streak_days: 0,
+        longest_streak: 0,
+        last_checkin_date: null,
+        daily_checkins: 0,
+        daily_goal: 2,
+        total_checkins: 0,
+        total_projects_completed: 0,
+        badges: [],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      setLoading(false);
+      return;
+    }
+
+    console.log("[useUserStats] Fetching stats for userId:", userId);
+
     try {
       setLoading(true);
 
       // Fetch REAL stats from experiment_checkins and experiments
-      // Add timeout to prevent hanging - resolve with empty data on timeout
-      const timeoutPromise = new Promise<[{ data: never[]; error: null }, { data: never[]; error: null }]>((resolve) =>
-        setTimeout(() => resolve([{ data: [], error: null }, { data: [], error: null }]), 5000)
-      );
+      // First get all experiment IDs for this user
+      const { data: userExperiments } = await supabase
+        .from("experiments")
+        .select("id, status")
+        .eq("user_id", userId);
 
-      const fetchPromise = Promise.all([
-        supabase
-          .from("experiment_checkins")
-          .select("id, status, created_at")
-          .eq("status", "done"),
-        supabase
-          .from("experiments")
-          .select("id, status")
-          .in("status", ["achieved"]),
-      ]);
+      console.log("[useUserStats] Found experiments:", userExperiments?.length || 0);
 
-      const [checkinsResult, experimentsResult] = await Promise.race([
-        fetchPromise,
-        timeoutPromise
-      ]) as [
-        { data: Array<{ id: string; status: string; created_at: string }> | null; error: unknown },
-        { data: Array<{ id: string; status: string }> | null; error: unknown }
-      ];
+      const userExperimentIds = (userExperiments || []).map(e => e.id);
+      const achievedExperiments = (userExperiments || []).filter(e => e.status === "achieved");
 
-      const completedCheckins = (checkinsResult.data || []) as Array<{ id: string; status: string; created_at: string }>;
-      const completedProjects = (experimentsResult.data || []) as Array<{ id: string; status: string }>;
+      // If no experiments, return empty stats
+      if (userExperimentIds.length === 0) {
+        const emptyStats: UserStats = {
+          id: "",
+          user_id: userId,
+          xp: 0,
+          level: 1,
+          streak_days: 0,
+          longest_streak: 0,
+          last_checkin_date: null,
+          daily_checkins: 0,
+          daily_goal: 2,
+          total_checkins: 0,
+          total_projects_completed: 0,
+          badges: [],
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        setStats(emptyStats);
+        setError(null);
+        setLoading(false);
+        return;
+      }
+
+      // Now get checkins only for this user's experiments
+      const { data: checkinsData } = await supabase
+        .from("experiment_checkins")
+        .select("id, status, created_at")
+        .eq("status", "done")
+        .in("experiment_id", userExperimentIds);
+
+      const completedCheckins = (checkinsData || []) as Array<{ id: string; status: string; created_at: string }>;
+      const completedProjects = achievedExperiments as Array<{ id: string; status: string }>;
 
       // Calculate total checkins (completed steps)
       const totalCheckins = completedCheckins.length;
@@ -117,7 +168,7 @@ export function useUserStats(): UseUserStatsReturn {
         const { data: savedStats } = await supabase
           .from("user_stats")
           .select("badges")
-          .eq("user_id", DEFAULT_USER_ID)
+          .eq("user_id", userId)
           .single();
 
         if (savedStats?.badges && Array.isArray(savedStats.badges)) {
@@ -129,7 +180,7 @@ export function useUserStats(): UseUserStatsReturn {
 
       const realStats: UserStats = {
         id: "",
-        user_id: DEFAULT_USER_ID,
+        user_id: userId,
         xp,
         level,
         streak_days: streakDays,
@@ -152,7 +203,7 @@ export function useUserStats(): UseUserStatsReturn {
       // Still set default stats so UI works
       setStats({
         id: "",
-        user_id: DEFAULT_USER_ID,
+        user_id: userId,
         xp: 0,
         level: 1,
         streak_days: 0,
@@ -169,7 +220,7 @@ export function useUserStats(): UseUserStatsReturn {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [userId, authLoading]);
 
   useEffect(() => {
     fetchStats();
@@ -182,7 +233,7 @@ export function useUserStats(): UseUserStatsReturn {
       levelUp: boolean;
       dailyGoalMet: boolean;
     } | null> => {
-      if (!stats) return null;
+      if (!stats || !userId) return null;
 
       const now = new Date();
       const today = now.toISOString().split("T")[0];
@@ -256,7 +307,7 @@ export function useUserStats(): UseUserStatsReturn {
         const { error: updateError } = await supabase
           .from("user_stats")
           .upsert({
-            user_id: DEFAULT_USER_ID,
+            user_id: userId,
             xp: updatedStats.xp,
             level: updatedStats.level,
             streak_days: newStreak,
@@ -267,7 +318,7 @@ export function useUserStats(): UseUserStatsReturn {
             badges: allBadges,
             updated_at: now.toISOString(),
           })
-          .eq("user_id", DEFAULT_USER_ID);
+          .eq("user_id", userId);
 
         if (updateError) {
           console.error("Error updating user stats:", updateError);
@@ -276,7 +327,7 @@ export function useUserStats(): UseUserStatsReturn {
 
         // Record XP event
         await supabase.from("xp_events").insert({
-          user_id: DEFAULT_USER_ID,
+          user_id: userId,
           amount: xpGained,
           reason: "checkin",
           experiment_id: experimentId,
@@ -299,7 +350,7 @@ export function useUserStats(): UseUserStatsReturn {
         return null;
       }
     },
-    [stats]
+    [stats, userId]
   );
 
   return {

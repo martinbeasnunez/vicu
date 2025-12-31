@@ -15,7 +15,7 @@ import { useUserStats } from "@/lib/useUserStats";
 import { Badge, getLevelName } from "@/lib/gamification";
 import { XpGainAnimation, BadgeUnlockAnimation, LevelUpAnimation } from "@/components/GamificationPanel";
 import LoadingScreen from "@/components/LoadingScreen";
-import { useAuth, getUserId } from "@/lib/auth-context";
+import { useAuth } from "@/lib/auth-context";
 import { AuthGuard } from "@/components/auth-guard";
 
 // All statuses for filtering (including inactive ones)
@@ -117,8 +117,9 @@ function formatLastCheckin(dateString: string | null): string {
 
 function HoyPageContent() {
   const router = useRouter();
-  const { user, signOut } = useAuth();
-  const userId = getUserId(user);
+  const { user, loading: authLoading, signOut } = useAuth();
+  // Use actual user ID only, not demo-user fallback
+  const userId = user?.id;
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
@@ -170,6 +171,9 @@ function HoyPageContent() {
   // WhatsApp (Kapso) notification state
   const [whatsappEnabled, setWhatsappEnabled] = useState<boolean | null>(null);
   const [whatsappLoading, setWhatsappLoading] = useState(false);
+  const [whatsappConfigured, setWhatsappConfigured] = useState(false); // Has phone number configured
+  const [showWhatsappModal, setShowWhatsappModal] = useState(false);
+  const [whatsappPhoneInput, setWhatsappPhoneInput] = useState("");
 
   // Stats explanation tooltip
   const [showStatsHelp, setShowStatsHelp] = useState(false);
@@ -228,21 +232,28 @@ function HoyPageContent() {
 
   // Check WhatsApp notification status on mount
   useEffect(() => {
-    if (!userId) return;
+    if (authLoading || !userId) return;
     const checkWhatsappStatus = async () => {
       try {
         const { data } = await supabase
           .from("whatsapp_config")
-          .select("is_active")
+          .select("is_active, phone_number")
           .eq("user_id", userId)
           .single();
-        setWhatsappEnabled(data?.is_active ?? false);
+        if (data?.phone_number) {
+          setWhatsappConfigured(true);
+          setWhatsappEnabled(data.is_active ?? false);
+        } else {
+          setWhatsappConfigured(false);
+          setWhatsappEnabled(false);
+        }
       } catch {
+        setWhatsappConfigured(false);
         setWhatsappEnabled(false);
       }
     };
     checkWhatsappStatus();
-  }, [userId]);
+  }, [userId, authLoading]);
 
   // Handler to activate push notifications
   // Web Push Flow:
@@ -347,6 +358,12 @@ function HoyPageContent() {
 
   // Toggle WhatsApp notifications
   const handleToggleWhatsapp = async () => {
+    // If not configured, show the phone input modal
+    if (!whatsappConfigured) {
+      setShowWhatsappModal(true);
+      return;
+    }
+
     if (whatsappEnabled === null) return;
     setWhatsappLoading(true);
 
@@ -370,8 +387,48 @@ function HoyPageContent() {
     }
   };
 
+  // Save WhatsApp phone number configuration
+  const handleSaveWhatsappPhone = async () => {
+    if (!whatsappPhoneInput.trim()) return;
+
+    // Format phone number: ensure it starts with country code
+    let phone = whatsappPhoneInput.trim().replace(/\s+/g, "");
+    if (!phone.startsWith("+")) {
+      // Assume Peru if no country code (user can adjust)
+      phone = "+51" + phone.replace(/^0+/, "");
+    }
+
+    setWhatsappLoading(true);
+    try {
+      // Use the same Kapso phone number ID for all users (it's the business number)
+      const { error } = await supabase
+        .from("whatsapp_config")
+        .upsert({
+          user_id: userId,
+          phone_number: phone,
+          kapso_phone_number_id: "12083619224", // Kapso business number ID
+          is_active: true,
+        });
+
+      if (error) {
+        showToast("Error al guardar número");
+      } else {
+        setWhatsappConfigured(true);
+        setWhatsappEnabled(true);
+        setShowWhatsappModal(false);
+        setWhatsappPhoneInput("");
+        showToast("¡Recordatorios WhatsApp activados!");
+      }
+    } catch {
+      showToast("Error al guardar número");
+    } finally {
+      setWhatsappLoading(false);
+    }
+  };
+
   const fetchData = useCallback(async () => {
-    if (!userId) return;
+    // Wait for auth to finish and have a real user
+    if (authLoading || !userId) return;
 
     try {
       // First check if user has any experiments at all (excluding deleted)
@@ -449,7 +506,7 @@ function HoyPageContent() {
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, authLoading]);
 
   useEffect(() => {
     fetchData();
@@ -789,34 +846,34 @@ function HoyPageContent() {
             )}
 
             {/* WhatsApp notification toggle */}
-            {whatsappEnabled !== null && (
-              <div className="relative group">
-                <button
-                  onClick={handleToggleWhatsapp}
-                  disabled={whatsappLoading}
-                  className={`p-1.5 sm:p-2 rounded-lg transition-all disabled:opacity-50 ${
-                    whatsappEnabled
-                      ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
-                      : "bg-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-700"
-                  }`}
-                  title={whatsappEnabled ? "Recordatorios activos" : "Activar recordatorios"}
-                >
-                  {whatsappLoading ? (
-                    <div className="w-4 h-4 border-2 border-slate-600 border-t-slate-300 rounded-full animate-spin" />
-                  ) : (
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                    </svg>
-                  )}
-                </button>
-                {/* Tooltip */}
-                <div className="absolute right-0 top-full mt-2 w-48 p-2 bg-slate-800 border border-slate-700 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 text-xs text-slate-300">
-                  {whatsappEnabled
+            <div className="relative group">
+              <button
+                onClick={handleToggleWhatsapp}
+                disabled={whatsappLoading}
+                className={`p-1.5 sm:p-2 rounded-lg transition-all disabled:opacity-50 ${
+                  whatsappEnabled
+                    ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                    : "bg-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-700"
+                }`}
+                title={whatsappEnabled ? "Recordatorios activos" : "Activar recordatorios"}
+              >
+                {whatsappLoading ? (
+                  <div className="w-4 h-4 border-2 border-slate-600 border-t-slate-300 rounded-full animate-spin" />
+                ) : (
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                  </svg>
+                )}
+              </button>
+              {/* Tooltip */}
+              <div className="absolute right-0 top-full mt-2 w-48 p-2 bg-slate-800 border border-slate-700 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 text-xs text-slate-300">
+                {!whatsappConfigured
+                  ? "Configura tu número para recibir recordatorios por WhatsApp."
+                  : whatsappEnabled
                     ? "Vicu te envía recordatorios por WhatsApp. Click para pausar."
                     : "Activa recordatorios por WhatsApp para que Vicu te motive a avanzar."}
-                </div>
               </div>
-            )}
+            </div>
 
             {/* Sign out button */}
             <div className="relative group">
@@ -1255,6 +1312,65 @@ function HoyPageContent() {
           newLevel={levelUpAnimation.level}
           onComplete={() => setLevelUpAnimation({ show: false, level: 0 })}
         />
+      )}
+
+      {/* WhatsApp Phone Number Modal */}
+      {showWhatsappModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 max-w-sm w-full space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-emerald-500/20 rounded-lg">
+                <svg className="w-6 h-6 text-emerald-400" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                </svg>
+              </div>
+              <div>
+                <h3 className="font-semibold text-white">Recordatorios WhatsApp</h3>
+                <p className="text-sm text-slate-400">Vicu te enviará mensajes para motivarte</p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm text-slate-300">Tu número de WhatsApp</label>
+              <input
+                type="tel"
+                value={whatsappPhoneInput}
+                onChange={(e) => setWhatsappPhoneInput(e.target.value)}
+                placeholder="+51 999 999 999"
+                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              />
+              <p className="text-xs text-slate-500">Incluye código de país (ej: +51 para Perú)</p>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => {
+                  setShowWhatsappModal(false);
+                  setWhatsappPhoneInput("");
+                }}
+                className="flex-1 px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveWhatsappPhone}
+                disabled={!whatsappPhoneInput.trim() || whatsappLoading}
+                className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {whatsappLoading ? (
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                    </svg>
+                    Activar
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
