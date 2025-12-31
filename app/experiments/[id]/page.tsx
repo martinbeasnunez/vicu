@@ -2220,6 +2220,77 @@ export default function ExperimentPage() {
               const stageProgress = { isComplete: totalSteps > 0 && completedSteps === totalSteps };
               const stageTransition = getRecommendationAction(currentStage, stageProgress, vicuRecommendation?.action);
 
+              // Loading state: show progress card during transition
+              if (transitionPhase !== "idle") {
+                const targetStage = acceptedStatus || "siguiente etapa";
+                return (
+                  <div className="card-premium px-3 sm:px-5 py-4 sm:py-5 border-indigo-500/20">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-slate-50">Preparando nueva etapa</h3>
+                        <p className="text-sm text-slate-400">
+                          {transitionPhase === "updating" && "Cambiando estado..."}
+                          {transitionPhase === "generating_steps" && "Generando nuevos pasos..."}
+                          {transitionPhase === "generating_recommendation" && "Preparando recomendación..."}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {/* Progress steps */}
+                      <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5">
+                        <div className="space-y-2.5">
+                          <div className="flex items-center gap-2.5">
+                            {transitionPhase === "updating" ? (
+                              <div className="w-4 h-4 border-2 border-indigo-400/30 border-t-indigo-400 rounded-full animate-spin" />
+                            ) : (
+                              <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                            <span className={`text-sm ${transitionPhase === "updating" ? "text-slate-200" : "text-slate-400"}`}>
+                              Cambiando a {typeof targetStage === "string" && STATUS_LABELS[targetStage as ExperimentStage] ? STATUS_LABELS[targetStage as ExperimentStage] : targetStage}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2.5">
+                            {transitionPhase === "generating_steps" ? (
+                              <div className="w-4 h-4 border-2 border-indigo-400/30 border-t-indigo-400 rounded-full animate-spin" />
+                            ) : transitionPhase === "generating_recommendation" ? (
+                              <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            ) : (
+                              <div className="w-4 h-4 rounded-full border-2 border-slate-600" />
+                            )}
+                            <span className={`text-sm ${transitionPhase === "generating_steps" ? "text-slate-200" : transitionPhase === "generating_recommendation" ? "text-slate-400" : "text-slate-500"}`}>
+                              Generando nuevos pasos para esta etapa
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2.5">
+                            {transitionPhase === "generating_recommendation" ? (
+                              <div className="w-4 h-4 border-2 border-indigo-400/30 border-t-indigo-400 rounded-full animate-spin" />
+                            ) : (
+                              <div className="w-4 h-4 rounded-full border-2 border-slate-600" />
+                            )}
+                            <span className={`text-sm ${transitionPhase === "generating_recommendation" ? "text-slate-200" : "text-slate-500"}`}>
+                              Preparando recomendación de Vicu
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Context message */}
+                      <p className="text-xs text-slate-500 text-center">
+                        Esto puede tomar unos segundos...
+                      </p>
+                    </div>
+                  </div>
+                );
+              }
+
               // Achieved/Discarded state: show summary only
               if (currentStage === "achieved" || currentStage === "discarded") {
                 return (
