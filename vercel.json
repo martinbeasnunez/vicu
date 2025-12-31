@@ -1,2 +1,8 @@
 {
+  "crons": [
+    {
+      "path": "/api/kapso/run-daily-reminders",
+      "schedule": "0 14 * * *"
+    }
+  ]
 }
