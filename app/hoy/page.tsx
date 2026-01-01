@@ -1330,10 +1330,28 @@ function HoyPageContent() {
               </div>
             </div>
 
-            {/* Step 1: Send Hola to Vicu */}
+            {/* Step 1: Enter phone number */}
             <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
               <div className="flex items-center gap-2">
                 <span className="flex items-center justify-center w-6 h-6 bg-emerald-500 text-white text-sm font-bold rounded-full">1</span>
+                <span className="text-sm font-medium text-white">Ingresa tu número</span>
+              </div>
+              <div className="pl-8 space-y-2">
+                <input
+                  type="tel"
+                  value={whatsappPhoneInput}
+                  onChange={(e) => setWhatsappPhoneInput(e.target.value)}
+                  placeholder="+51 999 999 999"
+                  className="w-full px-4 py-3 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                />
+                <p className="text-xs text-slate-500">Incluye código de país (ej: +51 para Perú)</p>
+              </div>
+            </div>
+
+            {/* Step 2: Send Hola to Vicu */}
+            <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="flex items-center justify-center w-6 h-6 bg-emerald-500 text-white text-sm font-bold rounded-full">2</span>
                 <span className="text-sm font-medium text-white">Envía "Hola" a Vicu</span>
               </div>
               <p className="text-xs text-slate-400 pl-8">
@@ -1350,24 +1368,6 @@ function HoyPageContent() {
                 </svg>
                 Abrir WhatsApp
               </a>
-            </div>
-
-            {/* Step 2: Enter phone number */}
-            <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
-              <div className="flex items-center gap-2">
-                <span className="flex items-center justify-center w-6 h-6 bg-emerald-500 text-white text-sm font-bold rounded-full">2</span>
-                <span className="text-sm font-medium text-white">Ingresa tu número</span>
-              </div>
-              <div className="pl-8 space-y-2">
-                <input
-                  type="tel"
-                  value={whatsappPhoneInput}
-                  onChange={(e) => setWhatsappPhoneInput(e.target.value)}
-                  placeholder="+51 999 999 999"
-                  className="w-full px-4 py-3 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                />
-                <p className="text-xs text-slate-500">Incluye código de país (ej: +51 para Perú)</p>
-              </div>
             </div>
 
             <div className="flex gap-3 pt-2">
