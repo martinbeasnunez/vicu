@@ -76,21 +76,21 @@ interface MoverModalState {
 const STATE_OPTIONS: { value: CurrentState; label: string; icon: string; description: string }[] = [
   {
     value: "not_started",
-    label: "No he empezado aún",
+    label: "No he empezado",
     icon: "🚀",
-    description: "Dame un empujón pequeño para arrancar",
+    description: "Procrastinando, sin claridad, o no sé por dónde empezar",
   },
   {
     value: "stuck",
     label: "Me trabé",
     icon: "🤔",
-    description: "Necesito una forma de desatorarme",
+    description: "Overthinking, perfeccionismo, o perdí el momentum",
   },
   {
     value: "going_well",
     label: "Voy bien",
     icon: "💪",
-    description: "Quiero seguir empujando",
+    description: "Tengo ritmo y quiero el siguiente paso",
   },
 ];
 
