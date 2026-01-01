@@ -48,7 +48,7 @@ export default function LoginPage() {
             <span className="text-white text-2xl font-bold">v</span>
           </div>
           <h1 className="text-2xl font-bold text-white">Vicu</h1>
-          <p className="text-slate-400 mt-1">Tu MBA de bolsillo</p>
+          <p className="text-slate-400 mt-1">Logra tus metas, un día a la vez</p>
         </div>
 
         {/* Login form */}
