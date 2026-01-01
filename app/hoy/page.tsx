@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -17,6 +17,29 @@ import { XpGainAnimation, BadgeUnlockAnimation, LevelUpAnimation } from "@/compo
 import LoadingScreen from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth-context";
 import { AuthGuard } from "@/components/auth-guard";
+
+// Country codes for phone selector
+const COUNTRY_CODES = [
+  { code: "+51", country: "Perú", flag: "🇵🇪" },
+  { code: "+52", country: "México", flag: "🇲🇽" },
+  { code: "+54", country: "Argentina", flag: "🇦🇷" },
+  { code: "+55", country: "Brasil", flag: "🇧🇷" },
+  { code: "+56", country: "Chile", flag: "🇨🇱" },
+  { code: "+57", country: "Colombia", flag: "🇨🇴" },
+  { code: "+58", country: "Venezuela", flag: "🇻🇪" },
+  { code: "+593", country: "Ecuador", flag: "🇪🇨" },
+  { code: "+591", country: "Bolivia", flag: "🇧🇴" },
+  { code: "+595", country: "Paraguay", flag: "🇵🇾" },
+  { code: "+598", country: "Uruguay", flag: "🇺🇾" },
+  { code: "+506", country: "Costa Rica", flag: "🇨🇷" },
+  { code: "+507", country: "Panamá", flag: "🇵🇦" },
+  { code: "+503", country: "El Salvador", flag: "🇸🇻" },
+  { code: "+502", country: "Guatemala", flag: "🇬🇹" },
+  { code: "+504", country: "Honduras", flag: "🇭🇳" },
+  { code: "+505", country: "Nicaragua", flag: "🇳🇮" },
+  { code: "+1", country: "Estados Unidos", flag: "🇺🇸" },
+  { code: "+34", country: "España", flag: "🇪🇸" },
+];
 
 // All statuses for filtering (including inactive ones)
 const ALL_STATUSES: ExperimentStatus[] = ["queued", "building", "testing", "adjusting", "achieved", "paused", "discarded"];
@@ -175,9 +198,25 @@ function HoyPageContent() {
   const [showWhatsappModal, setShowWhatsappModal] = useState(false);
   const [whatsappPhoneInput, setWhatsappPhoneInput] = useState("");
   const [whatsappStep2Done, setWhatsappStep2Done] = useState(false); // Track if user clicked "Abrir WhatsApp"
+  const [selectedCountry, setSelectedCountry] = useState(COUNTRY_CODES[0]); // Default to Peru
+  const [showCountryDropdown, setShowCountryDropdown] = useState(false);
+  const [countrySearch, setCountrySearch] = useState("");
+  const countryDropdownRef = useRef<HTMLDivElement>(null);
 
   // Stats explanation tooltip
   const [showStatsHelp, setShowStatsHelp] = useState(false);
+
+  // Close country dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (countryDropdownRef.current && !countryDropdownRef.current.contains(event.target as Node)) {
+        setShowCountryDropdown(false);
+        setCountrySearch("");
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Check notification availability and permission on mount
   useEffect(() => {
@@ -384,11 +423,14 @@ function HoyPageContent() {
 
     setWhatsappLoading(true);
     try {
+      // Combine country code with phone number
+      const fullPhoneNumber = selectedCountry.code + whatsappPhoneInput.replace(/^0+/, "").trim();
+
       // Use API endpoint to save (bypasses RLS issues)
       const response = await fetch("/api/whatsapp/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone_number: whatsappPhoneInput }),
+        body: JSON.stringify({ phone_number: fullPhoneNumber }),
       });
 
       const data = await response.json();
@@ -1319,7 +1361,7 @@ function HoyPageContent() {
               </div>
             </div>
 
-            {/* Step 1: Enter phone number */}
+            {/* Step 1: Enter phone number with country selector */}
             <div className={`border rounded-lg p-4 space-y-3 transition-all ${
               whatsappPhoneInput.trim()
                 ? "bg-emerald-500/10 border-emerald-500/30"
@@ -1340,62 +1382,134 @@ function HoyPageContent() {
                 </span>
               </div>
               <div className="pl-8 space-y-2">
-                <input
-                  type="tel"
-                  value={whatsappPhoneInput}
-                  onChange={(e) => setWhatsappPhoneInput(e.target.value)}
-                  placeholder="+51 999 999 999"
-                  className="w-full px-4 py-3 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                />
-                <p className="text-xs text-slate-500">Incluye código de país (ej: +51 para Perú)</p>
+                {/* Phone input with country selector */}
+                <div className="flex gap-2">
+                  {/* Country selector dropdown */}
+                  <div className="relative" ref={countryDropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => setShowCountryDropdown(!showCountryDropdown)}
+                      className="flex items-center gap-1.5 px-3 py-3 bg-slate-800 border border-slate-600 rounded-lg text-white hover:bg-slate-700 transition-colors min-w-[90px]"
+                    >
+                      <span className="text-lg">{selectedCountry.flag}</span>
+                      <span className="text-sm">{selectedCountry.code}</span>
+                      <svg className={`w-3.5 h-3.5 text-slate-400 transition-transform ${showCountryDropdown ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+
+                    {/* Dropdown menu */}
+                    {showCountryDropdown && (
+                      <div className="absolute top-full left-0 mt-1 w-64 bg-slate-800 border border-slate-600 rounded-lg shadow-xl z-50 overflow-hidden">
+                        {/* Search input */}
+                        <div className="p-2 border-b border-slate-700">
+                          <input
+                            type="text"
+                            value={countrySearch}
+                            onChange={(e) => setCountrySearch(e.target.value)}
+                            placeholder="Buscar país..."
+                            className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-md text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                            autoFocus
+                          />
+                        </div>
+                        {/* Country list */}
+                        <div className="max-h-48 overflow-y-auto">
+                          {COUNTRY_CODES
+                            .filter((c) =>
+                              c.country.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                              c.code.includes(countrySearch)
+                            )
+                            .map((country) => (
+                              <button
+                                key={country.code}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedCountry(country);
+                                  setShowCountryDropdown(false);
+                                  setCountrySearch("");
+                                }}
+                                className={`w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-slate-700 transition-colors ${
+                                  selectedCountry.code === country.code ? "bg-slate-700" : ""
+                                }`}
+                              >
+                                <span className="text-lg">{country.flag}</span>
+                                <span className="text-sm text-white flex-1">{country.country}</span>
+                                <span className="text-xs text-slate-400">{country.code}</span>
+                              </button>
+                            ))}
+                          {COUNTRY_CODES.filter((c) =>
+                            c.country.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                            c.code.includes(countrySearch)
+                          ).length === 0 && (
+                            <div className="px-3 py-4 text-center text-sm text-slate-500">
+                              No se encontró el país
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Phone number input */}
+                  <input
+                    type="tel"
+                    value={whatsappPhoneInput}
+                    onChange={(e) => setWhatsappPhoneInput(e.target.value.replace(/[^0-9\s]/g, ""))}
+                    placeholder="999 999 999"
+                    className="flex-1 px-4 py-3 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  />
+                </div>
+                <p className="text-xs text-slate-500">Solo el número, sin el código de país</p>
               </div>
             </div>
 
-            {/* Step 2: Send Hola to Vicu */}
-            <div className={`border rounded-lg p-4 space-y-3 transition-all ${
-              whatsappStep2Done
-                ? "bg-emerald-500/10 border-emerald-500/30"
-                : "bg-slate-800/50 border-slate-700"
-            }`}>
-              <div className="flex items-center gap-2">
-                {whatsappStep2Done ? (
-                  <span className="flex items-center justify-center w-6 h-6 bg-emerald-500 text-white rounded-full">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
+            {/* Step 2: Send Hola to Vicu - Only shown after step 1 is complete */}
+            {whatsappPhoneInput.trim() && (
+              <div className={`border rounded-lg p-4 space-y-3 transition-all animate-fade-in ${
+                whatsappStep2Done
+                  ? "bg-emerald-500/10 border-emerald-500/30"
+                  : "bg-slate-800/50 border-slate-700"
+              }`}>
+                <div className="flex items-center gap-2">
+                  {whatsappStep2Done ? (
+                    <span className="flex items-center justify-center w-6 h-6 bg-emerald-500 text-white rounded-full">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </span>
+                  ) : (
+                    <span className="flex items-center justify-center w-6 h-6 bg-emerald-500 text-white text-sm font-bold rounded-full animate-pulse">2</span>
+                  )}
+                  <span className={`text-sm font-medium ${whatsappStep2Done ? "text-emerald-400" : "text-white"}`}>
+                    Envía "Hola" a Vicu
                   </span>
-                ) : (
-                  <span className="flex items-center justify-center w-6 h-6 bg-slate-600 text-white text-sm font-bold rounded-full">2</span>
-                )}
-                <span className={`text-sm font-medium ${whatsappStep2Done ? "text-emerald-400" : "text-white"}`}>
-                  Envía "Hola" a Vicu
-                </span>
+                </div>
+                <p className="text-xs text-slate-400 pl-8">
+                  WhatsApp requiere que inicies la conversación. Abre WhatsApp y envía el mensaje.
+                </p>
+                <div className="pl-8 flex items-center gap-3">
+                  <a
+                    href="https://wa.me/12083619224?text=Hola%20Vicu%2C%20quiero%20activar%20mis%20recordatorios"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setWhatsappStep2Done(true)}
+                    className={`inline-flex items-center gap-2 px-4 py-2 text-white text-sm rounded-lg transition-colors ${
+                      whatsappStep2Done
+                        ? "bg-emerald-700 hover:bg-emerald-600"
+                        : "bg-emerald-600 hover:bg-emerald-500"
+                    }`}
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                    </svg>
+                    {whatsappStep2Done ? "Enviado" : "Abrir WhatsApp"}
+                  </a>
+                  {whatsappStep2Done && (
+                    <span className="text-xs text-emerald-400">Listo</span>
+                  )}
+                </div>
               </div>
-              <p className="text-xs text-slate-400 pl-8">
-                WhatsApp requiere que inicies la conversación. Abre WhatsApp y envía el mensaje.
-              </p>
-              <div className="pl-8 flex items-center gap-3">
-                <a
-                  href="https://wa.me/12083619224?text=Hola%20Vicu%2C%20quiero%20activar%20mis%20recordatorios"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={() => setWhatsappStep2Done(true)}
-                  className={`inline-flex items-center gap-2 px-4 py-2 text-white text-sm rounded-lg transition-colors ${
-                    whatsappStep2Done
-                      ? "bg-emerald-700 hover:bg-emerald-600"
-                      : "bg-emerald-600 hover:bg-emerald-500"
-                  }`}
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                  </svg>
-                  {whatsappStep2Done ? "Enviado" : "Abrir WhatsApp"}
-                </a>
-                {whatsappStep2Done && (
-                  <span className="text-xs text-emerald-400">Listo</span>
-                )}
-              </div>
-            </div>
+            )}
 
             {/* Progress indicator */}
             <div className="flex items-center justify-center gap-2 py-1">
@@ -1409,6 +1523,8 @@ function HoyPageContent() {
                   setShowWhatsappModal(false);
                   setWhatsappPhoneInput("");
                   setWhatsappStep2Done(false);
+                  setCountrySearch("");
+                  setShowCountryDropdown(false);
                 }}
                 className="flex-1 px-4 py-2.5 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition-colors"
               >
