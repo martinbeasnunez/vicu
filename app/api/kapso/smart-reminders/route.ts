@@ -54,8 +54,6 @@ interface DayContext {
 // Configuration
 // =============================================================================
 
-const DEFAULT_USER_ID = "demo-user";
-
 const SLOT_SCHEDULE: Record<SlotType, [number, number]> = {
   MORNING: [8, 0],
   MIDMORNING: [11, 0],
@@ -133,7 +131,7 @@ function calculateUrgencyScore(obj: {
   return score;
 }
 
-async function getDayContext(): Promise<DayContext> {
+async function getDayContext(userId: string): Promise<DayContext> {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayStr = today.toISOString();
@@ -141,6 +139,7 @@ async function getDayContext(): Promise<DayContext> {
   const { data: experiments } = await supabaseServer
     .from("experiments")
     .select("id, title, status, created_at, deadline, streak_days, last_checkin_at")
+    .eq("user_id", userId)
     .is("deleted_at", null)
     .in("status", ["queued", "building", "testing", "adjusting"])
     .order("created_at", { ascending: false })
@@ -536,98 +535,130 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Smart Reminders] Processing slot: ${slot}`);
 
-    // Check if already sent (unless forced)
-    if (!forcedSlot) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      const { data: existing } = await supabaseServer
-        .from("whatsapp_reminders")
-        .select("id")
-        .eq("user_id", DEFAULT_USER_ID)
-        .eq("slot_type", slot)
-        .gte("sent_at", today.toISOString())
-        .limit(1);
-
-      if (existing && existing.length > 0) {
-        return NextResponse.json({
-          success: true,
-          skipped: true,
-          reason: `Slot ${slot} already sent today`,
-        });
-      }
-    }
-
-    // Get WhatsApp config
-    const { data: config } = await supabaseServer
+    // Get ALL users with WhatsApp enabled
+    const { data: activeConfigs } = await supabaseServer
       .from("whatsapp_config")
       .select("*")
-      .eq("user_id", DEFAULT_USER_ID)
-      .eq("is_active", true)
-      .single();
+      .eq("is_active", true);
 
-    if (!config) {
+    if (!activeConfigs || activeConfigs.length === 0) {
       return NextResponse.json({
-        success: false,
-        error: "No active WhatsApp configuration",
-      }, { status: 404 });
-    }
-
-    const whatsappConfig = config as WhatsAppConfig;
-
-    // Get context
-    const ctx = await getDayContext();
-
-    // Build message based on slot
-    let result: { message: string; targetExp: string | null };
-
-    switch (slot) {
-      case "MORNING":
-        result = buildMorningMessage(ctx);
-        break;
-      case "MIDMORNING":
-        result = buildMidmorningMessage(ctx);
-        break;
-      case "AFTERNOON":
-        result = buildAfternoonMessage(ctx);
-        break;
-      case "EVENING":
-        result = buildEveningMessage(ctx);
-        break;
-      case "NIGHT":
-        result = buildNightMessage(ctx);
-        break;
-    }
-
-    // Send message
-    const sendResult = await sendWhatsAppMessage(whatsappConfig.phone_number, result.message);
-
-    if (!sendResult.success) {
-      return NextResponse.json({
-        success: false,
-        error: sendResult.error,
-      }, { status: 500 });
-    }
-
-    // Record reminder
-    await supabaseServer
-      .from("whatsapp_reminders")
-      .insert({
-        user_id: DEFAULT_USER_ID,
-        experiment_id: result.targetExp,
-        message_content: result.message,
-        status: "sent",
-        kapso_message_id: sendResult.messageId,
-        slot_type: slot,
+        success: true,
+        skipped: true,
+        reason: "No users with active WhatsApp configuration",
       });
+    }
+
+    console.log(`[Smart Reminders] Found ${activeConfigs.length} users with WhatsApp enabled`);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = today.toISOString();
+
+    const results: Array<{
+      user_id: string;
+      success: boolean;
+      skipped?: boolean;
+      reason?: string;
+      message_id?: string;
+    }> = [];
+
+    // Process each user
+    for (const config of activeConfigs) {
+      const userId = config.user_id;
+      const whatsappConfig = config as WhatsAppConfig;
+
+      // Check if already sent today for this user (unless forced)
+      if (!forcedSlot) {
+        const { data: existing } = await supabaseServer
+          .from("whatsapp_reminders")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("slot_type", slot)
+          .gte("sent_at", todayStr)
+          .limit(1);
+
+        if (existing && existing.length > 0) {
+          results.push({
+            user_id: userId,
+            success: true,
+            skipped: true,
+            reason: `Slot ${slot} already sent today`,
+          });
+          continue;
+        }
+      }
+
+      // Get context for this specific user
+      const ctx = await getDayContext(userId);
+
+      // Build message based on slot
+      let result: { message: string; targetExp: string | null };
+
+      switch (slot) {
+        case "MORNING":
+          result = buildMorningMessage(ctx);
+          break;
+        case "MIDMORNING":
+          result = buildMidmorningMessage(ctx);
+          break;
+        case "AFTERNOON":
+          result = buildAfternoonMessage(ctx);
+          break;
+        case "EVENING":
+          result = buildEveningMessage(ctx);
+          break;
+        case "NIGHT":
+          result = buildNightMessage(ctx);
+          break;
+      }
+
+      // Send message
+      const sendResult = await sendWhatsAppMessage(whatsappConfig.phone_number, result.message);
+
+      if (!sendResult.success) {
+        console.error(`[Smart Reminders] Failed to send to user ${userId}:`, sendResult.error);
+        results.push({
+          user_id: userId,
+          success: false,
+          reason: sendResult.error,
+        });
+        continue;
+      }
+
+      // Record reminder
+      await supabaseServer
+        .from("whatsapp_reminders")
+        .insert({
+          user_id: userId,
+          experiment_id: result.targetExp,
+          message_content: result.message,
+          status: "sent",
+          kapso_message_id: sendResult.messageId,
+          slot_type: slot,
+        });
+
+      results.push({
+        user_id: userId,
+        success: true,
+        message_id: sendResult.messageId,
+      });
+
+      console.log(`[Smart Reminders] Sent ${slot} to user ${userId}`);
+    }
+
+    const sent = results.filter(r => r.success && !r.skipped).length;
+    const skipped = results.filter(r => r.skipped).length;
+    const failed = results.filter(r => !r.success).length;
 
     return NextResponse.json({
       success: true,
       slot,
-      message_id: sendResult.messageId,
-      target_objective: result.targetExp,
-      objectives_count: ctx.objectives.length,
-      done_today: ctx.total_done_today,
+      total_users: activeConfigs.length,
+      sent,
+      skipped,
+      failed,
+      results,
     });
   } catch (error) {
     console.error("[Smart Reminders] Error:", error);
@@ -638,27 +669,51 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET() {
-  const ctx = await getDayContext();
-  const currentSlot = getCurrentSlot();
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const userId = searchParams.get("user_id");
 
+  const currentSlot = getCurrentSlot();
   const now = new Date();
   const bogotaOffset = -5 * 60;
   const bogotaTime = new Date(now.getTime() + (bogotaOffset - now.getTimezoneOffset()) * 60000);
 
+  // Get all active WhatsApp users
+  const { data: activeConfigs } = await supabaseServer
+    .from("whatsapp_config")
+    .select("user_id, phone_number")
+    .eq("is_active", true);
+
+  // If user_id provided, show their objectives
+  if (userId) {
+    const ctx = await getDayContext(userId);
+    return NextResponse.json({
+      current_slot: currentSlot,
+      bogota_time: bogotaTime.toISOString(),
+      schedule: SLOT_SCHEDULE,
+      user_id: userId,
+      objectives: ctx.objectives.map(o => ({
+        id: o.id,
+        title: o.title,
+        urgency_score: o.urgency_score,
+        days_without_progress: o.days_without_progress,
+        streak_days: o.streak_days,
+        pending_steps: o.pending_steps.length,
+        done_today: o.done_today,
+      })),
+      total_done_today: ctx.total_done_today,
+    });
+  }
+
+  // Otherwise show summary of all active users
   return NextResponse.json({
     current_slot: currentSlot,
     bogota_time: bogotaTime.toISOString(),
     schedule: SLOT_SCHEDULE,
-    objectives: ctx.objectives.map(o => ({
-      id: o.id,
-      title: o.title,
-      urgency_score: o.urgency_score,
-      days_without_progress: o.days_without_progress,
-      streak_days: o.streak_days,
-      pending_steps: o.pending_steps.length,
-      done_today: o.done_today,
-    })),
-    total_done_today: ctx.total_done_today,
+    active_whatsapp_users: activeConfigs?.length || 0,
+    users: activeConfigs?.map(c => ({
+      user_id: c.user_id,
+      phone: c.phone_number?.slice(-4) ? `***${c.phone_number.slice(-4)}` : "unknown",
+    })) || [],
   });
 }
