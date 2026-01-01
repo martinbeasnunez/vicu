@@ -47,21 +47,21 @@ interface MoverModalState {
 const STATE_OPTIONS: { value: CurrentState; label: string; icon: string; description: string }[] = [
   {
     value: "not_started",
-    label: "No he empezado aún",
+    label: "No he empezado",
     icon: "🚀",
-    description: "Dame un empujón pequeño para arrancar",
+    description: "Procrastinando, sin claridad, o no sé por dónde empezar",
   },
   {
     value: "stuck",
     label: "Me trabé",
     icon: "🤔",
-    description: "Necesito una forma de desatorarme",
+    description: "Overthinking, perfeccionismo, o perdí el momentum",
   },
   {
     value: "going_well",
     label: "Voy bien",
     icon: "💪",
-    description: "Quiero seguir empujando",
+    description: "Tengo ritmo y quiero el siguiente paso",
   },
 ];
 
@@ -888,34 +888,40 @@ function HoyPageContent() {
 
         {/* Status Filter Chips */}
         {experiments.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 sm:gap-2 -mx-1 px-1 overflow-x-auto pb-1 scrollbar-hide">
-            <button
-              onClick={() => setStatusFilter("all")}
-              className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${
-                statusFilter === "all"
-                  ? FILTER_CHIP_COLORS.all.active
-                  : FILTER_CHIP_COLORS.all.inactive
-              }`}
-            >
-              Todos ({experiments.length})
-            </button>
-            {ALL_STATUSES.map((status) => {
-              const count = statusCounts[status] || 0;
-              if (count === 0) return null;
-              return (
-                <button
-                  key={status}
-                  onClick={() => setStatusFilter(status)}
-                  className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${
-                    statusFilter === status
-                      ? FILTER_CHIP_COLORS[status].active
-                      : FILTER_CHIP_COLORS[status].inactive
-                  }`}
-                >
-                  {STATUS_LABELS[status]} ({count})
-                </button>
-              );
-            })}
+          <div className="relative -mx-3 xs:-mx-4 sm:-mx-6">
+            {/* Gradient fade on edges for scroll indication */}
+            <div className="absolute left-0 top-0 bottom-0 w-4 bg-gradient-to-r from-slate-900 to-transparent z-10 pointer-events-none sm:hidden" />
+            <div className="absolute right-0 top-0 bottom-0 w-4 bg-gradient-to-l from-slate-900 to-transparent z-10 pointer-events-none sm:hidden" />
+
+            <div className="flex gap-1.5 sm:gap-2 px-3 xs:px-4 sm:px-6 overflow-x-auto pb-2 scrollbar-hide sm:flex-wrap">
+              <button
+                onClick={() => setStatusFilter("all")}
+                className={`px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${
+                  statusFilter === "all"
+                    ? FILTER_CHIP_COLORS.all.active
+                    : FILTER_CHIP_COLORS.all.inactive
+                }`}
+              >
+                Todos ({experiments.length})
+              </button>
+              {ALL_STATUSES.map((status) => {
+                const count = statusCounts[status] || 0;
+                if (count === 0) return null;
+                return (
+                  <button
+                    key={status}
+                    onClick={() => setStatusFilter(status)}
+                    className={`px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${
+                      statusFilter === status
+                        ? FILTER_CHIP_COLORS[status].active
+                        : FILTER_CHIP_COLORS[status].inactive
+                    }`}
+                  >
+                    {STATUS_LABELS[status]} ({count})
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 
