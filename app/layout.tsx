@@ -18,8 +18,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Vicu - Tu MBA de bolsillo",
-  description: "Diseña y ejecuta experimentos de growth con IA",
+  title: "Vicu - Logra tus metas, un día a la vez",
+  description: "Tu compañero para lograr metas con pequeños pasos diarios",
 };
 
 export default function RootLayout({
