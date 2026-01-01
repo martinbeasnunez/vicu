@@ -235,12 +235,9 @@ function HoyPageContent() {
     if (authLoading || !userId) return;
     const checkWhatsappStatus = async () => {
       try {
-        const { data } = await supabase
-          .from("whatsapp_config")
-          .select("is_active, phone_number")
-          .eq("user_id", userId)
-          .single();
-        if (data?.phone_number) {
+        const response = await fetch("/api/whatsapp/config");
+        const data = await response.json();
+        if (data.success && data.is_configured) {
           setWhatsappConfigured(true);
           setWhatsappEnabled(data.is_active ?? false);
         } else {
@@ -369,17 +366,19 @@ function HoyPageContent() {
 
     try {
       const newStatus = !whatsappEnabled;
-      const { error } = await supabase
-        .from("whatsapp_config")
-        .update({ is_active: newStatus })
-        .eq("user_id", userId);
 
-      if (error) {
-        showToast("Error al cambiar configuración");
+      if (newStatus) {
+        // Re-enable via PATCH
+        const response = await fetch("/api/whatsapp/config", { method: "PATCH" });
+        if (!response.ok) throw new Error("Failed to enable");
       } else {
-        setWhatsappEnabled(newStatus);
-        showToast(newStatus ? "Recordatorios WhatsApp activados" : "Recordatorios WhatsApp pausados");
+        // Disable via DELETE
+        const response = await fetch("/api/whatsapp/config", { method: "DELETE" });
+        if (!response.ok) throw new Error("Failed to disable");
       }
+
+      setWhatsappEnabled(newStatus);
+      showToast(newStatus ? "Recordatorios WhatsApp activados" : "Recordatorios WhatsApp pausados");
     } catch {
       showToast("Error al cambiar configuración");
     } finally {
@@ -391,27 +390,19 @@ function HoyPageContent() {
   const handleSaveWhatsappPhone = async () => {
     if (!whatsappPhoneInput.trim()) return;
 
-    // Format phone number: ensure it starts with country code
-    let phone = whatsappPhoneInput.trim().replace(/\s+/g, "");
-    if (!phone.startsWith("+")) {
-      // Assume Peru if no country code (user can adjust)
-      phone = "+51" + phone.replace(/^0+/, "");
-    }
-
     setWhatsappLoading(true);
     try {
-      // Use the same Kapso phone number ID for all users (it's the business number)
-      const { error } = await supabase
-        .from("whatsapp_config")
-        .upsert({
-          user_id: userId,
-          phone_number: phone,
-          kapso_phone_number_id: "12083619224", // Kapso business number ID
-          is_active: true,
-        });
+      // Use API endpoint to save (bypasses RLS issues)
+      const response = await fetch("/api/whatsapp/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone_number: whatsappPhoneInput }),
+      });
 
-      if (error) {
-        showToast("Error al guardar número");
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        showToast(data.error || "Error al guardar número");
       } else {
         setWhatsappConfigured(true);
         setWhatsappEnabled(true);
