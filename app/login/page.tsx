@@ -44,9 +44,11 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-indigo-500/25">
-            <span className="text-white text-2xl font-bold">v</span>
-          </div>
+          <img
+            src="/vicu-logo.png"
+            alt="Vicu"
+            className="w-20 h-20 rounded-2xl mx-auto mb-4 shadow-lg shadow-indigo-500/25"
+          />
           <h1 className="text-2xl font-bold text-white">Vicu</h1>
           <p className="text-slate-400 mt-1">Logra tus metas, un día a la vez</p>
         </div>
