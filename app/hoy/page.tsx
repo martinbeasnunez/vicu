@@ -198,6 +198,7 @@ function HoyPageContent() {
   const [showWhatsappModal, setShowWhatsappModal] = useState(false);
   const [whatsappPhoneInput, setWhatsappPhoneInput] = useState("");
   const [whatsappStep2Done, setWhatsappStep2Done] = useState(false); // Track if user clicked "Abrir WhatsApp"
+  const [whatsappStep, setWhatsappStep] = useState<1 | 2>(1); // Current step in the flow
   const [selectedCountry, setSelectedCountry] = useState(COUNTRY_CODES[0]); // Default to Peru
   const [showCountryDropdown, setShowCountryDropdown] = useState(false);
   const [countrySearch, setCountrySearch] = useState("");
@@ -417,8 +418,8 @@ function HoyPageContent() {
     }
   };
 
-  // Save WhatsApp phone number configuration
-  const handleSaveWhatsappPhone = async () => {
+  // Save WhatsApp phone number and move to step 2
+  const handleSavePhoneAndContinue = async () => {
     if (!whatsappPhoneInput.trim()) return;
 
     setWhatsappLoading(true);
@@ -438,17 +439,25 @@ function HoyPageContent() {
       if (!response.ok || !data.success) {
         showToast(data.error || "Error al guardar número");
       } else {
-        setWhatsappConfigured(true);
-        setWhatsappEnabled(true);
-        setShowWhatsappModal(false);
-        setWhatsappPhoneInput("");
-        showToast("¡Recordatorios WhatsApp activados!");
+        // Move to step 2
+        setWhatsappStep(2);
       }
     } catch {
       showToast("Error al guardar número");
     } finally {
       setWhatsappLoading(false);
     }
+  };
+
+  // Final activation after step 2
+  const handleFinalActivation = () => {
+    setWhatsappConfigured(true);
+    setWhatsappEnabled(true);
+    setShowWhatsappModal(false);
+    setWhatsappPhoneInput("");
+    setWhatsappStep(1);
+    setWhatsappStep2Done(false);
+    showToast("¡Recordatorios WhatsApp activados!");
   };
 
   const fetchData = useCallback(async () => {
@@ -1348,200 +1357,216 @@ function HoyPageContent() {
       {/* WhatsApp Phone Number Modal */}
       {showWhatsappModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 max-w-sm w-full space-y-5">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-emerald-500/20 rounded-lg">
-                <svg className="w-6 h-6 text-emerald-400" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                </svg>
-              </div>
-              <div>
-                <h3 className="font-semibold text-white">Activar Recordatorios</h3>
-                <p className="text-sm text-slate-400">Completa ambos pasos para activar</p>
-              </div>
-            </div>
-
-            {/* Step 1: Enter phone number with country selector */}
-            <div className={`border rounded-lg p-4 space-y-3 transition-all ${
-              whatsappPhoneInput.trim()
-                ? "bg-emerald-500/10 border-emerald-500/30"
-                : "bg-slate-800/50 border-slate-700"
-            }`}>
-              <div className="flex items-center gap-2">
-                {whatsappPhoneInput.trim() ? (
-                  <span className="flex items-center justify-center w-6 h-6 bg-emerald-500 text-white rounded-full">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </span>
-                ) : (
-                  <span className="flex items-center justify-center w-6 h-6 bg-slate-600 text-white text-sm font-bold rounded-full">1</span>
-                )}
-                <span className={`text-sm font-medium ${whatsappPhoneInput.trim() ? "text-emerald-400" : "text-white"}`}>
-                  Ingresa tu número
-                </span>
-              </div>
-              <div className="pl-8 space-y-2">
-                {/* Phone input with country selector */}
-                <div className="flex gap-2">
-                  {/* Country selector dropdown */}
-                  <div className="relative" ref={countryDropdownRef}>
-                    <button
-                      type="button"
-                      onClick={() => setShowCountryDropdown(!showCountryDropdown)}
-                      className="flex items-center gap-1.5 px-3 py-3 bg-slate-800 border border-slate-600 rounded-lg text-white hover:bg-slate-700 transition-colors min-w-[90px]"
-                    >
-                      <span className="text-lg">{selectedCountry.flag}</span>
-                      <span className="text-sm">{selectedCountry.code}</span>
-                      <svg className={`w-3.5 h-3.5 text-slate-400 transition-transform ${showCountryDropdown ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-
-                    {/* Dropdown menu */}
-                    {showCountryDropdown && (
-                      <div className="absolute top-full left-0 mt-1 w-64 bg-slate-800 border border-slate-600 rounded-lg shadow-xl z-50 overflow-hidden">
-                        {/* Search input */}
-                        <div className="p-2 border-b border-slate-700">
-                          <input
-                            type="text"
-                            value={countrySearch}
-                            onChange={(e) => setCountrySearch(e.target.value)}
-                            placeholder="Buscar país..."
-                            className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-md text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                            autoFocus
-                          />
-                        </div>
-                        {/* Country list */}
-                        <div className="max-h-48 overflow-y-auto">
-                          {COUNTRY_CODES
-                            .filter((c) =>
-                              c.country.toLowerCase().includes(countrySearch.toLowerCase()) ||
-                              c.code.includes(countrySearch)
-                            )
-                            .map((country) => (
-                              <button
-                                key={country.code}
-                                type="button"
-                                onClick={() => {
-                                  setSelectedCountry(country);
-                                  setShowCountryDropdown(false);
-                                  setCountrySearch("");
-                                }}
-                                className={`w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-slate-700 transition-colors ${
-                                  selectedCountry.code === country.code ? "bg-slate-700" : ""
-                                }`}
-                              >
-                                <span className="text-lg">{country.flag}</span>
-                                <span className="text-sm text-white flex-1">{country.country}</span>
-                                <span className="text-xs text-slate-400">{country.code}</span>
-                              </button>
-                            ))}
-                          {COUNTRY_CODES.filter((c) =>
-                            c.country.toLowerCase().includes(countrySearch.toLowerCase()) ||
-                            c.code.includes(countrySearch)
-                          ).length === 0 && (
-                            <div className="px-3 py-4 text-center text-sm text-slate-500">
-                              No se encontró el país
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Phone number input */}
-                  <input
-                    type="tel"
-                    value={whatsappPhoneInput}
-                    onChange={(e) => setWhatsappPhoneInput(e.target.value.replace(/[^0-9\s]/g, ""))}
-                    placeholder="999 999 999"
-                    className="flex-1 px-4 py-3 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  />
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-sm w-full">
+            {/* Header with step indicator */}
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-emerald-500/20 rounded-xl">
+                  <svg className="w-6 h-6 text-emerald-400" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                  </svg>
                 </div>
-                <p className="text-xs text-slate-500">Solo el número, sin el código de país</p>
-              </div>
-            </div>
-
-            {/* Step 2: Send Hola to Vicu - Only shown after step 1 is complete */}
-            {whatsappPhoneInput.trim() && (
-              <div className={`border rounded-lg p-4 space-y-3 transition-all animate-fade-in ${
-                whatsappStep2Done
-                  ? "bg-emerald-500/10 border-emerald-500/30"
-                  : "bg-slate-800/50 border-slate-700"
-              }`}>
-                <div className="flex items-center gap-2">
-                  {whatsappStep2Done ? (
-                    <span className="flex items-center justify-center w-6 h-6 bg-emerald-500 text-white rounded-full">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </span>
-                  ) : (
-                    <span className="flex items-center justify-center w-6 h-6 bg-emerald-500 text-white text-sm font-bold rounded-full animate-pulse">2</span>
-                  )}
-                  <span className={`text-sm font-medium ${whatsappStep2Done ? "text-emerald-400" : "text-white"}`}>
-                    Envía "Hola" a Vicu
-                  </span>
-                </div>
-                <p className="text-xs text-slate-400 pl-8">
-                  WhatsApp requiere que inicies la conversación. Abre WhatsApp y envía el mensaje.
-                </p>
-                <div className="pl-8 flex items-center gap-3">
-                  <a
-                    href="https://wa.me/12083619224?text=Hola%20Vicu%2C%20quiero%20activar%20mis%20recordatorios"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setWhatsappStep2Done(true)}
-                    className={`inline-flex items-center gap-2 px-4 py-2 text-white text-sm rounded-lg transition-colors ${
-                      whatsappStep2Done
-                        ? "bg-emerald-700 hover:bg-emerald-600"
-                        : "bg-emerald-600 hover:bg-emerald-500"
-                    }`}
-                  >
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                    </svg>
-                    {whatsappStep2Done ? "Enviado" : "Abrir WhatsApp"}
-                  </a>
-                  {whatsappStep2Done && (
-                    <span className="text-xs text-emerald-400">Listo</span>
-                  )}
+                <div>
+                  <h3 className="font-semibold text-white text-lg">Recordatorios WhatsApp</h3>
+                  <p className="text-xs text-slate-400">Paso {whatsappStep} de 2</p>
                 </div>
               </div>
-            )}
-
-            {/* Progress indicator */}
-            <div className="flex items-center justify-center gap-2 py-1">
-              <div className={`h-1.5 flex-1 rounded-full transition-all ${whatsappPhoneInput.trim() ? "bg-emerald-500" : "bg-slate-700"}`} />
-              <div className={`h-1.5 flex-1 rounded-full transition-all ${whatsappStep2Done ? "bg-emerald-500" : "bg-slate-700"}`} />
-            </div>
-
-            <div className="flex gap-3">
               <button
                 onClick={() => {
                   setShowWhatsappModal(false);
                   setWhatsappPhoneInput("");
                   setWhatsappStep2Done(false);
+                  setWhatsappStep(1);
                   setCountrySearch("");
                   setShowCountryDropdown(false);
                 }}
-                className="flex-1 px-4 py-2.5 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition-colors"
+                className="p-1.5 text-slate-400 hover:text-slate-200 transition-colors rounded-lg hover:bg-slate-800"
               >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSaveWhatsappPhone}
-                disabled={!whatsappPhoneInput.trim() || !whatsappStep2Done || whatsappLoading}
-                className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-emerald-600 flex items-center justify-center gap-2"
-              >
-                {whatsappLoading ? (
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                  "Activar"
-                )}
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
+
+            {/* Progress bar */}
+            <div className="flex gap-2 mb-6">
+              <div className="h-1 flex-1 rounded-full bg-emerald-500" />
+              <div className={`h-1 flex-1 rounded-full transition-all ${whatsappStep === 2 ? "bg-emerald-500" : "bg-slate-700"}`} />
+            </div>
+
+            {/* Step 1: Phone number */}
+            {whatsappStep === 1 && (
+              <div className="space-y-5">
+                <div>
+                  <label className="block text-sm font-medium text-slate-200 mb-3">
+                    Tu número de WhatsApp
+                  </label>
+                  {/* Phone input with country selector */}
+                  <div className="flex gap-2">
+                    {/* Country selector dropdown */}
+                    <div className="relative" ref={countryDropdownRef}>
+                      <button
+                        type="button"
+                        onClick={() => setShowCountryDropdown(!showCountryDropdown)}
+                        className="flex items-center gap-2 h-12 px-3 bg-slate-800 border border-slate-600 rounded-xl text-white hover:bg-slate-700 hover:border-slate-500 transition-all"
+                      >
+                        <span className="text-xl">{selectedCountry.flag}</span>
+                        <span className="text-sm font-medium">{selectedCountry.code}</span>
+                        <svg className={`w-4 h-4 text-slate-400 transition-transform ${showCountryDropdown ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+
+                      {/* Dropdown menu */}
+                      {showCountryDropdown && (
+                        <div className="absolute top-full left-0 mt-2 w-72 bg-slate-800 border border-slate-600 rounded-xl shadow-2xl z-50 overflow-hidden">
+                          {/* Search input */}
+                          <div className="p-3 border-b border-slate-700">
+                            <div className="relative">
+                              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                              </svg>
+                              <input
+                                type="text"
+                                value={countrySearch}
+                                onChange={(e) => setCountrySearch(e.target.value)}
+                                placeholder="Buscar país..."
+                                className="w-full pl-10 pr-4 py-2.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                autoFocus
+                              />
+                            </div>
+                          </div>
+                          {/* Country list */}
+                          <div className="max-h-56 overflow-y-auto">
+                            {COUNTRY_CODES
+                              .filter((c) =>
+                                c.country.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                                c.code.includes(countrySearch)
+                              )
+                              .map((country) => (
+                                <button
+                                  key={country.code}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedCountry(country);
+                                    setShowCountryDropdown(false);
+                                    setCountrySearch("");
+                                  }}
+                                  className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-700/50 transition-colors ${
+                                    selectedCountry.code === country.code ? "bg-emerald-500/10" : ""
+                                  }`}
+                                >
+                                  <span className="text-xl">{country.flag}</span>
+                                  <span className="text-sm text-white flex-1">{country.country}</span>
+                                  <span className="text-xs text-slate-400 font-mono">{country.code}</span>
+                                  {selectedCountry.code === country.code && (
+                                    <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                  )}
+                                </button>
+                              ))}
+                            {COUNTRY_CODES.filter((c) =>
+                              c.country.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                              c.code.includes(countrySearch)
+                            ).length === 0 && (
+                              <div className="px-4 py-6 text-center text-sm text-slate-500">
+                                No se encontró el país
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Phone number input */}
+                    <input
+                      type="tel"
+                      value={whatsappPhoneInput}
+                      onChange={(e) => setWhatsappPhoneInput(e.target.value.replace(/[^0-9]/g, ""))}
+                      placeholder="999999999"
+                      className="flex-1 h-12 px-4 bg-slate-800 border border-slate-600 rounded-xl text-white text-lg font-medium placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent tracking-wide"
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500 mt-2">Solo números, sin espacios ni guiones</p>
+                </div>
+
+                <button
+                  onClick={handleSavePhoneAndContinue}
+                  disabled={!whatsappPhoneInput.trim() || whatsappPhoneInput.length < 7 || whatsappLoading}
+                  className="w-full h-12 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-500 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-emerald-600 flex items-center justify-center gap-2"
+                >
+                  {whatsappLoading ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      Continuar
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* Step 2: Send message to WhatsApp */}
+            {whatsappStep === 2 && (
+              <div className="space-y-5">
+                <div className="text-center space-y-3">
+                  <div className="w-16 h-16 mx-auto bg-emerald-500/20 rounded-2xl flex items-center justify-center">
+                    <svg className="w-8 h-8 text-emerald-400" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                    </svg>
+                  </div>
+                  <h4 className="text-lg font-semibold text-white">Envía "Hola" a Vicu</h4>
+                  <p className="text-sm text-slate-400">
+                    WhatsApp requiere que inicies la conversación para recibir mensajes.
+                  </p>
+                </div>
+
+                <a
+                  href="https://wa.me/12083619224?text=Hola%20Vicu"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setWhatsappStep2Done(true)}
+                  className={`w-full h-12 flex items-center justify-center gap-2 rounded-xl font-medium transition-all ${
+                    whatsappStep2Done
+                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                      : "bg-emerald-600 text-white hover:bg-emerald-500"
+                  }`}
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                  </svg>
+                  {whatsappStep2Done ? "Mensaje enviado" : "Abrir WhatsApp"}
+                  {whatsappStep2Done && (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </a>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={() => setWhatsappStep(1)}
+                    className="flex-1 h-11 bg-slate-800 text-slate-300 rounded-xl font-medium hover:bg-slate-700 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                    Atrás
+                  </button>
+                  <button
+                    onClick={handleFinalActivation}
+                    disabled={!whatsappStep2Done}
+                    className="flex-1 h-11 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-500 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-emerald-600"
+                  >
+                    Listo
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
