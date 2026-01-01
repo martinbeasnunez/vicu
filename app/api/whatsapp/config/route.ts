@@ -31,14 +31,18 @@ async function getAuthenticatedUser() {
 // POST - Save WhatsApp config for the authenticated user
 export async function POST(request: NextRequest) {
   try {
+    console.log("[WhatsApp Config] POST request received");
     const user = await getAuthenticatedUser();
 
     if (!user) {
+      console.log("[WhatsApp Config] No authenticated user found");
       return NextResponse.json(
         { success: false, error: "No autenticado" },
         { status: 401 }
       );
     }
+
+    console.log(`[WhatsApp Config] User authenticated: ${user.id} (${user.email})`);
 
     const body = await request.json();
     const { phone_number } = body;
@@ -71,13 +75,14 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error("[WhatsApp Config] Error saving:", error);
+      console.error("[WhatsApp Config] Error details:", JSON.stringify(error));
       return NextResponse.json(
-        { success: false, error: "Error al guardar configuración" },
+        { success: false, error: "Error al guardar configuración", details: error.message },
         { status: 500 }
       );
     }
 
-    console.log(`[WhatsApp Config] Saved for user ${user.id}: ${phone}`);
+    console.log(`[WhatsApp Config] SUCCESS - Saved for user ${user.id} (${user.email}): ${phone}`);
 
     return NextResponse.json({
       success: true,
