@@ -355,30 +355,21 @@ function HoyPageContent() {
 
   // Toggle WhatsApp notifications
   const handleToggleWhatsapp = async () => {
-    // If not configured, show the phone input modal
-    if (!whatsappConfigured) {
+    // If not configured OR currently disabled, show the phone input modal
+    // This ensures user always goes through the full setup flow
+    if (!whatsappConfigured || !whatsappEnabled) {
       setShowWhatsappModal(true);
       return;
     }
 
-    if (whatsappEnabled === null) return;
+    // If enabled, disable it
     setWhatsappLoading(true);
-
     try {
-      const newStatus = !whatsappEnabled;
+      const response = await fetch("/api/whatsapp/config", { method: "DELETE" });
+      if (!response.ok) throw new Error("Failed to disable");
 
-      if (newStatus) {
-        // Re-enable via PATCH
-        const response = await fetch("/api/whatsapp/config", { method: "PATCH" });
-        if (!response.ok) throw new Error("Failed to enable");
-      } else {
-        // Disable via DELETE
-        const response = await fetch("/api/whatsapp/config", { method: "DELETE" });
-        if (!response.ok) throw new Error("Failed to disable");
-      }
-
-      setWhatsappEnabled(newStatus);
-      showToast(newStatus ? "Recordatorios WhatsApp activados" : "Recordatorios WhatsApp pausados");
+      setWhatsappEnabled(false);
+      showToast("Recordatorios WhatsApp pausados");
     } catch {
       showToast("Error al cambiar configuración");
     } finally {
