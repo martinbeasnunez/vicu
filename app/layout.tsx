@@ -42,8 +42,12 @@ export const metadata: Metadata = {
     images: ["https://vicu.vercel.app/vicu-logo.png"],
   },
   icons: {
-    icon: "/vicu-logo.png",
-    apple: "/vicu-logo.png",
+    icon: [
+      { url: "/icon-16.png", sizes: "16x16", type: "image/png" },
+      { url: "/icon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/vicu-logo.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.png",
   },
 };
 
