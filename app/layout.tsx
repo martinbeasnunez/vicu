@@ -27,19 +27,19 @@ export const metadata: Metadata = {
     siteName: "Vicu",
     images: [
       {
-        url: "https://vicu.vercel.app/vicu-logo.png",
-        width: 512,
-        height: 512,
-        alt: "Vicu",
+        url: "https://vicu.vercel.app/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Vicu - Logra tus metas, un día a la vez",
       },
     ],
     type: "website",
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: "Vicu - Logra tus metas, un día a la vez",
     description: "Tu compañero para lograr metas con pequeños pasos diarios",
-    images: ["https://vicu.vercel.app/vicu-logo.png"],
+    images: ["https://vicu.vercel.app/og-image.png"],
   },
   icons: {
     icon: [
