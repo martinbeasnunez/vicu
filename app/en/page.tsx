@@ -59,19 +59,38 @@ export default function LandingPageEN() {
             </div>
           </div>
 
-          {/* App Preview Image */}
-          <div className="mt-16 sm:mt-20 animate-fade-in-up stagger-3">
-            <div className="relative mx-auto max-w-4xl">
-              {/* Glow effect behind image */}
-              <div className="absolute inset-0 bg-gradient-to-t from-indigo-600/20 via-purple-600/10 to-transparent blur-3xl -z-10 scale-110" />
-              <Image
-                src="/vicu-app-preview.png"
-                alt="Vicu - Your goal companion"
-                width={1200}
-                height={750}
-                className="w-full h-auto rounded-xl shadow-2xl shadow-black/50 border border-white/10"
-                priority
-              />
+          {/* App Preview - Two iPhones */}
+          <div className="mt-16 sm:mt-24 animate-fade-in-up stagger-3">
+            <div className="relative mx-auto max-w-5xl">
+              {/* Glow effect behind images */}
+              <div className="absolute inset-0 bg-gradient-to-t from-indigo-600/30 via-purple-600/20 to-transparent blur-[100px] -z-10 scale-110" />
+
+              {/* Two iPhones side by side */}
+              <div className="flex justify-center items-center gap-4 sm:gap-8 md:gap-12">
+                {/* iPhone 1 - App view */}
+                <div className="relative w-[45%] max-w-[280px] transform hover:scale-105 transition-transform duration-500">
+                  <Image
+                    src="/vicu-app-preview.png"
+                    alt="Vicu - Your goals"
+                    width={560}
+                    height={1120}
+                    className="w-full h-auto drop-shadow-2xl"
+                    priority
+                  />
+                </div>
+
+                {/* iPhone 2 - WhatsApp view */}
+                <div className="relative w-[45%] max-w-[280px] transform hover:scale-105 transition-transform duration-500 translate-y-8">
+                  <Image
+                    src="/vicu-app-preview2.png"
+                    alt="Vicu - WhatsApp reminders"
+                    width={560}
+                    height={1120}
+                    className="w-full h-auto drop-shadow-2xl"
+                    priority
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
