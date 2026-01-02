@@ -14,6 +14,16 @@ export default function LandingPageEN() {
         <div className="absolute top-40 right-0 w-[400px] h-[400px] bg-emerald-600/10 rounded-full blur-[100px] -z-10" />
 
         <div className="max-w-5xl mx-auto px-6 pt-12 pb-20 sm:pt-20 sm:pb-32">
+          {/* Language toggle */}
+          <div className="absolute top-6 right-6 sm:top-8 sm:right-8">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-400 hover:text-white border border-white/10 hover:border-white/20 rounded-full transition-colors"
+            >
+              <span>ES</span>
+            </Link>
+          </div>
+
           {/* Logo */}
           <div className="flex justify-center mb-12 animate-fade-in">
             <Image
