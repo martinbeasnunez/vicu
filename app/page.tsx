@@ -60,33 +60,34 @@ export default function LandingPage() {
           </div>
 
           {/* App Preview - Two iPhones */}
-          <div className="mt-16 sm:mt-24 animate-fade-in-up stagger-3">
-            <div className="relative mx-auto max-w-5xl">
-              {/* Glow effect behind images */}
-              <div className="absolute inset-0 bg-gradient-to-t from-indigo-600/30 via-purple-600/20 to-transparent blur-[100px] -z-10 scale-110" />
+          <div className="mt-20 sm:mt-28 animate-fade-in-up stagger-3 px-4">
+            <div className="relative mx-auto max-w-3xl">
+              {/* Glow effects */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-indigo-500/30 rounded-full blur-[120px] -z-10" />
+              <div className="absolute top-1/3 left-1/3 w-[300px] h-[300px] bg-purple-500/20 rounded-full blur-[80px] -z-10" />
 
-              {/* Two iPhones side by side */}
-              <div className="flex justify-center items-center gap-4 sm:gap-8 md:gap-12">
-                {/* iPhone 1 - App view */}
-                <div className="relative w-[45%] max-w-[280px] transform hover:scale-105 transition-transform duration-500">
+              {/* Two iPhones - overlapping style */}
+              <div className="relative flex justify-center items-end h-[500px] sm:h-[600px]">
+                {/* iPhone 1 - App view (front left) */}
+                <div className="absolute left-1/2 -translate-x-[65%] bottom-0 w-[240px] sm:w-[280px] z-10 transition-transform duration-500 hover:scale-[1.02] hover:-translate-y-2">
                   <Image
                     src="/vicu-app-preview.png"
                     alt="Vicu - Tus objetivos"
                     width={560}
                     height={1120}
-                    className="w-full h-auto drop-shadow-2xl"
+                    className="w-full h-auto drop-shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
                     priority
                   />
                 </div>
 
-                {/* iPhone 2 - WhatsApp view */}
-                <div className="relative w-[45%] max-w-[280px] transform hover:scale-105 transition-transform duration-500 translate-y-8">
+                {/* iPhone 2 - WhatsApp view (back right) */}
+                <div className="absolute left-1/2 -translate-x-[35%] bottom-8 w-[240px] sm:w-[280px] z-0 transition-transform duration-500 hover:scale-[1.02] hover:-translate-y-2">
                   <Image
                     src="/vicu-app-preview2.png"
                     alt="Vicu - Recordatorios WhatsApp"
                     width={560}
                     height={1120}
-                    className="w-full h-auto drop-shadow-2xl"
+                    className="w-full h-auto drop-shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
                     priority
                   />
                 </div>
