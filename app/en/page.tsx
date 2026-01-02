@@ -59,16 +59,16 @@ export default function LandingPageEN() {
             </div>
           </div>
 
-          {/* App Preview - MacBook + iPhone */}
+          {/* App Preview - MacBook + iPhone side by side */}
           <div className="mt-16 sm:mt-24 animate-fade-in-up stagger-3">
-            <div className="relative mx-auto max-w-5xl px-4">
-              {/* Glow behind MacBook */}
+            <div className="relative mx-auto max-w-6xl px-4">
+              {/* Glow behind devices */}
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] h-[400px] bg-gradient-to-br from-indigo-500/25 via-purple-500/15 to-indigo-600/25 rounded-full blur-[80px] -z-10" />
 
-              {/* Desktop: MacBook with iPhone overlay */}
-              <div className="hidden sm:block relative pb-16">
-                {/* MacBook - Centered */}
-                <div className="relative w-full max-w-[800px] mx-auto">
+              {/* Desktop: MacBook + iPhone side by side */}
+              <div className="hidden sm:flex items-end justify-center gap-8 md:gap-12">
+                {/* MacBook */}
+                <div className="w-[65%] max-w-[700px]">
                   <Image
                     src="/vicu-web-macbook.png"
                     alt="Vicu - Dashboard"
@@ -77,18 +77,18 @@ export default function LandingPageEN() {
                     className="w-full h-auto"
                     priority
                   />
+                </div>
 
-                  {/* iPhone - Overlay on MacBook screen area */}
-                  <div className="absolute right-[12%] bottom-[15%] w-[36%] z-30">
-                    <Image
-                      src="/vicu-web-iphone.png"
-                      alt="Vicu - WhatsApp"
-                      width={560}
-                      height={1120}
-                      className="w-full h-auto drop-shadow-[0_25px_50px_rgba(0,0,0,0.5)]"
-                      priority
-                    />
-                  </div>
+                {/* iPhone - To the right, big */}
+                <div className="w-[22%] min-w-[180px] max-w-[240px]">
+                  <Image
+                    src="/vicu-web-iphone.png"
+                    alt="Vicu - WhatsApp"
+                    width={560}
+                    height={1120}
+                    className="w-full h-auto drop-shadow-[0_25px_50px_rgba(0,0,0,0.5)]"
+                    priority
+                  />
                 </div>
               </div>
 
@@ -107,7 +107,7 @@ export default function LandingPageEN() {
                 </div>
 
                 {/* iPhone - Large on mobile */}
-                <div className="w-[80%] max-w-[360px]">
+                <div className="w-[70%] max-w-[320px]">
                   <Image
                     src="/vicu-web-iphone.png"
                     alt="Vicu - WhatsApp"
