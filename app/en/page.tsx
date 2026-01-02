@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Target, MessageCircle, Sparkles, Check, Zap } from "lucide-react";
 
-export default function LandingPage() {
+export default function LandingPageEN() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#020617] via-[#050816] to-[#020617]">
       {/* Hero Section */}
@@ -29,20 +29,20 @@ export default function LandingPage() {
           <div className="text-center max-w-3xl mx-auto">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-sm font-medium mb-8 animate-fade-in-down">
               <Sparkles className="w-4 h-4" />
-              <span>Beta privada</span>
+              <span>Private Beta</span>
             </div>
 
             <h1 className="text-4xl sm:text-5xl md:text-6xl font-semibold text-white leading-tight tracking-tight mb-6 animate-fade-in-up">
-              Deja de pensar.
+              Stop overthinking.
               <br />
               <span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-indigo-400 bg-clip-text text-transparent">
-                Empieza a avanzar.
+                Start achieving.
               </span>
             </h1>
 
             <p className="text-lg sm:text-xl text-slate-400 mb-10 max-w-2xl mx-auto leading-relaxed animate-fade-in-up stagger-1">
-              Vicu es tu compañero de IA que convierte tus metas en pasos claros
-              y te manda recordatorios por WhatsApp para que no dejes nada a medias.
+              Vicu is your AI companion that turns your goals into clear steps
+              and sends you WhatsApp reminders so you never leave anything unfinished.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center animate-fade-in-up stagger-2">
@@ -50,11 +50,11 @@ export default function LandingPage() {
                 href="/login"
                 className="group inline-flex items-center gap-2 px-8 py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-full transition-all duration-200 hover:scale-105 hover:shadow-lg hover:shadow-indigo-500/25"
               >
-                Probar Vicu gratis
+                Try Vicu for free
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </Link>
               <span className="text-slate-500 text-sm">
-                Sin tarjeta de crédito
+                No credit card required
               </span>
             </div>
           </div>
@@ -66,7 +66,7 @@ export default function LandingPage() {
               <div className="absolute inset-0 bg-gradient-to-t from-indigo-600/20 via-purple-600/10 to-transparent blur-3xl -z-10 scale-110" />
               <Image
                 src="/vicu-app-preview.png"
-                alt="Vicu - Tu compañero de metas"
+                alt="Vicu - Your goal companion"
                 width={1200}
                 height={750}
                 className="w-full h-auto rounded-xl shadow-2xl shadow-black/50 border border-white/10"
@@ -82,9 +82,9 @@ export default function LandingPage() {
         <div className="max-w-5xl mx-auto px-6">
           <div className="text-center mb-16">
             <h2 className="text-2xl sm:text-3xl font-semibold text-white mb-4">
-              Tienes metas grandes.
+              You have big goals.
               <br />
-              <span className="text-slate-400">Pero algo te frena.</span>
+              <span className="text-slate-400">But something holds you back.</span>
             </h2>
           </div>
 
@@ -92,18 +92,18 @@ export default function LandingPage() {
             {[
               {
                 icon: "🤯",
-                title: "Demasiados pensamientos",
-                description: "Tienes muchas ideas pero no sabes por dónde empezar"
+                title: "Too many thoughts",
+                description: "You have many ideas but don't know where to start"
               },
               {
                 icon: "📅",
-                title: "Siempre para mañana",
-                description: "Te propones cosas y terminas postergándolas indefinidamente"
+                title: "Always tomorrow",
+                description: "You set goals and end up postponing them indefinitely"
               },
               {
                 icon: "🔄",
-                title: "Empiezas, pero no terminas",
-                description: "Comienzas con energía y después pierdes el momentum"
+                title: "Start but never finish",
+                description: "You begin with energy but then lose momentum"
               }
             ].map((item, i) => (
               <div
@@ -127,13 +127,13 @@ export default function LandingPage() {
           <div className="text-center mb-16">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm font-medium mb-6">
               <Check className="w-4 h-4" />
-              <span>La solución</span>
+              <span>The solution</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-semibold text-white mb-4">
-              Vicu te ayuda a lograr lo que te propones
+              Vicu helps you achieve what you set out to do
             </h2>
             <p className="text-slate-400 max-w-xl mx-auto">
-              Con inteligencia artificial y recordatorios por WhatsApp
+              With artificial intelligence and WhatsApp reminders
             </p>
           </div>
 
@@ -146,8 +146,8 @@ export default function LandingPage() {
               <div className="w-12 h-12 rounded-xl bg-indigo-500/10 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
                 <Target className="w-6 h-6 text-indigo-400" />
               </div>
-              <h3 className="text-lg font-medium text-white mb-3">Cuenta tu meta</h3>
-              <p className="text-slate-400 text-sm leading-relaxed">Escribe qué quieres lograr. Vicu entiende tu objetivo y lo descompone.</p>
+              <h3 className="text-lg font-medium text-white mb-3">Share your goal</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">Write what you want to achieve. Vicu understands your objective and breaks it down.</p>
             </div>
 
             {/* Step 2 */}
@@ -158,8 +158,8 @@ export default function LandingPage() {
               <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
                 <Zap className="w-6 h-6 text-purple-400" />
               </div>
-              <h3 className="text-lg font-medium text-white mb-3">Recibe tu siguiente paso</h3>
-              <p className="text-slate-400 text-sm leading-relaxed">La IA analiza tu meta y te sugiere exactamente qué hacer ahora.</p>
+              <h3 className="text-lg font-medium text-white mb-3">Get your next step</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">AI analyzes your goal and suggests exactly what to do now.</p>
             </div>
 
             {/* Step 3 */}
@@ -170,8 +170,8 @@ export default function LandingPage() {
               <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
                 <MessageCircle className="w-6 h-6 text-emerald-400" />
               </div>
-              <h3 className="text-lg font-medium text-white mb-3">Recordatorios en WhatsApp</h3>
-              <p className="text-slate-400 text-sm leading-relaxed">Vicu te escribe para que avances. Responde y marca tu progreso.</p>
+              <h3 className="text-lg font-medium text-white mb-3">WhatsApp reminders</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">Vicu messages you to keep you moving. Reply to track your progress.</p>
             </div>
           </div>
         </div>
@@ -183,22 +183,22 @@ export default function LandingPage() {
           <div className="p-8 sm:p-12 rounded-3xl bg-gradient-to-b from-indigo-600/10 to-transparent border border-indigo-500/20">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-medium mb-6">
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-              Cupos limitados
+              Limited spots
             </div>
 
             <h2 className="text-2xl sm:text-3xl font-semibold text-white mb-4">
-              Únete a la beta privada
+              Join the private beta
             </h2>
             <p className="text-slate-400 mb-8 max-w-lg mx-auto">
-              Estamos invitando a un grupo pequeño de personas que quieren
-              dejar de procrastinar y empezar a lograr sus metas.
+              We&apos;re inviting a small group of people who want to
+              stop procrastinating and start achieving their goals.
             </p>
 
             <Link
               href="/login"
               className="group inline-flex items-center gap-2 px-8 py-4 bg-white text-slate-900 font-medium rounded-full transition-all duration-200 hover:scale-105 hover:shadow-lg hover:shadow-white/10"
             >
-              Quiero entrar
+              I want in
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </Link>
           </div>
@@ -217,11 +217,11 @@ export default function LandingPage() {
                 height={32}
               />
               <span className="text-slate-400 text-sm">
-                © 2026 Vicu. Tu compañero de metas.
+                © 2026 Vicu. Your goal companion.
               </span>
             </div>
             <div className="text-slate-500 text-sm">
-              Hecho con amor en LatAm
+              Made with love in LatAm
             </div>
           </div>
         </div>
