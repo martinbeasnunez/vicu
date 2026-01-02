@@ -59,64 +59,24 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* App Preview - MacBook + iPhone side by side */}
+          {/* App Preview */}
           <div className="mt-16 sm:mt-24 animate-fade-in-up stagger-3">
-            <div className="relative mx-auto max-w-6xl px-4">
-              {/* Glow behind devices */}
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] h-[400px] bg-gradient-to-br from-indigo-500/25 via-purple-500/15 to-indigo-600/25 rounded-full blur-[80px] -z-10" />
+            <div className="relative mx-auto max-w-5xl px-4">
+              {/* Glow effect */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[100%] h-[80%] bg-gradient-to-br from-indigo-500/30 via-purple-500/20 to-indigo-600/30 rounded-full blur-[100px] -z-10" />
 
-              {/* Desktop: MacBook + iPhone side by side */}
-              <div className="hidden sm:flex items-end justify-center gap-8 md:gap-12">
-                {/* MacBook */}
-                <div className="w-[65%] max-w-[700px]">
-                  <Image
-                    src="/vicu-web-macbook.png"
-                    alt="Vicu - Dashboard"
-                    width={1600}
-                    height={1000}
-                    className="w-full h-auto"
-                    priority
-                  />
-                </div>
-
-                {/* iPhone - To the right, big */}
-                <div className="w-[22%] min-w-[180px] max-w-[240px]">
-                  <Image
-                    src="/vicu-web-iphone.png"
-                    alt="Vicu - WhatsApp"
-                    width={560}
-                    height={1120}
-                    className="w-full h-auto drop-shadow-[0_25px_50px_rgba(0,0,0,0.5)]"
-                    priority
-                  />
-                </div>
-              </div>
-
-              {/* Mobile: Stacked layout */}
-              <div className="sm:hidden flex flex-col items-center gap-8">
-                {/* MacBook */}
-                <div className="w-full">
-                  <Image
-                    src="/vicu-web-macbook.png"
-                    alt="Vicu - Dashboard"
-                    width={1600}
-                    height={1000}
-                    className="w-full h-auto"
-                    priority
-                  />
-                </div>
-
-                {/* iPhone - Large on mobile */}
-                <div className="w-[70%] max-w-[320px]">
-                  <Image
-                    src="/vicu-web-iphone.png"
-                    alt="Vicu - WhatsApp"
-                    width={560}
-                    height={1120}
-                    className="w-full h-auto drop-shadow-[0_20px_40px_rgba(0,0,0,0.4)]"
-                    priority
-                  />
-                </div>
+              {/* Device mockup */}
+              <div className="relative group">
+                <Image
+                  src="/vicu-web-macbook.png"
+                  alt="Vicu - Tu compañero de metas"
+                  width={1920}
+                  height={1080}
+                  className="w-full h-auto transition-transform duration-700 ease-out group-hover:scale-[1.02]"
+                  priority
+                />
+                {/* Reflection/shine effect */}
+                <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none rounded-2xl" />
               </div>
             </div>
           </div>
