@@ -66,7 +66,7 @@ export default function LandingPage() {
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] h-[400px] bg-gradient-to-br from-indigo-500/25 via-purple-500/15 to-indigo-600/25 rounded-full blur-[80px] -z-10" />
 
               {/* Desktop: MacBook with iPhone overlay */}
-              <div className="hidden sm:block relative">
+              <div className="hidden sm:block relative pb-16">
                 {/* MacBook - Centered */}
                 <div className="relative w-full max-w-[800px] mx-auto">
                   <Image
@@ -78,14 +78,14 @@ export default function LandingPage() {
                     priority
                   />
 
-                  {/* iPhone - Overlay bottom right of MacBook */}
-                  <div className="absolute right-[5%] -bottom-[5%] w-[30%] min-w-[220px] max-w-[280px] z-20">
+                  {/* iPhone - Overlay on MacBook screen area */}
+                  <div className="absolute right-[12%] bottom-[15%] w-[36%] z-30">
                     <Image
                       src="/vicu-web-iphone.png"
                       alt="Vicu - WhatsApp"
                       width={560}
                       height={1120}
-                      className="w-full h-auto drop-shadow-[0_30px_60px_rgba(0,0,0,0.4)]"
+                      className="w-full h-auto drop-shadow-[0_25px_50px_rgba(0,0,0,0.5)]"
                       priority
                     />
                   </div>
@@ -93,7 +93,7 @@ export default function LandingPage() {
               </div>
 
               {/* Mobile: Stacked layout */}
-              <div className="sm:hidden flex flex-col items-center gap-6">
+              <div className="sm:hidden flex flex-col items-center gap-8">
                 {/* MacBook */}
                 <div className="w-full">
                   <Image
@@ -106,8 +106,8 @@ export default function LandingPage() {
                   />
                 </div>
 
-                {/* iPhone - Full width on mobile */}
-                <div className="w-[200px]">
+                {/* iPhone - Large on mobile */}
+                <div className="w-[80%] max-w-[360px]">
                   <Image
                     src="/vicu-web-iphone.png"
                     alt="Vicu - WhatsApp"
