@@ -99,6 +99,13 @@ async function handleIncomingMessage(
     return;
   }
 
+  // Check if this is a first-time message (welcome/activation message)
+  const lowerMessage = messageText.toLowerCase().trim();
+  const isWelcomeMessage = lowerMessage.includes("hola") ||
+                           lowerMessage.includes("activar") ||
+                           lowerMessage === "hi" ||
+                           lowerMessage === "hello";
+
   // Find the most recent reminder that hasn't been responded to
   const { data: reminder, error: reminderError } = await getSupabase()
     .from("whatsapp_reminders")
@@ -109,8 +116,25 @@ async function handleIncomingMessage(
     .limit(1)
     .single();
 
+  // If no pending reminder, check if it's a welcome message
   if (reminderError || !reminder) {
-    console.log(`[Kapso Webhook] No pending reminder found for user ${config.user_id}`);
+    if (isWelcomeMessage && config.phone_number) {
+      // Send welcome message
+      const welcomeMsg = `¡Hola! 👋 Soy *Vicu*, tu compañero para lograr metas.
+
+✅ *¡Tu WhatsApp está conectado!*
+
+Ahora te enviaré recordatorios para ayudarte a avanzar en tus objetivos. Puedes volver a la app para terminar la configuración.
+
+💡 *Tip:* Responde a mis mensajes para marcar avances o pedirme ayuda.
+
+¡Vamos a lograr grandes cosas juntos! 🚀`;
+
+      await sendWhatsAppMessage(config.phone_number, welcomeMsg);
+      console.log(`[Kapso Webhook] Sent welcome message to ${fromNumber}`);
+    } else {
+      console.log(`[Kapso Webhook] No pending reminder found for user ${config.user_id}`);
+    }
     return;
   }
 
