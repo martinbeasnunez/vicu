@@ -62,31 +62,58 @@ export default function LandingPageEN() {
           {/* App Preview - MacBook + iPhone */}
           <div className="mt-16 sm:mt-24 animate-fade-in-up stagger-3">
             <div className="relative mx-auto max-w-5xl px-4">
-              {/* Glow effect */}
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[500px] bg-gradient-to-br from-indigo-500/30 via-purple-500/20 to-indigo-600/30 rounded-full blur-[120px] -z-10" />
+              {/* Glow behind MacBook */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] h-[400px] bg-gradient-to-br from-indigo-500/25 via-purple-500/15 to-indigo-600/25 rounded-full blur-[80px] -z-10" />
 
-              {/* Devices container */}
-              <div className="relative flex justify-center items-end">
-                {/* MacBook - Main device */}
-                <div className="relative w-full max-w-[700px] z-10">
+              {/* Desktop: MacBook with iPhone overlay */}
+              <div className="hidden sm:block relative">
+                {/* MacBook - Centered */}
+                <div className="relative w-full max-w-[800px] mx-auto">
                   <Image
                     src="/vicu-web-macbook.png"
                     alt="Vicu - Dashboard"
-                    width={1400}
-                    height={900}
+                    width={1600}
+                    height={1000}
+                    className="w-full h-auto"
+                    priority
+                  />
+
+                  {/* iPhone - Overlay bottom right of MacBook */}
+                  <div className="absolute right-[5%] -bottom-[5%] w-[30%] min-w-[220px] max-w-[280px] z-20">
+                    <Image
+                      src="/vicu-web-iphone.png"
+                      alt="Vicu - WhatsApp"
+                      width={560}
+                      height={1120}
+                      className="w-full h-auto drop-shadow-[0_30px_60px_rgba(0,0,0,0.4)]"
+                      priority
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Mobile: Stacked layout */}
+              <div className="sm:hidden flex flex-col items-center gap-6">
+                {/* MacBook */}
+                <div className="w-full">
+                  <Image
+                    src="/vicu-web-macbook.png"
+                    alt="Vicu - Dashboard"
+                    width={1600}
+                    height={1000}
                     className="w-full h-auto"
                     priority
                   />
                 </div>
 
-                {/* iPhone - Floating on the right */}
-                <div className="absolute right-0 sm:right-4 md:right-8 bottom-4 sm:bottom-8 w-[100px] sm:w-[140px] md:w-[180px] z-20">
+                {/* iPhone - Full width on mobile */}
+                <div className="w-[200px]">
                   <Image
                     src="/vicu-web-iphone.png"
                     alt="Vicu - WhatsApp"
-                    width={360}
-                    height={720}
-                    className="w-full h-auto drop-shadow-[0_20px_60px_rgba(0,0,0,0.5)]"
+                    width={560}
+                    height={1120}
+                    className="w-full h-auto drop-shadow-[0_20px_40px_rgba(0,0,0,0.4)]"
                     priority
                   />
                 </div>
