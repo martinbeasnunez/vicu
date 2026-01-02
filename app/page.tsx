@@ -58,6 +58,22 @@ export default function LandingPage() {
               </span>
             </div>
           </div>
+
+          {/* App Preview Image */}
+          <div className="mt-16 sm:mt-20 animate-fade-in-up stagger-3">
+            <div className="relative mx-auto max-w-4xl">
+              {/* Glow effect behind image */}
+              <div className="absolute inset-0 bg-gradient-to-t from-indigo-600/20 via-purple-600/10 to-transparent blur-3xl -z-10 scale-110" />
+              <Image
+                src="/vicu-app-preview.png"
+                alt="Vicu - Tu compañero de metas"
+                width={1200}
+                height={750}
+                className="w-full h-auto rounded-xl shadow-2xl shadow-black/50 border border-white/10"
+                priority
+              />
+            </div>
+          </div>
         </div>
       </section>
 
