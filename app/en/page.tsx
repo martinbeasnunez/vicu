@@ -60,34 +60,33 @@ export default function LandingPageEN() {
           </div>
 
           {/* App Preview - Two iPhones */}
-          <div className="mt-20 sm:mt-28 animate-fade-in-up stagger-3 px-4">
-            <div className="relative mx-auto max-w-3xl">
-              {/* Glow effects */}
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-indigo-500/30 rounded-full blur-[120px] -z-10" />
-              <div className="absolute top-1/3 left-1/3 w-[300px] h-[300px] bg-purple-500/20 rounded-full blur-[80px] -z-10" />
+          <div className="mt-16 sm:mt-20 animate-fade-in-up stagger-3">
+            <div className="relative mx-auto max-w-2xl px-8">
+              {/* Centered glow */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-to-br from-indigo-500/40 via-purple-500/30 to-indigo-600/40 rounded-full blur-[100px] -z-10" />
 
-              {/* Two iPhones - overlapping style */}
-              <div className="relative flex justify-center items-end h-[500px] sm:h-[600px]">
-                {/* iPhone 1 - App view (front left) */}
-                <div className="absolute left-1/2 -translate-x-[65%] bottom-0 w-[240px] sm:w-[280px] z-10 transition-transform duration-500 hover:scale-[1.02] hover:-translate-y-2">
+              {/* Two iPhones - clean centered layout */}
+              <div className="flex justify-center items-start gap-[-20px] sm:gap-4">
+                {/* iPhone 1 - App view */}
+                <div className="relative w-[160px] sm:w-[220px] md:w-[260px] -mr-6 sm:-mr-4 z-10 transform rotate-[-4deg]">
                   <Image
                     src="/vicu-app-preview.png"
                     alt="Vicu - Your goals"
-                    width={560}
-                    height={1120}
-                    className="w-full h-auto drop-shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
+                    width={520}
+                    height={1040}
+                    className="w-full h-auto rounded-[24px] sm:rounded-[32px] shadow-[0_25px_80px_-15px_rgba(0,0,0,0.6)]"
                     priority
                   />
                 </div>
 
-                {/* iPhone 2 - WhatsApp view (back right) */}
-                <div className="absolute left-1/2 -translate-x-[35%] bottom-8 w-[240px] sm:w-[280px] z-0 transition-transform duration-500 hover:scale-[1.02] hover:-translate-y-2">
+                {/* iPhone 2 - WhatsApp view */}
+                <div className="relative w-[160px] sm:w-[220px] md:w-[260px] -ml-6 sm:-ml-4 z-20 transform rotate-[4deg] translate-y-4">
                   <Image
                     src="/vicu-app-preview2.png"
                     alt="Vicu - WhatsApp reminders"
-                    width={560}
-                    height={1120}
-                    className="w-full h-auto drop-shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
+                    width={520}
+                    height={1040}
+                    className="w-full h-auto rounded-[24px] sm:rounded-[32px] shadow-[0_25px_80px_-15px_rgba(0,0,0,0.6)]"
                     priority
                   />
                 </div>
