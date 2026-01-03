@@ -7,6 +7,7 @@ import Image from "next/image";
 import { useExperimentStore } from "@/lib/experiment-store";
 import type { VicuAnalysis } from "@/lib/vicu-analyzer";
 import { AuthGuard } from "@/components/auth-guard";
+import { useAuth } from "@/lib/auth-context";
 
 type MessageRole = "vicu" | "user";
 
@@ -54,6 +55,7 @@ const LOADING_MESSAGES = [
 
 function VicuPageContent() {
   const router = useRouter();
+  const { user } = useAuth();
   const { setExperiment, setCopy } = useExperimentStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -474,6 +476,7 @@ function VicuPageContent() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          user_id: user?.id, // Pass user ID from client to ensure correct assignment
           description: richDescription,
           project_type: "external",
           experiment_type: dbExperimentType,

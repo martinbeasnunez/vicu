@@ -11,10 +11,15 @@ function generateFallbackTitle(description: string): string {
 }
 
 export async function POST(request: NextRequest) {
-  // Get authenticated user ID
-  const userId = await getAuthUserIdOrDemo();
-
   const data = await request.json();
+
+  // Use client-provided user_id if available, otherwise fall back to server auth
+  // This fixes sync issues when server can't read cookies but client is authenticated
+  const userId = data.user_id || await getAuthUserIdOrDemo();
+
+  if (!userId || userId === "demo-user") {
+    console.warn("[EXPERIMENTS] Creating experiment without authenticated user - data won't sync across devices");
+  }
 
   const {
     description,
