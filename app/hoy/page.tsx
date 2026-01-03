@@ -845,7 +845,7 @@ function HoyPageContent() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-slate-950">
       {/* Toast */}
       {toast && (
         <div className="fixed top-6 right-6 z-50 px-5 py-3 card-glass text-slate-50 rounded-xl shadow-lg animate-fade-in-down">
