@@ -24,8 +24,16 @@ export async function GET(request: Request) {
   // Count unique users
   const uniqueUsers = new Set(experiments?.map((e) => e.user_id) || []);
 
-  // Filter out demo-user experiments
-  const realExperiments = experiments?.filter((e) => e.user_id !== "demo-user") || [];
+  // Get admin user ID to exclude
+  const { data: adminUser } = await supabaseServer.auth.admin.listUsers();
+  const adminEmail = "martin@getlavado.com";
+  const adminUserId = adminUser?.users?.find((u) => u.email === adminEmail)?.id;
+
+  // Filter out demo-user and admin experiments
+  const realExperiments = experiments?.filter((e) =>
+    e.user_id !== "demo-user" &&
+    e.user_id !== adminUserId
+  ) || [];
   const realUsers = new Set(realExperiments.map((e) => e.user_id));
 
   // Get recent experiments (last 7 days)
