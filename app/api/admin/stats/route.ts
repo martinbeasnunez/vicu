@@ -2,8 +2,39 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase-server";
 
 // Simple admin stats endpoint - access with /api/admin/stats?key=vicu2024
+// Add ?debug=martin to see martin@getlavado.com experiments
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
+  const debug = searchParams.get("debug");
+
+  // Debug mode: show martin's experiments with deleted_at status
+  if (debug === "martin") {
+    const { data: adminUser } = await supabaseServer.auth.admin.listUsers();
+    const adminUserId = adminUser?.users?.find((u) => u.email === "martin@getlavado.com")?.id;
+
+    if (!adminUserId) {
+      return NextResponse.json({ error: "Admin user not found" });
+    }
+
+    const { data: martinExps } = await supabaseServer
+      .from("experiments")
+      .select("id, title, status, deleted_at, created_at")
+      .eq("user_id", adminUserId)
+      .order("created_at", { ascending: false });
+
+    return NextResponse.json({
+      user_id: adminUserId,
+      total: martinExps?.length || 0,
+      activos: martinExps?.filter(e => !e.deleted_at).length || 0,
+      borrados: martinExps?.filter(e => e.deleted_at).length || 0,
+      experimentos: martinExps?.map(e => ({
+        titulo: e.title,
+        estado: e.status,
+        borrado: e.deleted_at ? new Date(e.deleted_at).toLocaleDateString("es-PE") : null,
+      })),
+    });
+  }
+
   const key = searchParams.get("key");
 
   // Simple auth check
@@ -14,7 +45,7 @@ export async function GET(request: Request) {
   // Get all users from auth.users via experiments table (unique user_ids)
   const { data: experiments, error: expError } = await supabaseServer
     .from("experiments")
-    .select("user_id, title, description, created_at, status")
+    .select("user_id, title, description, created_at, status, deleted_at")
     .order("created_at", { ascending: false });
 
   if (expError) {
@@ -47,6 +78,7 @@ export async function GET(request: Request) {
   const goalSummary = realExperiments.slice(0, 20).map((e) => ({
     titulo: e.title,
     estado: e.status,
+    borrado: e.deleted_at ? "SI" : "no",
     fecha: new Date(e.created_at).toLocaleDateString("es-PE"),
   }));
 
