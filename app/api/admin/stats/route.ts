@@ -50,13 +50,25 @@ export async function GET(request: Request) {
     fecha: new Date(e.created_at).toLocaleDateString("es-PE"),
   }));
 
+  // Get WhatsApp configs to see who has it enabled
+  const { data: whatsappConfigs } = await supabaseServer
+    .from("whatsapp_config")
+    .select("user_id, phone_number, is_active, created_at");
+
+  const whatsappUsers = whatsappConfigs?.filter(c => c.is_active && c.user_id !== adminUserId) || [];
+
   return NextResponse.json({
     resumen: {
       usuarios_totales: realUsers.size,
       usuarios_con_demo: uniqueUsers.size,
       objetivos_totales: realExperiments.length,
       objetivos_ultimos_7_dias: recentExperiments.length,
+      usuarios_con_whatsapp: whatsappUsers.length,
     },
+    whatsapp_activos: whatsappUsers.map(w => ({
+      telefono: w.phone_number ? `***${w.phone_number.slice(-4)}` : "unknown",
+      desde: new Date(w.created_at).toLocaleDateString("es-PE"),
+    })),
     ultimos_20_objetivos: goalSummary,
   });
 }
