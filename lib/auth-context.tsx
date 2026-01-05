@@ -51,10 +51,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithEmail = async (email: string) => {
     try {
+      // Always use production URL for email redirect
+      const redirectUrl = process.env.NODE_ENV === "production"
+        ? "https://vicu.vercel.app/auth/callback"
+        : `${window.location.origin}/auth/callback`;
+
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          emailRedirectTo: redirectUrl,
         },
       });
       return { error: error as Error | null };

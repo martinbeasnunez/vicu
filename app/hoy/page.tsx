@@ -1482,10 +1482,12 @@ function HoyPageContent() {
                     {/* Phone number input */}
                     <input
                       type="tel"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       value={whatsappPhoneInput}
                       onChange={(e) => setWhatsappPhoneInput(e.target.value.replace(/[^0-9]/g, ""))}
                       placeholder="999999999"
-                      className="flex-1 h-12 px-4 bg-slate-800 border border-slate-600 rounded-xl text-white text-lg font-medium placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent tracking-wide"
+                      className="flex-1 min-w-0 h-12 px-4 bg-slate-800 border border-slate-600 rounded-xl text-white text-lg font-medium placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                     />
                   </div>
                   <p className="text-xs text-slate-500 mt-2">Solo números, sin espacios ni guiones</p>

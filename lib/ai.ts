@@ -694,7 +694,17 @@ Tu tarea es generar 2-3 pasos iniciales MUY CONCRETOS y PEQUEÑOS para un objeti
 
 ${stageContext}${situationalContextStr}
 
-REGLAS IMPORTANTES:
+REGLAS CRÍTICAS - LEE CON ATENCIÓN:
+
+⚠️ RESPETA EL CONTEXTO DEL USUARIO LITERALMENTE:
+- USA las palabras EXACTAS que el usuario escribió, NO las reinterpretes
+- Si dice "hijo de 2 años" o "hijo de 2.5 años" → es un NIÑO PEQUEÑO (toddler), NO un bebé
+- Si dice "hijo de 3 meses" → es un bebé
+- NO asumas edades, etapas de desarrollo, ni situaciones que el usuario NO mencionó
+- Si el usuario da un contexto específico, los pasos DEBEN reflejarlo exactamente
+- NUNCA generalices cuando hay información específica disponible
+
+REGLAS DE FORMATO:
 1. Los pasos deben ser ACCIONES ESPECÍFICAS, no genéricos
 2. El primer paso debe poder hacerse en menos de 5 minutos
 3. Cada paso debe ser verificable (se puede decir "sí, lo hice" o "no")

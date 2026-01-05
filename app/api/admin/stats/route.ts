@@ -35,6 +35,26 @@ export async function GET(request: Request) {
     });
   }
 
+  // Debug whatsapp reminders
+  if (debug === "reminders") {
+    const { data: reminders } = await supabaseServer
+      .from("whatsapp_reminders")
+      .select("*")
+      .order("sent_at", { ascending: false })
+      .limit(20);
+
+    return NextResponse.json({
+      total: reminders?.length || 0,
+      reminders: reminders?.map(r => ({
+        user_id: r.user_id,
+        slot: r.slot_type,
+        status: r.status,
+        sent_at: r.sent_at,
+        message_preview: r.message_content?.substring(0, 100),
+      })),
+    });
+  }
+
   const key = searchParams.get("key");
 
   // Simple auth check

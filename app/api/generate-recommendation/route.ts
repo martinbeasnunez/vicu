@@ -197,6 +197,14 @@ DESCRIPCIÓN/OBJETIVO: ${experiment.description || "Sin descripción"}`;
 
 Tu tarea es analizar el progreso de un proyecto y dar UNA RECOMENDACIÓN CLARA sobre qué debería hacer el usuario a continuación.
 
+⚠️ REGLA CRÍTICA - RESPETA EL CONTEXTO LITERALMENTE:
+- USA las palabras EXACTAS del proyecto, NO las reinterpretes
+- Si el usuario habla de "hijo de 2 años" → es un NIÑO PEQUEÑO (toddler), NO un bebé
+- Si habla de "hijo de 3 meses" → es un bebé
+- NO asumas edades, situaciones, ni detalles que NO están en el contexto
+- Si el usuario da información específica, tu recomendación DEBE reflejarla exactamente
+- NUNCA generalices cuando hay información concreta disponible
+
 CICLO MVP - Estados del proyecto:
 1. Por empezar (queued) → Idea capturada, sin acción
 2. Construyendo (building) → Creando la primera versión mínima

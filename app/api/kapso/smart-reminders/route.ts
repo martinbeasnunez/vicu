@@ -110,25 +110,52 @@ function calculateUrgencyScore(obj: {
 }): number {
   let score = 0;
 
+  // Deadline proximity (reduced weights to allow more rotation)
   if (obj.deadline) {
     const daysUntilDeadline = Math.floor(
       (new Date(obj.deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
     );
-    if (daysUntilDeadline <= 3) score += 50;
-    else if (daysUntilDeadline <= 7) score += 30;
-    else if (daysUntilDeadline <= 14) score += 15;
+    if (daysUntilDeadline <= 3) score += 35;
+    else if (daysUntilDeadline <= 7) score += 20;
+    else if (daysUntilDeadline <= 14) score += 10;
   }
 
-  if (obj.days_without_progress >= 7) score += 40;
-  else if (obj.days_without_progress >= 3) score += 25;
-  else if (obj.days_without_progress >= 1) score += 10;
+  // Days without progress (reduced weights)
+  if (obj.days_without_progress >= 7) score += 25;
+  else if (obj.days_without_progress >= 3) score += 15;
+  else if (obj.days_without_progress >= 1) score += 5;
 
+  // Streak bonus (keep same)
   if (obj.streak_days >= 7) score += 20;
   else if (obj.streak_days >= 3) score += 10;
 
+  // Already done today penalty
   if (obj.done_today > 0) score -= 30;
 
   return score;
+}
+
+// Add rotation factor based on time to vary which objective gets suggested
+function addRotationFactor(objectives: ObjectiveWithContext[]): void {
+  if (objectives.length <= 1) return;
+
+  // Use current hour + day of year to create rotation
+  const now = new Date();
+  const dayOfYear = Math.floor((now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
+  const hour = now.getHours();
+
+  // Different rotation for each time slot (5 slots per day)
+  const slotIndex = Math.floor(hour / 5);
+  const rotationSeed = (dayOfYear * 5 + slotIndex) % objectives.length;
+
+  // Boost the rotated objective by adding points
+  objectives.forEach((obj, idx) => {
+    // The objective at rotationSeed position gets a boost
+    // This creates variety across time slots
+    if (idx === rotationSeed) {
+      obj.urgency_score += 15;
+    }
+  });
 }
 
 async function getDayContext(userId: string): Promise<DayContext> {
@@ -203,6 +230,9 @@ async function getDayContext(userId: string): Promise<DayContext> {
     obj.urgency_score = calculateUrgencyScore(obj);
     return obj;
   });
+
+  // Apply rotation factor to create variety across time slots
+  addRotationFactor(objectives);
 
   objectives.sort((a, b) => b.urgency_score - a.urgency_score);
 
