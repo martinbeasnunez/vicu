@@ -6,18 +6,6 @@
     },
     {
       "path": "/api/kapso/smart-reminders",
-      "schedule": "0 16 * * *"
-    },
-    {
-      "path": "/api/kapso/smart-reminders",
-      "schedule": "0 19 * * *"
-    },
-    {
-      "path": "/api/kapso/smart-reminders",
-      "schedule": "0 22 * * *"
-    },
-    {
-      "path": "/api/kapso/smart-reminders",
       "schedule": "0 2 * * *"
     }
   ]
