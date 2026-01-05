@@ -9,7 +9,7 @@ const KAPSO_API_BASE = "https://api.kapso.ai/meta/whatsapp/v24.0";
  */
 export async function POST(request: NextRequest) {
   try {
-    const { phone, message } = await request.json();
+    const { phone, message, template } = await request.json();
 
     if (!phone) {
       return NextResponse.json(
@@ -20,8 +20,9 @@ export async function POST(request: NextRequest) {
 
     const apiKey = process.env.KAPSO_API_KEY;
     const phoneNumberId = process.env.KAPSO_PHONE_NUMBER_ID || "996277176894864";
-    const templateName = process.env.WHATSAPP_TEMPLATE_NAME || "hello_world";
-    const testMessage = message || "Recuerda revisar tu objetivo de hoy. ¡Tú puedes!";
+    // Allow override via request body for testing
+    const templateName = template || process.env.WHATSAPP_TEMPLATE_NAME || "hello_world";
+    const testMessage = message || "Recuerda revisar tu objetivo de hoy";
 
     if (!apiKey) {
       return NextResponse.json(
