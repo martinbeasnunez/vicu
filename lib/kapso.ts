@@ -174,6 +174,15 @@ export async function sendWhatsAppTemplate(
   // For custom templates like "vicu_reminder", we pass the message as parameter
   const isCustomTemplate = templateName !== "hello_world";
 
+  // Sanitize message for WhatsApp template parameters:
+  // - No newlines/tabs allowed
+  // - No more than 4 consecutive spaces
+  const sanitizedMessage = message
+    .replace(/\n/g, " | ")  // Replace newlines with separator
+    .replace(/\t/g, " ")     // Replace tabs with space
+    .replace(/\s{4,}/g, "   ") // Max 3 consecutive spaces
+    .substring(0, 1024);     // WhatsApp limit
+
   const payload: KapsoSendMessageRequest = {
     messaging_product: "whatsapp",
     recipient_type: "individual",
@@ -191,7 +200,7 @@ export async function sendWhatsAppTemplate(
             parameters: [
               {
                 type: "text",
-                text: message.substring(0, 1024), // WhatsApp limit
+                text: sanitizedMessage,
               },
             ],
           },
