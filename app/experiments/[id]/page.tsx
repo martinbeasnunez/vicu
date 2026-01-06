@@ -7,6 +7,7 @@ import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 import { useExperimentStore } from "@/lib/experiment-store";
 import { AuthGuard } from "@/components/auth-guard";
+import WhatsAppOnboardingModal from "@/components/WhatsAppOnboardingModal";
 import {
   ExperimentStatus,
   STATUS_LABELS,
@@ -571,6 +572,10 @@ function ExperimentPageContent() {
     selectedState: null,
     nextStep: null,
   });
+
+  // WhatsApp onboarding modal state
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+  const [hasCheckedWhatsApp, setHasCheckedWhatsApp] = useState(false);
 
   const totalActions = actions.length;
   const doneActions = actions.filter((a) => a.status === "done").length;
@@ -1725,6 +1730,29 @@ function ExperimentPageContent() {
     }
     fetchData();
   }, [id, fetchActions, fetchCheckins]);
+
+  // Check if user has WhatsApp configured - show modal if not
+  useEffect(() => {
+    if (loading || hasCheckedWhatsApp) return;
+
+    async function checkWhatsApp() {
+      try {
+        const res = await fetch("/api/whatsapp/config");
+        const data = await res.json();
+        setHasCheckedWhatsApp(true);
+
+        // Show modal if user doesn't have WhatsApp configured
+        if (data.success && !data.is_active) {
+          // Small delay to let the page render first
+          setTimeout(() => setShowWhatsAppModal(true), 1500);
+        }
+      } catch {
+        setHasCheckedWhatsApp(true);
+      }
+    }
+
+    checkWhatsApp();
+  }, [loading, hasCheckedWhatsApp]);
 
   useEffect(() => {
     if (!loading && actions.length === 0 && !actionsError) {
@@ -3816,6 +3844,17 @@ function ExperimentPageContent() {
           </div>
         </div>
       )}
+
+      {/* WhatsApp Onboarding Modal */}
+      <WhatsAppOnboardingModal
+        isOpen={showWhatsAppModal}
+        onClose={() => setShowWhatsAppModal(false)}
+        onSuccess={() => {
+          setShowWhatsAppModal(false);
+          setToast("Recordatorios activados");
+          setTimeout(() => setToast(null), 3000);
+        }}
+      />
     </div>
   );
 }
