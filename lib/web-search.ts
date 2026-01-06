@@ -22,131 +22,90 @@ export interface SearchResult {
   source_urls?: string[];
 }
 
-interface BraveSearchResult {
-  title: string;
-  url: string;
-  description: string;
-}
-
-interface BraveSearchResponse {
-  web?: {
-    results: BraveSearchResult[];
-  };
-}
-
 /**
- * Search using Brave Search API for real web results.
- * Falls back gracefully if API key is not configured.
- */
-async function braveSearch(query: string): Promise<BraveSearchResult[]> {
-  const apiKey = process.env.BRAVE_SEARCH_API_KEY;
-
-  if (!apiKey) {
-    console.warn("BRAVE_SEARCH_API_KEY not configured, skipping web search");
-    return [];
-  }
-
-  try {
-    const response = await fetch(
-      `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`,
-      {
-        headers: {
-          "Accept": "application/json",
-          "X-Subscription-Token": apiKey,
-        },
-      }
-    );
-
-    if (!response.ok) {
-      console.error(`Brave Search API error: ${response.status}`);
-      return [];
-    }
-
-    const data: BraveSearchResponse = await response.json();
-    return data.web?.results || [];
-  } catch (error) {
-    console.error("Brave Search failed:", error);
-    return [];
-  }
-}
-
-/**
- * Uses real web search to find information, then summarizes with GPT.
+ * Uses OpenAI's built-in web search via Responses API.
+ * This provides Google-quality search results directly through OpenAI.
  */
 export async function searchForContext(query: string): Promise<SearchResult> {
-  // Step 1: Get real search results from Brave
-  const braveResults = await braveSearch(query);
+  try {
+    console.log(`[Web Search] Searching for: "${query}"`);
 
-  if (braveResults.length === 0) {
-    return {
-      query,
-      summary: "",
-      facts: [],
-      source_hint: "",
-    };
-  }
+    // Use OpenAI Responses API with web search tool
+    const response = await getOpenAI().responses.create({
+      model: "gpt-4o-mini",
+      tools: [{ type: "web_search_preview" }],
+      input: `Busca información actualizada sobre: "${query}"
 
-  // Step 2: Build context from search results
-  const searchContext = braveResults
-    .map((r, i) => `[${i + 1}] ${r.title}\n${r.description}\nURL: ${r.url}`)
-    .join("\n\n");
-
-  // Step 3: Use GPT to extract relevant facts from the REAL search results
-  const completion = await getOpenAI().chat.completions.create({
-    model: "gpt-4.1-mini",
-    messages: [
-      {
-        role: "system",
-        content: `Eres un asistente que extrae información relevante de resultados de búsqueda web.
+Responde en formato JSON con esta estructura exacta:
+{
+  "summary": "Resumen de 1-2 oraciones sobre qué es",
+  "facts": ["Dato específico 1", "Dato específico 2", "Dato específico 3"],
+  "source_hint": "Tipo de fuente (ej: 'sitio oficial', 'artículo')",
+  "urls": ["url1", "url2"]
+}
 
 IMPORTANTE:
-- SOLO usa información de los resultados proporcionados, NO inventes datos
-- Si los resultados no contienen la información solicitada, indica que no se encontró
-- Extrae datos específicos y verificables de las fuentes
-- Prioriza información de fuentes confiables
+- Si es una empresa/startup/producto, incluye qué hace y su propósito
+- Prioriza información del sitio oficial si existe
+- Incluye las URLs de las fuentes que uses`,
+    });
 
-Responde SOLO con JSON válido:
-{
-  "summary": "Resumen de 1-2 oraciones basado en los resultados",
-  "facts": ["Dato específico 1", "Dato específico 2", "Dato específico 3"],
-  "source_hint": "Tipo de fuentes encontradas (ej: 'sitio oficial', 'artículos', 'foros')"
-}`
-      },
-      {
-        role: "user",
-        content: `Búsqueda: "${query}"\n\nResultados:\n${searchContext}`
+    // Extract the text content from the response
+    let textContent = "";
+    for (const item of response.output || []) {
+      if (item.type === "message" && "content" in item) {
+        for (const contentItem of item.content || []) {
+          if (contentItem.type === "output_text" && "text" in contentItem) {
+            textContent = contentItem.text;
+            break;
+          }
+        }
       }
-    ],
-    temperature: 0.2,
-  });
+    }
 
-  const content = completion.choices[0]?.message?.content;
-  if (!content) {
+    if (!textContent) {
+      console.log("[Web Search] No text content in response");
+      return {
+        query,
+        summary: "",
+        facts: [],
+        source_hint: "",
+      };
+    }
+
+    // Try to parse JSON from the response
+    try {
+      // Find JSON in the response (might be wrapped in markdown code blocks)
+      const jsonMatch = textContent.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        console.log(`[Web Search] Found: ${parsed.summary}`);
+        return {
+          query,
+          summary: parsed.summary || "",
+          facts: parsed.facts || [],
+          source_hint: parsed.source_hint || "",
+          source_urls: parsed.urls || [],
+        };
+      }
+    } catch (parseError) {
+      console.log("[Web Search] Could not parse JSON, using raw text");
+    }
+
+    // Fallback: return the raw text as summary
+    return {
+      query,
+      summary: textContent.slice(0, 200),
+      facts: [],
+      source_hint: "búsqueda web",
+    };
+  } catch (error) {
+    console.error("[Web Search] Error:", error);
     return {
       query,
       summary: "",
       facts: [],
       source_hint: "",
-      source_urls: braveResults.map(r => r.url),
-    };
-  }
-
-  try {
-    const parsed = JSON.parse(content);
-    return {
-      query,
-      summary: parsed.summary || "",
-      facts: parsed.facts || [],
-      source_hint: parsed.source_hint || "",
-      source_urls: braveResults.map(r => r.url),
-    };
-  } catch {
-    return {
-      query,
-      summary: "",
-      facts: [],
-      source_hint: "",
-      source_urls: braveResults.map(r => r.url),
     };
   }
 }
@@ -215,14 +174,14 @@ Responde SOLO con JSON:
 
 /**
  * Main function: analyzes user message and returns enriched context if needed.
- * Uses real web search via Brave Search API.
+ * Uses OpenAI's built-in web search for accurate, real-time results.
  */
 export async function enrichWithSearch(
   userMessage: string,
   conversationContext: string
 ): Promise<{ enriched: boolean; searchResults: SearchResult[] }> {
-  // Check if Brave Search is configured
-  if (!process.env.BRAVE_SEARCH_API_KEY) {
+  // Check if OpenAI is configured
+  if (!process.env.OPENAI_API_KEY) {
     return { enriched: false, searchResults: [] };
   }
 

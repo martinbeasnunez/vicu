@@ -72,6 +72,7 @@ function VicuPageContent() {
   const [phase, setPhase] = useState<ChatPhase>("conversation");
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analyzingStatus, setAnalyzingStatus] = useState<string>("Pensando...");
 
   const [analysis, setAnalysis] = useState<VicuAnalysis | null>(null);
   const [clarificationIndex, setClarificationIndex] = useState(0);
@@ -111,6 +112,20 @@ function VicuPageContent() {
 
   const analyzeConversation = async (currentMessages: Message[]) => {
     setIsAnalyzing(true);
+    setAnalyzingStatus("Investigando...");
+
+    // Cycle through status messages while waiting
+    const statusMessages = [
+      "Investigando...",
+      "Buscando información...",
+      "Analizando contexto...",
+      "Pensando respuesta...",
+    ];
+    let statusIndex = 0;
+    const statusInterval = setInterval(() => {
+      statusIndex = (statusIndex + 1) % statusMessages.length;
+      setAnalyzingStatus(statusMessages[statusIndex]);
+    }, 1500);
 
     try {
       const res = await fetch("/api/analyze-chat", {
@@ -133,6 +148,7 @@ function VicuPageContent() {
     } catch (error) {
       console.error("Error analyzing chat:", error);
     } finally {
+      clearInterval(statusInterval);
       setIsAnalyzing(false);
     }
 
@@ -704,17 +720,20 @@ function VicuPageContent() {
                 </div>
               ))}
 
-              {/* Typing indicator */}
+              {/* Typing indicator with status */}
               {isAnalyzing && (
                 <div className="flex justify-start animate-fade-in">
                   <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center mr-3 overflow-hidden">
                     <Image src="/vicu-logo.png" alt="Vicu" width={28} height={28} className="w-6 h-6" />
                   </div>
                   <div className="bg-slate-900/70 border border-white/10 rounded-2xl rounded-bl-md px-4 py-3">
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                      <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                      <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
+                        <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                        <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                        <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                      </div>
+                      <span className="text-slate-400 text-sm">{analyzingStatus}</span>
                     </div>
                   </div>
                 </div>
