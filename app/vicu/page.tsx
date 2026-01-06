@@ -217,14 +217,6 @@ function VicuPageContent() {
       parts.push(`**Objetivo:** ${result.summary}`);
     }
 
-    // Show discovered facts from research (if any)
-    if (result.discovered_facts && result.discovered_facts.length > 0) {
-      parts.push(`\n**Datos que investigué:**`);
-      result.discovered_facts.slice(0, 4).forEach(fact => {
-        parts.push(`• ${fact}`);
-      });
-    }
-
     if (result.context_bullets && result.context_bullets.length > 0) {
       parts.push(`\n**Contexto clave:**`);
       result.context_bullets.forEach(bullet => {
@@ -257,13 +249,9 @@ function VicuPageContent() {
     return parts.join("\n");
   };
 
-  // Build a context-aware response prefix when search results are available
-  const buildSearchContextPrefix = (result: VicuAnalysis): string => {
-    if (!result.discovered_facts || result.discovered_facts.length === 0) {
-      return "";
-    }
-    // Return a brief mention that we found relevant data
-    return `💡 Investigué un poco y encontré información útil:\n• ${result.discovered_facts.slice(0, 2).join("\n• ")}\n\n`;
+  // Build a context-aware response prefix (search feature disabled)
+  const buildSearchContextPrefix = (_result: VicuAnalysis): string => {
+    return "";
   };
 
   const handleSendMessage = async () => {
