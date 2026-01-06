@@ -164,28 +164,26 @@ export async function detectSearchNeeds(userMessage: string, context: string): P
         content: `Analiza el mensaje y determina si necesitas buscar información en la web.
 
 BUSCA CUANDO el usuario mencione:
-- Nombres propios de empresas/startups/productos que podrían ser ambiguos (ej: "Thoven" podría ser música o una startup)
-- Productos específicos donde el mercado/precio importa (ej: "bus escolar" - ¿en qué país? ¿qué tipo?)
+- Nombres propios de empresas/startups/productos que podrían ser ambiguos
+- Productos específicos donde el mercado/precio importa
 - Proyectos o plataformas que no conoces con certeza
-- Cualquier nombre que podría tener múltiples significados
 
 NO BUSQUES CUANDO:
 - Es un término genérico sin ambigüedad (ej: "bajar de peso", "aprender inglés")
 - El usuario ya explicó qué es
 - Es información personal del usuario (ej: "mi empresa", "mi trabajo")
 
-IMPORTANTE: Para nombres ambiguos como "Thoven", "Getlavado", etc., SIEMPRE busca para confirmar qué es realmente.
+FORMATO DE QUERIES:
+- Para empresas tech/startups: "nombreempresa.ai" (buscar el dominio directamente)
+- Para productos con contexto local: "producto país" (ej: "minivan escolar Peru")
+- Para nombres ambiguos: buscar con contexto de negocio "nombre empresa startup IA"
 
 Responde SOLO con JSON:
 {
   "needs_search": true/false,
-  "queries": ["búsqueda 1"] // máximo 2 búsquedas muy específicas
-}
-
-Las queries deben incluir contexto cuando sea posible:
-- "Thoven startup" o "thoven.ai" (no solo "Thoven")
-- "Getlavado Peru" o "getlavado startup" (no solo "Getlavado")
-- "bus escolar Peru precio" (incluir país si se puede inferir)`
+  "queries": ["búsqueda 1", "búsqueda 2"], // máximo 2 búsquedas
+  "likely_domain": "nombre.ai" // opcional: si crees que es una empresa tech, sugiere el dominio probable
+}`
       },
       {
         role: "user",
@@ -201,7 +199,12 @@ Las queries deben incluir contexto cuando sea posible:
   try {
     const parsed = JSON.parse(content);
     if (parsed.needs_search && parsed.queries) {
-      return parsed.queries.slice(0, 2);
+      const queries = parsed.queries.slice(0, 2);
+      // If a likely domain was suggested, add a search for it
+      if (parsed.likely_domain && !queries.some((q: string) => q.includes(parsed.likely_domain))) {
+        queries.unshift(parsed.likely_domain);
+      }
+      return queries.slice(0, 2);
     }
   } catch {
     // Si falla el parsing, no buscar
