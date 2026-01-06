@@ -276,7 +276,9 @@ export default function AdminDashboard() {
                       <td className="p-3 text-sm">{u.email || "-"}</td>
                       <td className="p-3">
                         {u.whatsapp_active ? (
-                          <span className="text-emerald-400 text-sm">Si</span>
+                          <span className="text-emerald-400 text-sm" title={u.phone || ""}>
+                            {u.phone ? `+${u.phone.slice(0, 2)}...${u.phone.slice(-4)}` : "Si"}
+                          </span>
                         ) : (
                           <span className="text-slate-500 text-sm">-</span>
                         )}
