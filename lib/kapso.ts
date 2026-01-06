@@ -139,73 +139,15 @@ export function isKapsoConfigured(): boolean {
 // =============================================================================
 
 /**
- * Send a WhatsApp text message via Kapso API
- * Falls back to template if text message fails (outside 24h window)
+ * Send a WhatsApp message via Kapso API
+ * Always uses template to avoid 24h window restrictions
  */
 export async function sendWhatsAppMessage(
   to: string,
   message: string
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const { apiKey, phoneNumberId } = getKapsoConfig();
-
-  if (!apiKey) {
-    console.warn("[Kapso] API key not configured. Skipping WhatsApp message.");
-    return { success: false, error: "KAPSO_API_KEY not configured" };
-  }
-
-  // Clean phone number: remove spaces, dashes, and the + prefix
-  // WhatsApp Cloud API expects numbers WITHOUT the + prefix (e.g., "51965450086")
-  const cleanPhone = to.replace(/[\s\-+]/g, "");
-
-  console.log("[Kapso] Sending to:", { original: to, cleaned: cleanPhone, phoneNumberId });
-
-  const payload: KapsoSendMessageRequest = {
-    messaging_product: "whatsapp",
-    recipient_type: "individual",
-    to: cleanPhone,
-    type: "text",
-    text: {
-      body: message,
-      preview_url: false,
-    },
-  };
-
-  try {
-    const response = await fetch(`${KAPSO_API_BASE}/${phoneNumberId}/messages`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": apiKey,
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[Kapso] Failed to send text message:", response.status, errorText);
-
-      // Check if error is due to 24h window (error code 131047 or similar)
-      const isWindowError = errorText.includes("131047") ||
-        errorText.includes("Re-engagement message") ||
-        errorText.includes("24 hour");
-
-      if (isWindowError) {
-        console.log("[Kapso] Outside 24h window, trying template...");
-        return sendWhatsAppTemplate(cleanPhone, message);
-      }
-
-      return { success: false, error: `HTTP ${response.status}: ${errorText}` };
-    }
-
-    const data: KapsoSendMessageResponse = await response.json();
-    const messageId = data.messages?.[0]?.id;
-
-    console.log("[Kapso] Message sent successfully:", messageId);
-    return { success: true, messageId };
-  } catch (error) {
-    console.error("[Kapso] Error sending message:", error);
-    return { success: false, error: String(error) };
-  }
+  // Always use template to avoid 24h conversation window issues
+  return sendWhatsAppTemplate(to, message);
 }
 
 /**
