@@ -223,24 +223,26 @@ export default function AdminDashboard() {
         {data.daily_activity && data.daily_activity.length > 0 && (
           <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 mb-8">
             <h2 className="text-lg font-semibold mb-4">Actividad ultimos 7 dias</h2>
-            <div className="flex items-end gap-2 h-32">
+            <div className="flex items-end gap-2 h-40">
               {data.daily_activity.map((day, i) => (
                 <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                  <div className="flex gap-1 text-[10px] text-slate-400">
+                    <span className="text-emerald-400">{day.checkins}</span>
+                    <span className="text-amber-400">{day.objectives_created}</span>
+                    <span className="text-blue-400">{day.reminders_sent}</span>
+                  </div>
                   <div className="w-full flex gap-1 items-end h-24">
                     <div
                       className="flex-1 bg-emerald-500 rounded-t"
                       style={{ height: `${(day.checkins / maxCheckins) * 100}%`, minHeight: day.checkins > 0 ? 4 : 0 }}
-                      title={`${day.checkins} checkins`}
                     />
                     <div
                       className="flex-1 bg-amber-500 rounded-t"
                       style={{ height: `${(day.objectives_created / maxObjectives) * 100}%`, minHeight: day.objectives_created > 0 ? 4 : 0 }}
-                      title={`${day.objectives_created} objetivos creados`}
                     />
                     <div
                       className="flex-1 bg-blue-500 rounded-t"
                       style={{ height: `${(day.reminders_sent / maxReminders) * 100}%`, minHeight: day.reminders_sent > 0 ? 4 : 0 }}
-                      title={`${day.reminders_sent} recordatorios`}
                     />
                   </div>
                   <span className="text-xs text-slate-500">{formatDate(day.date)}</span>
