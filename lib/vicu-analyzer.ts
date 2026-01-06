@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { enrichWithSearch, SearchResult } from "./web-search";
 
 // Lazy initialization to avoid build-time errors in Vercel
 let _openai: OpenAI | null = null;
@@ -78,6 +79,10 @@ export interface VicuAnalysis {
   phases?: ObjectivePhase[];
   // Situational context for smarter recommendations (ALL categories)
   situational_context?: SituationalContext;
+  // Search results used to enrich the analysis (from real web search)
+  search_results?: SearchResult[];
+  // Facts discovered from search (to show to user)
+  discovered_facts?: string[];
 }
 
 const ANALYSIS_SYSTEM_PROMPT = `Eres Vicu, una IA de SEGUIMIENTO que ayuda a las personas a CUMPLIR sus metas y proyectos.
@@ -356,18 +361,35 @@ export async function analyzeChat(messages: ChatMessage[]): Promise<VicuAnalysis
     .map((m) => `${m.role === "vicu" ? "Vicu" : "Usuario"}: ${m.content}`)
     .join("\n");
 
-  // NOTE: Web search/discovered_facts feature DISABLED
-  // The GPT-based "search" was returning incorrect data:
-  // - Thoven (thoven.ai) was confused with Beethoven (music)
-  // - School vehicles in Peru ($13k) got US bus prices ($100-200k)
-  // The model's training data caused more harm than good.
-  // If real-time search is needed in the future, integrate a proper search API.
+  // Get the last user message for search enrichment
+  const lastUserMessage = messages.filter(m => m.role === "user").pop()?.content || "";
+
+  // STEP 1: Search for real information using Brave Search API
+  // This helps Vicu understand proper nouns like "Thoven" (thoven.ai) or "Getlavado" (laundry startup)
+  let searchContext = "";
+  let searchResults: SearchResult[] = [];
+  let discoveredFacts: string[] = [];
+
+  try {
+    const enrichment = await enrichWithSearch(lastUserMessage, conversationText);
+    if (enrichment.enriched && enrichment.searchResults.length > 0) {
+      searchResults = enrichment.searchResults;
+      // Collect all facts from search results
+      discoveredFacts = searchResults.flatMap(r => r.facts);
+      // Build context string for the prompt
+      searchContext = `\n\n## INFORMACIÓN ENCONTRADA EN LA WEB:\n${searchResults.map(r =>
+        `**${r.query}**\n${r.summary}\n${r.facts.length > 0 ? `- ${r.facts.join("\n- ")}` : ""}\n(Fuente: ${r.source_hint})`
+      ).join("\n\n")}`;
+    }
+  } catch (searchError) {
+    console.warn("Search enrichment failed, continuing without:", searchError);
+  }
 
   // Inyectar la fecha de hoy en el prompt
   const todayDate = new Date().toISOString().split("T")[0];
   const promptWithDate = ANALYSIS_SYSTEM_PROMPT.replace("{{TODAY_DATE}}", todayDate);
 
-  // Analyze conversation
+  // STEP 2: Analyze with enriched context from real web search
   const completion = await getOpenAI().chat.completions.create({
     model: "gpt-4.1-mini",
     messages: [
@@ -377,7 +399,7 @@ export async function analyzeChat(messages: ChatMessage[]): Promise<VicuAnalysis
       },
       {
         role: "user",
-        content: `Analiza esta conversación y extrae el plan de experimento:\n\n${conversationText}`,
+        content: `Analiza esta conversación y extrae el plan de experimento:\n\n${conversationText}${searchContext}`,
       },
     ],
     temperature: 0.3,
@@ -397,6 +419,8 @@ export async function analyzeChat(messages: ChatMessage[]): Promise<VicuAnalysis
     return {
       ...parsed,
       confidence: normalizedConfidence,
+      search_results: searchResults.length > 0 ? searchResults : undefined,
+      discovered_facts: discoveredFacts.length > 0 ? discoveredFacts : undefined,
     } as VicuAnalysis;
   } catch {
     console.error("Failed to parse analysis response:", content);
@@ -417,6 +441,8 @@ export async function analyzeChat(messages: ChatMessage[]): Promise<VicuAnalysis
       needs_clarification: true,
       clarifying_questions: ["Cuéntame más sobre tu proyecto. ¿Qué quieres lograr exactamente?"],
       confidence: 0,
+      search_results: searchResults.length > 0 ? searchResults : undefined,
+      discovered_facts: discoveredFacts.length > 0 ? discoveredFacts : undefined,
     };
   }
 }

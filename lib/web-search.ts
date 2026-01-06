@@ -19,50 +19,115 @@ export interface SearchResult {
   summary: string;
   facts: string[];
   source_hint: string;
+  source_urls?: string[];
+}
+
+interface BraveSearchResult {
+  title: string;
+  url: string;
+  description: string;
+}
+
+interface BraveSearchResponse {
+  web?: {
+    results: BraveSearchResult[];
+  };
 }
 
 /**
- * Uses OpenAI to search for real-world information.
- * This leverages the model's training data for common facts like product prices,
- * market data, etc. For truly real-time data, you'd integrate a search API.
+ * Search using Brave Search API for real web results.
+ * Falls back gracefully if API key is not configured.
+ */
+async function braveSearch(query: string): Promise<BraveSearchResult[]> {
+  const apiKey = process.env.BRAVE_SEARCH_API_KEY;
+
+  if (!apiKey) {
+    console.warn("BRAVE_SEARCH_API_KEY not configured, skipping web search");
+    return [];
+  }
+
+  try {
+    const response = await fetch(
+      `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`,
+      {
+        headers: {
+          "Accept": "application/json",
+          "X-Subscription-Token": apiKey,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.error(`Brave Search API error: ${response.status}`);
+      return [];
+    }
+
+    const data: BraveSearchResponse = await response.json();
+    return data.web?.results || [];
+  } catch (error) {
+    console.error("Brave Search failed:", error);
+    return [];
+  }
+}
+
+/**
+ * Uses real web search to find information, then summarizes with GPT.
  */
 export async function searchForContext(query: string): Promise<SearchResult> {
+  // Step 1: Get real search results from Brave
+  const braveResults = await braveSearch(query);
+
+  if (braveResults.length === 0) {
+    return {
+      query,
+      summary: "",
+      facts: [],
+      source_hint: "",
+    };
+  }
+
+  // Step 2: Build context from search results
+  const searchContext = braveResults
+    .map((r, i) => `[${i + 1}] ${r.title}\n${r.description}\nURL: ${r.url}`)
+    .join("\n\n");
+
+  // Step 3: Use GPT to extract relevant facts from the REAL search results
   const completion = await getOpenAI().chat.completions.create({
     model: "gpt-4.1-mini",
     messages: [
       {
         role: "system",
-        content: `Eres un asistente de investigación. Tu trabajo es proporcionar información factual y actualizada sobre cualquier tema.
+        content: `Eres un asistente que extrae información relevante de resultados de búsqueda web.
 
 IMPORTANTE:
-- Proporciona datos ESPECÍFICOS y NUMÉRICOS cuando sea posible
-- Para precios, da rangos realistas del mercado actual (2024-2025)
-- Para productos, incluye modelos, versiones y precios típicos
-- Si es un tema de nicho, menciona las fuentes típicas de información
-- Sé conciso pero informativo
+- SOLO usa información de los resultados proporcionados, NO inventes datos
+- Si los resultados no contienen la información solicitada, indica que no se encontró
+- Extrae datos específicos y verificables de las fuentes
+- Prioriza información de fuentes confiables
 
 Responde SOLO con JSON válido:
 {
-  "summary": "Resumen de 1-2 oraciones con la información clave",
+  "summary": "Resumen de 1-2 oraciones basado en los resultados",
   "facts": ["Dato específico 1", "Dato específico 2", "Dato específico 3"],
-  "source_hint": "Donde típicamente se encuentra esta info (ej: 'concesionarios', 'mercado libre', 'tiendas especializadas')"
+  "source_hint": "Tipo de fuentes encontradas (ej: 'sitio oficial', 'artículos', 'foros')"
 }`
       },
       {
         role: "user",
-        content: query
+        content: `Búsqueda: "${query}"\n\nResultados:\n${searchContext}`
       }
     ],
-    temperature: 0.3,
+    temperature: 0.2,
   });
 
   const content = completion.choices[0]?.message?.content;
   if (!content) {
     return {
       query,
-      summary: "No se encontró información específica.",
+      summary: "",
       facts: [],
-      source_hint: ""
+      source_hint: "",
+      source_urls: braveResults.map(r => r.url),
     };
   }
 
@@ -72,21 +137,23 @@ Responde SOLO con JSON válido:
       query,
       summary: parsed.summary || "",
       facts: parsed.facts || [],
-      source_hint: parsed.source_hint || ""
+      source_hint: parsed.source_hint || "",
+      source_urls: braveResults.map(r => r.url),
     };
   } catch {
     return {
       query,
-      summary: content.slice(0, 200),
+      summary: "",
       facts: [],
-      source_hint: ""
+      source_hint: "",
+      source_urls: braveResults.map(r => r.url),
     };
   }
 }
 
 /**
  * Detects if a message needs external information lookup.
- * Returns search queries if needed.
+ * Focuses on proper nouns, company names, and specific products that need verification.
  */
 export async function detectSearchNeeds(userMessage: string, context: string): Promise<string[]> {
   const completion = await getOpenAI().chat.completions.create({
@@ -94,30 +161,31 @@ export async function detectSearchNeeds(userMessage: string, context: string): P
     messages: [
       {
         role: "system",
-        content: `Analiza el mensaje del usuario y determina si necesitas buscar información externa para ayudarlo mejor.
+        content: `Analiza el mensaje y determina si necesitas buscar información en la web.
 
-BUSCA INFORMACIÓN CUANDO:
-- Mencione un producto específico (autos, tecnología, etc.) → busca precios y modelos
-- Mencione una meta financiera sin contexto → busca costos típicos
-- Mencione aprender algo → busca duración típica y recursos
-- Mencione un negocio/industria → busca datos del mercado
-- Mencione una ubicación específica → busca información local relevante
+BUSCA CUANDO el usuario mencione:
+- Nombres propios de empresas/startups/productos que podrían ser ambiguos (ej: "Thoven" podría ser música o una startup)
+- Productos específicos donde el mercado/precio importa (ej: "bus escolar" - ¿en qué país? ¿qué tipo?)
+- Proyectos o plataformas que no conoces con certeza
+- Cualquier nombre que podría tener múltiples significados
 
 NO BUSQUES CUANDO:
-- El usuario ya dio los datos específicos
-- Es una meta puramente personal sin datos de mercado (ej: "quiero ser más feliz")
-- Ya tienes la información en el contexto
+- Es un término genérico sin ambigüedad (ej: "bajar de peso", "aprender inglés")
+- El usuario ya explicó qué es
+- Es información personal del usuario (ej: "mi empresa", "mi trabajo")
+
+IMPORTANTE: Para nombres ambiguos como "Thoven", "Getlavado", etc., SIEMPRE busca para confirmar qué es realmente.
 
 Responde SOLO con JSON:
 {
   "needs_search": true/false,
-  "queries": ["búsqueda 1", "búsqueda 2"] // máximo 2 búsquedas, vacío si needs_search=false
+  "queries": ["búsqueda 1"] // máximo 2 búsquedas muy específicas
 }
 
-Las queries deben ser específicas, ej:
-- "precio Suzuki Jimny 2024 Perú nuevo y usado"
-- "costo promedio curso inglés presencial Lima"
-- "precio típico servicios desarrollo web freelance Latinoamérica"`
+Las queries deben incluir contexto cuando sea posible:
+- "Thoven startup" o "thoven.ai" (no solo "Thoven")
+- "Getlavado Peru" o "getlavado startup" (no solo "Getlavado")
+- "bus escolar Peru precio" (incluir país si se puede inferir)`
       },
       {
         role: "user",
@@ -133,7 +201,7 @@ Las queries deben ser específicas, ej:
   try {
     const parsed = JSON.parse(content);
     if (parsed.needs_search && parsed.queries) {
-      return parsed.queries.slice(0, 2); // máximo 2 búsquedas
+      return parsed.queries.slice(0, 2);
     }
   } catch {
     // Si falla el parsing, no buscar
@@ -144,11 +212,17 @@ Las queries deben ser específicas, ej:
 
 /**
  * Main function: analyzes user message and returns enriched context if needed.
+ * Uses real web search via Brave Search API.
  */
 export async function enrichWithSearch(
   userMessage: string,
   conversationContext: string
 ): Promise<{ enriched: boolean; searchResults: SearchResult[] }> {
+  // Check if Brave Search is configured
+  if (!process.env.BRAVE_SEARCH_API_KEY) {
+    return { enriched: false, searchResults: [] };
+  }
+
   // Detect if we need to search
   const searchQueries = await detectSearchNeeds(userMessage, conversationContext);
 
@@ -160,8 +234,11 @@ export async function enrichWithSearch(
   const searchPromises = searchQueries.map(query => searchForContext(query));
   const searchResults = await Promise.all(searchPromises);
 
+  // Filter out empty results
+  const validResults = searchResults.filter(r => r.facts.length > 0 || r.summary);
+
   return {
-    enriched: true,
-    searchResults
+    enriched: validResults.length > 0,
+    searchResults: validResults
   };
 }
