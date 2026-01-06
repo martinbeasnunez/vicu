@@ -139,6 +139,11 @@ export async function GET(request: NextRequest) {
         return d >= date && d < nextDate;
       }).length || 0;
 
+      const objectivesCreatedOnDay = experiments?.filter(e => {
+        const d = new Date(e.created_at);
+        return d >= date && d < nextDate;
+      }).length || 0;
+
       const { count: remindersSent } = await supabase
         .from("whatsapp_reminders")
         .select("*", { count: "exact", head: true })
@@ -148,6 +153,7 @@ export async function GET(request: NextRequest) {
       dailyActivity.push({
         date: date.toISOString().split("T")[0],
         checkins: checkinsOnDay,
+        objectives_created: objectivesCreatedOnDay,
         reminders_sent: remindersSent || 0,
       });
     }

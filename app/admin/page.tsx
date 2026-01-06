@@ -32,6 +32,7 @@ interface DashboardData {
   daily_activity: Array<{
     date: string;
     checkins: number;
+    objectives_created: number;
     reminders_sent: number;
   }>;
   users: Array<{
@@ -161,6 +162,7 @@ export default function AdminDashboard() {
   };
 
   const maxCheckins = Math.max(...(data.daily_activity?.map(d => d.checkins) || [1]), 1);
+  const maxObjectives = Math.max(...(data.daily_activity?.map(d => d.objectives_created) || [1]), 1);
   const maxReminders = Math.max(...(data.daily_activity?.map(d => d.reminders_sent) || [1]), 1);
 
   return (
@@ -231,6 +233,11 @@ export default function AdminDashboard() {
                       title={`${day.checkins} checkins`}
                     />
                     <div
+                      className="flex-1 bg-amber-500 rounded-t"
+                      style={{ height: `${(day.objectives_created / maxObjectives) * 100}%`, minHeight: day.objectives_created > 0 ? 4 : 0 }}
+                      title={`${day.objectives_created} objetivos creados`}
+                    />
+                    <div
                       className="flex-1 bg-blue-500 rounded-t"
                       style={{ height: `${(day.reminders_sent / maxReminders) * 100}%`, minHeight: day.reminders_sent > 0 ? 4 : 0 }}
                       title={`${day.reminders_sent} recordatorios`}
@@ -244,6 +251,10 @@ export default function AdminDashboard() {
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-emerald-500 rounded" />
                 <span className="text-slate-400">Checkins</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-amber-500 rounded" />
+                <span className="text-slate-400">Objetivos</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-blue-500 rounded" />
