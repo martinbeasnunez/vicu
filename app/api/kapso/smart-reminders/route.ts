@@ -2,14 +2,14 @@
  * POST /api/kapso/smart-reminders
  *
  * Sistema de recordatorios WhatsApp para Vicu.
- * 5 resúmenes diarios con contexto de todos los objetivos.
+ * Enfoque HÍBRIDO para maximizar engagement:
  *
  * HORARIOS (Bogotá/Lima UTC-5):
- * - 08:00 → MORNING - Plan del día
- * - 11:00 → MIDMORNING - Check-in de media mañana
- * - 14:00 → AFTERNOON - Check-in de tarde
- * - 17:00 → EVENING - Último empujón del día
- * - 21:00 → NIGHT - Resumen del día
+ * - 08:00 → MORNING - Resumen: todos los objetivos + sugerencia (informativo)
+ * - 11:00 → MIDMORNING - Acción: 1 objetivo, responde 1/2/3 (interactivo)
+ * - 14:00 → AFTERNOON - Acción: 1 objetivo, responde 1/2/3 (interactivo)
+ * - 17:00 → EVENING - Acción: 1 objetivo, responde 1/2/3 (interactivo)
+ * - 21:00 → NIGHT - Resumen: qué hiciste hoy + plan mañana (reflexivo)
  *
  * Usa ?slot=MORNING para forzar un slot.
  */
@@ -620,19 +620,43 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Build actionable message (one task, clear response options)
-      const actionResult = await buildActionableMessage(userId);
+      // HYBRID APPROACH:
+      // - MORNING & NIGHT: Summary messages (context, planning, reflection)
+      // - MIDMORNING, AFTERNOON, EVENING: Actionable messages (1/2/3 responses)
 
-      // Add slot-specific emoji (keep it short for single-line format)
-      const slotEmoji: Record<SlotType, string> = {
-        MORNING: "☀️",
-        MIDMORNING: "☕",
-        AFTERNOON: "🌤️",
-        EVENING: "🌅",
-        NIGHT: "🌙",
-      };
+      let fullMessage: string;
+      let targetExpId: string | null = null;
 
-      const fullMessage = `${slotEmoji[slot]} ${actionResult.message}`;
+      const isSummarySlot = slot === "MORNING" || slot === "NIGHT";
+
+      if (isSummarySlot) {
+        // Get full day context for summary messages
+        const ctx = await getDayContext(userId);
+
+        let result: { message: string; targetExp: string | null };
+        if (slot === "MORNING") {
+          result = buildMorningMessage(ctx);
+        } else {
+          result = buildNightMessage(ctx);
+        }
+
+        fullMessage = result.message;
+        targetExpId = result.targetExp;
+      } else {
+        // Actionable message with 1/2/3 options
+        const actionResult = await buildActionableMessage(userId);
+
+        const slotEmoji: Record<SlotType, string> = {
+          MORNING: "☀️",
+          MIDMORNING: "☕",
+          AFTERNOON: "🌤️",
+          EVENING: "🌅",
+          NIGHT: "🌙",
+        };
+
+        fullMessage = `${slotEmoji[slot]} ${actionResult.message}`;
+        targetExpId = actionResult.experimentId;
+      }
 
       // Send message
       const sendResult = await sendWhatsAppMessage(whatsappConfig.phone_number, fullMessage);
@@ -652,7 +676,7 @@ export async function POST(request: NextRequest) {
         .from("whatsapp_reminders")
         .insert({
           user_id: userId,
-          experiment_id: actionResult.experimentId,
+          experiment_id: targetExpId,
           message_content: fullMessage,
           status: "sent",
           kapso_message_id: sendResult.messageId,
