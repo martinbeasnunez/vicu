@@ -385,6 +385,7 @@ export async function processUserResponse(
 
 /**
  * Build actionable WhatsApp message for a user
+ * Optimized for single-line template format (no newlines in WhatsApp templates)
  */
 export async function buildActionableMessage(userId: string): Promise<{
   message: string;
@@ -395,7 +396,7 @@ export async function buildActionableMessage(userId: string): Promise<{
 
   if (!objective) {
     return {
-      message: `No tienes objetivos activos.\n\n¿Qué quieres lograr? Entra a vicu.vercel.app`,
+      message: `No tienes objetivos activos. ¿Qué quieres lograr? Entra a vicu.vercel.app`,
       experimentId: null,
       actionSaved: false,
     };
@@ -418,18 +419,18 @@ export async function buildActionableMessage(userId: string): Promise<{
   // Save pending action for later processing
   await savePendingAction(userId, objective.id, checkinId, actionText, isAiGenerated);
 
-  // Build message
-  const daysText = objective.days_without_progress > 0
-    ? ` (${objective.days_without_progress} días sin avance)`
-    : "";
+  // Build urgency context (human-friendly)
+  let urgencyHint = "";
+  if (objective.days_without_progress >= 7 && objective.days_without_progress < 900) {
+    urgencyHint = ` - ${objective.days_without_progress} días pausado`;
+  } else if (objective.days_without_progress >= 3 && objective.days_without_progress < 7) {
+    urgencyHint = " - hace unos días";
+  } else if (objective.streak_days >= 3) {
+    urgencyHint = ` - 🔥 racha ${objective.streak_days} días`;
+  }
 
-  const message = `*${objective.title}*${daysText}
-
-→ ${actionText}
-
-1️⃣ Listo
-2️⃣ Mañana
-3️⃣ Otra opción`;
+  // Single-line friendly format
+  const message = `${objective.title}${urgencyHint}. Hoy: ${actionText}. Responde 1=Listo, 2=Mañana, 3=Otra`;
 
   return {
     message,

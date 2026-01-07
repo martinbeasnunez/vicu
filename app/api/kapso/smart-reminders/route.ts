@@ -623,16 +623,16 @@ export async function POST(request: NextRequest) {
       // Build actionable message (one task, clear response options)
       const actionResult = await buildActionableMessage(userId);
 
-      // Add slot-specific greeting
-      const slotGreeting: Record<SlotType, string> = {
-        MORNING: "☀️ Buenos días",
-        MIDMORNING: "☕ Media mañana",
-        AFTERNOON: "🌤️ Tarde",
-        EVENING: "🌅 Último empujón",
-        NIGHT: "🌙 Antes de dormir",
+      // Add slot-specific emoji (keep it short for single-line format)
+      const slotEmoji: Record<SlotType, string> = {
+        MORNING: "☀️",
+        MIDMORNING: "☕",
+        AFTERNOON: "🌤️",
+        EVENING: "🌅",
+        NIGHT: "🌙",
       };
 
-      const fullMessage = `${slotGreeting[slot]}\n\n${actionResult.message}`;
+      const fullMessage = `${slotEmoji[slot]} ${actionResult.message}`;
 
       // Send message
       const sendResult = await sendWhatsAppMessage(whatsappConfig.phone_number, fullMessage);
