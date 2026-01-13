@@ -68,12 +68,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const verifyOtp = async (email: string, token: string) => {
     try {
-      console.log("[AUTH] Verifying OTP for:", email, "token length:", token.length);
+      // Email must be lowercase for Supabase to match correctly
+      const normalizedEmail = email.toLowerCase().trim();
+      console.log("[AUTH] Verifying OTP for:", normalizedEmail, "token:", token);
+
+      // Try with type "email" first (recommended), fallback to "magiclink" if needed
       const { data, error } = await supabase.auth.verifyOtp({
-        email,
+        email: normalizedEmail,
         token,
         type: "email",
       });
+
       console.log("[AUTH] Verify result:", { data: !!data?.user, error: error?.message });
       return { error: error as Error | null };
     } catch (error) {
