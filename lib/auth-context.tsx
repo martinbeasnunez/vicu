@@ -9,6 +9,7 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   signInWithEmail: (email: string) => Promise<{ error: Error | null }>;
+  verifyOtp: (email: string, token: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -51,16 +52,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithEmail = async (email: string) => {
     try {
-      // Always use production URL for email redirect
-      const redirectUrl = process.env.NODE_ENV === "production"
-        ? "https://vicu.vercel.app/auth/callback"
-        : `${window.location.origin}/auth/callback`;
-
+      // Use OTP (6-digit code) instead of magic link
+      // This works across different browsers/devices - user just enters the code
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: redirectUrl,
+          shouldCreateUser: true,
         },
+      });
+      return { error: error as Error | null };
+    } catch (error) {
+      return { error: error as Error };
+    }
+  };
+
+  const verifyOtp = async (email: string, token: string) => {
+    try {
+      const { error } = await supabase.auth.verifyOtp({
+        email,
+        token,
+        type: "email",
       });
       return { error: error as Error | null };
     } catch (error) {
@@ -73,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signInWithEmail, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, signInWithEmail, verifyOtp, signOut }}>
       {children}
     </AuthContext.Provider>
   );
