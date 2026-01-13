@@ -1,32 +1,48 @@
 /**
  * POST /api/kapso/smart-reminders
  *
- * Sistema de recordatorios WhatsApp para Vicu.
- * Enfoque HÍBRIDO con ROTACIÓN DE OBJETIVOS para maximizar engagement:
+ * Sistema de recordatorios WhatsApp para Vicu - COACH INTELIGENTE
+ *
+ * FILOSOFÍA:
+ * - 3 mensajes máximo por día (menos spam, más impacto)
+ * - AI genera mensajes personalizados según el perfil del usuario
+ * - Rotación de objetivos por día (lunes=obj1, martes=obj2, etc.)
+ * - Aprende del usuario: hora de respuesta, palabras que usa, patrones
  *
  * HORARIOS (Bogotá/Lima UTC-5):
- * - 08:00 → MORNING - Resumen: todos los objetivos + sugerencia (informativo)
- * - 11:00 → MIDMORNING - Acción: objetivo #1 (más urgente), responde 1/2/3
- * - 14:00 → AFTERNOON - Acción: objetivo #2 (segundo más urgente), responde 1/2/3
- * - 17:00 → EVENING - Acción: objetivo #3 (tercero más urgente), responde 1/2/3
- * - 21:00 → NIGHT - Resumen: qué hiciste hoy + plan mañana (reflexivo)
- *
- * ROTACIÓN: Cada slot del día toca un objetivo DIFERENTE para evitar
- * enviar el mismo mensaje 3 veces al día. Usa template "vicu_action".
+ * - 08:00 → MORNING - Mensaje accionable del día (objetivo rotativo)
+ * - 14:00 → MIDDAY - Follow-up si no respondió en la mañana
+ * - 20:00 → EVENING - Cierre del día + celebración o gentle nudge
  *
  * Usa ?slot=MORNING para forzar un slot.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase-server";
-import { sendWhatsAppMessage, sendVicuActionTemplate, isKapsoConfigured, WhatsAppConfig } from "@/lib/kapso";
-import { buildActionableMessage } from "@/lib/whatsapp-actions";
+import { sendVicuActionTemplate, isKapsoConfigured, WhatsAppConfig } from "@/lib/kapso";
+import {
+  getAllActionableObjectives,
+  generateMicroAction,
+  savePendingAction
+} from "@/lib/whatsapp-actions";
+import OpenAI from "openai";
 
 // =============================================================================
 // Types
 // =============================================================================
 
-type SlotType = "MORNING" | "MIDMORNING" | "AFTERNOON" | "EVENING" | "NIGHT";
+type SlotType = "MORNING" | "MIDDAY" | "EVENING";
+
+interface UserEngagementProfile {
+  user_id: string;
+  preferred_response_hour: number | null;
+  response_words: string[];
+  avg_response_time_minutes: number | null;
+  total_responses: number;
+  total_completions: number;
+  consecutive_no_response: number;
+  last_response_at: string | null;
+}
 
 interface ObjectiveWithContext {
   id: string;
@@ -60,11 +76,18 @@ interface DayContext {
 
 const SLOT_SCHEDULE: Record<SlotType, [number, number]> = {
   MORNING: [8, 0],
-  MIDMORNING: [11, 0],
-  AFTERNOON: [14, 0],
-  EVENING: [17, 0],
-  NIGHT: [21, 0],
+  MIDDAY: [14, 0],
+  EVENING: [20, 0],
 };
+
+// OpenAI client for AI-powered messages
+let _openai: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return _openai;
+}
 
 // =============================================================================
 // Helpers
@@ -139,26 +162,192 @@ function calculateUrgencyScore(obj: {
   return score;
 }
 
-// Add rotation factor based on time to vary which objective gets suggested
-function addRotationFactor(objectives: ObjectiveWithContext[]): void {
-  if (objectives.length <= 1) return;
+/**
+ * Get objective for today using day-based rotation
+ * Monday = objective 0, Tuesday = objective 1, etc.
+ */
+function getObjectiveIndexForToday(totalObjectives: number): number {
+  if (totalObjectives === 0) return 0;
+  const dayOfWeek = new Date().getDay(); // 0=Sunday, 1=Monday, etc.
+  // Shift so Monday=0, Sunday=6
+  const adjustedDay = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  return adjustedDay % totalObjectives;
+}
 
-  // Use current hour + day of year to create rotation
-  const now = new Date();
-  const dayOfYear = Math.floor((now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
-  const hour = now.getHours();
+/**
+ * Get user engagement profile from past interactions
+ */
+async function getUserEngagementProfile(userId: string): Promise<UserEngagementProfile> {
+  // Get recent responses from pending actions
+  const { data: recentActions } = await supabaseServer
+    .from("whatsapp_pending_actions")
+    .select("status, created_at, action_text")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(30);
 
-  // Different rotation for each time slot (5 slots per day)
-  const slotIndex = Math.floor(hour / 5);
-  const rotationSeed = (dayOfYear * 5 + slotIndex) % objectives.length;
+  // Get recent reminders to calculate response rate
+  const { data: recentReminders } = await supabaseServer
+    .from("whatsapp_reminders")
+    .select("sent_at, status, responded_at, user_response")
+    .eq("user_id", userId)
+    .order("sent_at", { ascending: false })
+    .limit(30);
 
-  // Boost the rotated objective by adding points
-  objectives.forEach((obj, idx) => {
-    // The objective at rotationSeed position gets a boost
-    // This creates variety across time slots
-    if (idx === rotationSeed) {
-      obj.urgency_score += 15;
+  const totalResponses = recentActions?.filter(a => a.status !== "pending").length || 0;
+  const totalCompletions = recentActions?.filter(a => a.status === "done").length || 0;
+
+  // Calculate consecutive no-responses
+  let consecutiveNoResponse = 0;
+  for (const action of recentActions || []) {
+    if (action.status === "pending") {
+      consecutiveNoResponse++;
+    } else {
+      break;
     }
+  }
+
+  // Extract common response words from user_response
+  const responseWords: string[] = [];
+  recentReminders?.forEach(r => {
+    if (r.user_response) {
+      const words = r.user_response.toLowerCase().split(/\s+/);
+      words.forEach((w: string) => {
+        if (["listo", "hecho", "ya", "ok", "si", "no", "mañana"].includes(w)) {
+          if (!responseWords.includes(w)) responseWords.push(w);
+        }
+      });
+    }
+  });
+
+  // Calculate preferred response hour
+  let preferredHour: number | null = null;
+  const respondedReminders = recentReminders?.filter(r => r.responded_at);
+  if (respondedReminders && respondedReminders.length >= 3) {
+    const hours = respondedReminders.map(r => new Date(r.responded_at!).getHours());
+    preferredHour = Math.round(hours.reduce((a, b) => a + b, 0) / hours.length);
+  }
+
+  return {
+    user_id: userId,
+    preferred_response_hour: preferredHour,
+    response_words: responseWords.length > 0 ? responseWords : ["listo"],
+    avg_response_time_minutes: null, // TODO: calculate
+    total_responses: totalResponses,
+    total_completions: totalCompletions,
+    consecutive_no_response: consecutiveNoResponse,
+    last_response_at: recentActions?.find(a => a.status !== "pending")?.created_at || null,
+  };
+}
+
+/**
+ * Generate AI-powered personalized message
+ */
+async function generatePersonalizedMessage(
+  objective: { title: string; streak_days: number; days_without_progress: number },
+  microAction: string,
+  slot: SlotType,
+  profile: UserEngagementProfile,
+  respondedToday: boolean
+): Promise<{ objectiveText: string; actionText: string }> {
+  // Build context for AI
+  const streakContext = objective.streak_days >= 3
+    ? `racha de ${objective.streak_days} días`
+    : objective.days_without_progress >= 3
+    ? `${objective.days_without_progress} días sin avance`
+    : "objetivo activo";
+
+  const userContext = profile.consecutive_no_response >= 3
+    ? "Usuario no ha respondido en varios días, ser gentil y no presionar"
+    : profile.total_completions > 5
+    ? "Usuario comprometido con historial de completar tareas"
+    : "Usuario nuevo o con poca interacción";
+
+  const slotContext = {
+    MORNING: "Mensaje de la mañana, energético pero no abrumador",
+    MIDDAY: respondedToday
+      ? "Ya respondió hoy, no enviar"
+      : "Follow-up de medio día, recordatorio gentil",
+    EVENING: respondedToday
+      ? "Celebrar el logro del día"
+      : "Cierre del día, última oportunidad sin presión",
+  }[slot];
+
+  const preferredWord = profile.response_words[0] || "listo";
+
+  try {
+    const completion = await getOpenAI().chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `Eres Vicu, un coach de objetivos por WhatsApp. Genera mensajes cortos y efectivos.
+
+REGLAS:
+- Máximo 50 caracteres para el objetivo (parámetro 1)
+- Máximo 80 caracteres para la acción (parámetro 2)
+- Sin emojis (el template ya los tiene)
+- Tono conversacional, como un amigo
+- Si el usuario tiene racha, mencionarla brevemente
+- Si lleva días sin avance, ser gentil no culposo
+- Usar la palabra preferida del usuario para responder: "${preferredWord}"
+
+CONTEXTO:
+- Objetivo: ${objective.title}
+- Estado: ${streakContext}
+- Micro-acción sugerida: ${microAction}
+- Perfil usuario: ${userContext}
+- Momento: ${slotContext}
+
+FORMATO DE RESPUESTA (JSON):
+{
+  "objective": "título corto del objetivo con contexto",
+  "action": "acción específica + invitación a responder"
+}`
+        },
+        {
+          role: "user",
+          content: `Genera el mensaje para el slot ${slot}`
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 150,
+      response_format: { type: "json_object" },
+    });
+
+    const response = JSON.parse(completion.choices[0]?.message?.content || "{}");
+
+    return {
+      objectiveText: response.objective || `${objective.title}`,
+      actionText: response.action || `${microAction}. Responde ${preferredWord} cuando termines`,
+    };
+  } catch (error) {
+    console.error("[Smart Reminders] AI generation failed:", error);
+    // Fallback to simple format
+    const streakInfo = objective.streak_days >= 3
+      ? ` (racha ${objective.streak_days}d)`
+      : objective.days_without_progress >= 7
+      ? ` (${objective.days_without_progress}d pausado)`
+      : "";
+
+    return {
+      objectiveText: `${objective.title}${streakInfo}`,
+      actionText: `${microAction}. Responde ${preferredWord} cuando termines`,
+    };
+  }
+}
+
+/**
+ * Add rotation factor to prevent always selecting the same objective
+ * Uses current hour to shift urgency scores
+ */
+function addRotationFactor(objectives: ObjectiveWithContext[]): void {
+  const hour = new Date().getHours();
+  objectives.forEach((obj, index) => {
+    // Add small rotation bonus based on hour and position
+    // This creates variety across different time slots
+    const rotationBonus = ((hour + index) % objectives.length) * 2;
+    obj.urgency_score += rotationBonus;
   });
 }
 
@@ -246,303 +435,9 @@ async function getDayContext(userId: string): Promise<DayContext> {
   };
 }
 
-// =============================================================================
-// Message Builders
-// =============================================================================
-
-function buildMorningMessage(ctx: DayContext): { message: string; targetExp: string | null } {
-  if (ctx.objectives.length === 0) {
-    return {
-      message: `☀️ *Buenos días*
-
-No tienes objetivos activos en Vicu.
-
-¿Qué te gustaría lograr? Entra a la app y cuéntame.`,
-      targetExp: null,
-    };
-  }
-
-  // Build list with status indicators
-  const list = ctx.objectives.slice(0, 5).map(obj => {
-    let emoji = "📌";
-    let extra = "";
-
-    if (obj.days_without_progress >= 7) {
-      emoji = "🔴";
-      extra = ` (${obj.days_without_progress} días)`;
-    } else if (obj.days_without_progress >= 3) {
-      emoji = "🟡";
-      extra = ` (${obj.days_without_progress} días)`;
-    } else if (obj.streak_days >= 3) {
-      emoji = "🔥";
-      extra = ` (racha ${obj.streak_days}d)`;
-    }
-
-    return `${emoji} ${obj.title}${extra}`;
-  }).join("\n");
-
-  const needsAttention = ctx.objectives.filter(o => o.days_without_progress >= 3);
-  const withStreaks = ctx.objectives.filter(o => o.streak_days >= 3);
-
-  let insight = "";
-  if (needsAttention.length > 0) {
-    insight = `\n\n⚠️ ${needsAttention.length} objetivo${needsAttention.length > 1 ? "s necesitan" : " necesita"} atención`;
-  } else if (withStreaks.length > 0) {
-    insight = `\n\n🔥 ${withStreaks.length} racha${withStreaks.length > 1 ? "s" : ""} activa${withStreaks.length > 1 ? "s" : ""}`;
-  }
-
-  // Suggest where to start
-  const suggested = ctx.objectives[0];
-  const suggestedStep = suggested?.pending_steps[0];
-
-  let suggestion = "";
-  if (suggested) {
-    suggestion = `\n\n💡 *Empieza por:* ${suggested.title}`;
-    if (suggestedStep) {
-      suggestion += `\n→ ${suggestedStep.step_title}`;
-    }
-  }
-
-  return {
-    message: `☀️ *Buenos días*
-
-Tus ${ctx.objectives.length} objetivos activos:
-
-${list}${insight}${suggestion}
-
-¡Hoy es un buen día para avanzar!`,
-    targetExp: suggested?.id || null,
-  };
-}
-
-function buildMidmorningMessage(ctx: DayContext): { message: string; targetExp: string | null } {
-  if (ctx.objectives.length === 0) {
-    return {
-      message: `☕ *Media mañana*
-
-No tienes objetivos activos en Vicu.
-
-¿Qué te gustaría lograr? Cuéntame en la app.`,
-      targetExp: null,
-    };
-  }
-
-  const withProgress = ctx.objectives.filter(o => o.done_today > 0);
-  const withoutProgress = ctx.objectives.filter(o => o.done_today === 0);
-
-  let message = `☕ *Media mañana*\n`;
-
-  if (withProgress.length > 0) {
-    message += `\n¡Ya arrancaste! Llevas ${ctx.total_done_today} paso${ctx.total_done_today > 1 ? "s" : ""} hoy.`;
-
-    if (withoutProgress.length > 0) {
-      const next = withoutProgress[0];
-      message += `\n\n¿Seguimos con *${next.title}*?`;
-      if (next.pending_steps[0]) {
-        message += `\n→ ${next.pending_steps[0].step_title}`;
-      }
-    }
-  } else {
-    message += `\nLa mañana avanza y aún no empezaste.`;
-
-    const suggested = ctx.objectives[0];
-    if (suggested) {
-      message += `\n\n¿Arrancamos con *${suggested.title}*?`;
-      if (suggested.pending_steps[0]) {
-        message += `\n→ ${suggested.pending_steps[0].step_title}`;
-      }
-    }
-
-    message += `\n\n5 minutos bastan para empezar ⚡`;
-  }
-
-  return {
-    message,
-    targetExp: withoutProgress[0]?.id || withProgress[0]?.id || null,
-  };
-}
-
-function buildAfternoonMessage(ctx: DayContext): { message: string; targetExp: string | null } {
-  if (ctx.objectives.length === 0) {
-    return {
-      message: `🌤️ *Check-in de la tarde*
-
-No tienes objetivos activos.
-
-¿Hay algo que quieras lograr? Entra a Vicu.`,
-      targetExp: null,
-    };
-  }
-
-  const withProgress = ctx.objectives.filter(o => o.done_today > 0);
-  const withoutProgress = ctx.objectives.filter(o => o.done_today === 0);
-
-  let message = `🌤️ *Tarde*\n`;
-
-  if (withProgress.length > 0) {
-    const progressList = withProgress
-      .map(o => `✅ ${o.title}`)
-      .join("\n");
-
-    message += `\nVas bien:\n${progressList}`;
-
-    if (withoutProgress.length > 0) {
-      const remaining = withoutProgress.slice(0, 3);
-      message += `\n\nPendientes:\n${remaining.map(o => `• ${o.title}`).join("\n")}`;
-
-      if (withoutProgress.length > 3) {
-        message += `\n...y ${withoutProgress.length - 3} más`;
-      }
-    } else {
-      message += `\n\n🎉 ¡Día productivo! Ya avanzaste en todo.`;
-    }
-  } else {
-    message += `\nAún sin avances hoy.`;
-
-    const mostUrgent = ctx.objectives[0];
-    const step = mostUrgent?.pending_steps[0];
-
-    if (mostUrgent) {
-      message += `\n\nTodavía hay tiempo. ¿*${mostUrgent.title}*?`;
-      if (step) {
-        message += `\n→ ${step.step_title}`;
-      }
-    }
-
-    message += `\n\nUn paso pequeño > ninguno 💪`;
-  }
-
-  return {
-    message,
-    targetExp: withoutProgress[0]?.id || withProgress[0]?.id || null,
-  };
-}
-
-function buildEveningMessage(ctx: DayContext): { message: string; targetExp: string | null } {
-  if (ctx.objectives.length === 0) {
-    return {
-      message: `🌅 *Último empujón*
-
-No tienes objetivos activos.
-
-¿Hay algo que quieras lograr? Entra a Vicu.`,
-      targetExp: null,
-    };
-  }
-
-  const withProgress = ctx.objectives.filter(o => o.done_today > 0);
-  const withoutProgress = ctx.objectives.filter(o => o.done_today === 0);
-
-  let message = `🌅 *Último empujón*\n`;
-
-  if (withProgress.length > 0 && withoutProgress.length === 0) {
-    // All done!
-    message += `\n¡Increíble! Hoy avanzaste en todos tus objetivos.`;
-    message += `\n\nTotal: ${ctx.total_done_today} paso${ctx.total_done_today > 1 ? "s" : ""} 🔥`;
-    message += `\n\nPuedes descansar tranquilo.`;
-  } else if (withProgress.length > 0) {
-    // Some progress
-    message += `\nLlevas ${ctx.total_done_today} paso${ctx.total_done_today > 1 ? "s" : ""} hoy.`;
-
-    const urgent = withoutProgress.filter(o => o.days_without_progress >= 3);
-    if (urgent.length > 0) {
-      message += `\n\n⚠️ ${urgent.length} objetivo${urgent.length > 1 ? "s llevan" : " lleva"} días sin avance:`;
-      message += `\n${urgent.slice(0, 2).map(o => `• ${o.title}`).join("\n")}`;
-    } else {
-      const next = withoutProgress[0];
-      if (next) {
-        message += `\n\n¿Un paso más antes de cerrar el día?`;
-        message += `\n→ *${next.title}*`;
-      }
-    }
-  } else {
-    // No progress today
-    message += `\nEl día casi termina y no has avanzado.`;
-
-    const mostUrgent = ctx.objectives[0];
-    if (mostUrgent) {
-      message += `\n\nÚltima oportunidad: *${mostUrgent.title}*`;
-      if (mostUrgent.pending_steps[0]) {
-        message += `\n→ ${mostUrgent.pending_steps[0].step_title}`;
-      }
-    }
-
-    message += `\n\n¿10 minutos antes de descansar?`;
-  }
-
-  return {
-    message,
-    targetExp: withoutProgress[0]?.id || withProgress[0]?.id || null,
-  };
-}
-
-function buildNightMessage(ctx: DayContext): { message: string; targetExp: string | null } {
-  if (ctx.objectives.length === 0) {
-    return {
-      message: `🌙 *Buenas noches*
-
-No tienes objetivos activos en Vicu.
-
-Mañana es un buen día para empezar algo nuevo.
-
-Descansa bien 😴`,
-      targetExp: null,
-    };
-  }
-
-  const withProgress = ctx.objectives.filter(o => o.done_today > 0);
-  const withoutProgress = ctx.objectives.filter(o => o.done_today === 0);
-
-  let message = `🌙 *Resumen del día*\n`;
-
-  if (ctx.total_done_today > 0) {
-    const progressList = withProgress
-      .map(o => `✅ ${o.title} (${o.done_today} paso${o.done_today > 1 ? "s" : ""})`)
-      .join("\n");
-    message += `\nHoy avanzaste en ${withProgress.length} objetivo${withProgress.length > 1 ? "s" : ""}:\n${progressList}`;
-
-    // Celebrate streaks
-    const newStreaks = withProgress.filter(o => o.streak_days > 1);
-    if (newStreaks.length > 0) {
-      const best = newStreaks.sort((a, b) => b.streak_days - a.streak_days)[0];
-      message += `\n\n🔥 Racha en *${best.title}*: ${best.streak_days} días`;
-    }
-  } else {
-    message += `\nHoy fue un día de descanso.`;
-  }
-
-  // Show what didn't get attention
-  if (withoutProgress.length > 0) {
-    const withoutList = withoutProgress.slice(0, 4).map(o => {
-      const days = o.days_without_progress;
-      const daysText = days === 0 ? "" : days === 1 ? " · 1 día" : ` · ${days} días`;
-      return `• ${o.title}${daysText}`;
-    }).join("\n");
-
-    message += `\n\nSin avance hoy:\n${withoutList}`;
-    if (withoutProgress.length > 4) {
-      message += `\n...y ${withoutProgress.length - 4} más`;
-    }
-  }
-
-  // Tomorrow suggestion
-  const tomorrowFocus = withoutProgress
-    .sort((a, b) => b.urgency_score - a.urgency_score)[0];
-
-  if (tomorrowFocus) {
-    message += `\n\n🎯 Mañana: *${tomorrowFocus.title}*`;
-  }
-
-  message += `\n\nDescansa bien 😴`;
-
-  return {
-    message,
-    targetExp: tomorrowFocus?.id || withProgress[0]?.id || null,
-  };
-}
 
 // =============================================================================
-// Main Handler
+// Main Handler - AI-Powered Coach System
 // =============================================================================
 
 export async function POST(request: NextRequest) {
@@ -563,7 +458,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         skipped: true,
-        reason: "No slot matches current time",
+        reason: "No slot matches current time (slots: MORNING 8am, MIDDAY 2pm, EVENING 8pm)",
       });
     }
 
@@ -602,7 +497,7 @@ export async function POST(request: NextRequest) {
       const userId = config.user_id;
       const whatsappConfig = config as WhatsAppConfig;
 
-      // Check if already sent today for this user (unless forced)
+      // Check if already sent this slot today (unless forced)
       if (!forcedSlot) {
         const { data: existing } = await supabaseServer
           .from("whatsapp_reminders")
@@ -623,98 +518,80 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // HYBRID APPROACH:
-      // - MORNING & NIGHT: Summary messages (context, planning, reflection)
-      // - MIDMORNING, AFTERNOON, EVENING: Actionable messages (1/2/3 responses)
+      // Get user's objectives with day-based rotation
+      const objectives = await getAllActionableObjectives(userId);
 
-      let fullMessage: string;
-      let targetExpId: string | null = null;
-
-      const isSummarySlot = slot === "MORNING" || slot === "NIGHT";
-
-      if (isSummarySlot) {
-        // Get full day context for summary messages
-        const ctx = await getDayContext(userId);
-
-        let result: { message: string; targetExp: string | null };
-        if (slot === "MORNING") {
-          result = buildMorningMessage(ctx);
-        } else {
-          result = buildNightMessage(ctx);
-        }
-
-        fullMessage = result.message;
-        targetExpId = result.targetExp;
-      } else {
-        // Actionable message with 1/2/3 options
-        // Use slot index to rotate through different objectives:
-        // MIDMORNING = 0 (most urgent), AFTERNOON = 1, EVENING = 2
-        const slotIndexMap: Record<SlotType, number> = {
-          MORNING: 0,
-          MIDMORNING: 0,  // Most urgent
-          AFTERNOON: 1,   // Second most urgent
-          EVENING: 2,     // Third most urgent
-          NIGHT: 0,
-        };
-        const slotIndex = slotIndexMap[slot];
-
-        const actionResult = await buildActionableMessage(userId, slotIndex);
-
-        const slotEmoji: Record<SlotType, string> = {
-          MORNING: "☀️",
-          MIDMORNING: "☕",
-          AFTERNOON: "🌤️",
-          EVENING: "🌅",
-          NIGHT: "🌙",
-        };
-
-        fullMessage = `${slotEmoji[slot]} ${actionResult.message}`;
-        targetExpId = actionResult.experimentId;
-
-        // Use vicu_action template if we have objective data
-        if (actionResult.objectiveTitle && actionResult.actionText) {
-          const sendResult = await sendVicuActionTemplate(
-            whatsappConfig.phone_number,
-            actionResult.objectiveTitle,
-            actionResult.actionText,
-            actionResult.streakInfo || undefined
-          );
-
-          if (!sendResult.success) {
-            console.error(`[Smart Reminders] Failed to send vicu_action to user ${userId}:`, sendResult.error);
-            results.push({
-              user_id: userId,
-              success: false,
-              reason: sendResult.error,
-            });
-            continue;
-          }
-
-          // Record reminder
-          await supabaseServer
-            .from("whatsapp_reminders")
-            .insert({
-              user_id: userId,
-              experiment_id: targetExpId,
-              message_content: fullMessage,
-              status: "sent",
-              kapso_message_id: sendResult.messageId,
-              slot_type: slot,
-            });
-
-          results.push({
-            user_id: userId,
-            success: true,
-            message_id: sendResult.messageId,
-          });
-
-          console.log(`[Smart Reminders] Sent ${slot} (vicu_action) to user ${userId}`);
-          continue;
-        }
+      if (objectives.length === 0) {
+        results.push({
+          user_id: userId,
+          success: true,
+          skipped: true,
+          reason: "No active objectives",
+        });
+        continue;
       }
 
-      // Fallback: Send message using generic template
-      const sendResult = await sendWhatsAppMessage(whatsappConfig.phone_number, fullMessage);
+      // Select objective based on day rotation (Monday=0, Tuesday=1, etc.)
+      const objectiveIndex = getObjectiveIndexForToday(objectives.length);
+      const selectedObjective = objectives[objectiveIndex];
+
+      // Get user engagement profile for personalization
+      const profile = await getUserEngagementProfile(userId);
+
+      // Check if user already responded today (for MIDDAY/EVENING skip logic)
+      const { data: todayActions } = await supabaseServer
+        .from("whatsapp_pending_actions")
+        .select("status")
+        .eq("user_id", userId)
+        .gte("created_at", todayStr)
+        .in("status", ["done", "skipped"]);
+
+      const respondedToday = (todayActions?.length || 0) > 0;
+
+      // MIDDAY: Skip if user already responded to morning message
+      if (slot === "MIDDAY" && respondedToday) {
+        results.push({
+          user_id: userId,
+          success: true,
+          skipped: true,
+          reason: "User already responded today, skipping MIDDAY follow-up",
+        });
+        continue;
+      }
+
+      // Generate micro-action for the objective
+      const microAction = selectedObjective.pending_step
+        ? selectedObjective.pending_step.title
+        : await generateMicroAction(selectedObjective.title);
+
+      // Generate AI-personalized message
+      const { objectiveText, actionText } = await generatePersonalizedMessage(
+        {
+          title: selectedObjective.title,
+          streak_days: selectedObjective.streak_days,
+          days_without_progress: selectedObjective.days_without_progress,
+        },
+        microAction,
+        slot,
+        profile,
+        respondedToday
+      );
+
+      // Save pending action for tracking responses
+      await savePendingAction(
+        userId,
+        selectedObjective.id,
+        selectedObjective.pending_step?.id || null,
+        microAction,
+        !selectedObjective.pending_step // is AI generated
+      );
+
+      // Send via vicu_action template
+      const sendResult = await sendVicuActionTemplate(
+        whatsappConfig.phone_number,
+        objectiveText,
+        actionText
+      );
 
       if (!sendResult.success) {
         console.error(`[Smart Reminders] Failed to send to user ${userId}:`, sendResult.error);
@@ -731,8 +608,8 @@ export async function POST(request: NextRequest) {
         .from("whatsapp_reminders")
         .insert({
           user_id: userId,
-          experiment_id: targetExpId,
-          message_content: fullMessage,
+          experiment_id: selectedObjective.id,
+          message_content: `${objectiveText} | ${actionText}`,
           status: "sent",
           kapso_message_id: sendResult.messageId,
           slot_type: slot,
@@ -744,7 +621,7 @@ export async function POST(request: NextRequest) {
         message_id: sendResult.messageId,
       });
 
-      console.log(`[Smart Reminders] Sent ${slot} to user ${userId}`);
+      console.log(`[Smart Reminders] Sent ${slot} to user ${userId} - objective: ${selectedObjective.title}`);
     }
 
     const sent = results.filter(r => r.success && !r.skipped).length;
