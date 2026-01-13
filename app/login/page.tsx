@@ -1,15 +1,33 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 
-export default function LoginPage() {
+function LoginForm() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const { signInWithEmail, user } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Show error from callback if present
+  useEffect(() => {
+    const error = searchParams.get("error");
+    if (error) {
+      // Map common errors to Spanish
+      const errorMessages: Record<string, string> = {
+        "no_code": "El enlace no es válido. Solicita uno nuevo.",
+        "auth_failed": "Error de autenticación. Intenta de nuevo.",
+        "Email link is invalid or has expired": "El enlace expiró. Solicita uno nuevo.",
+      };
+      setMessage({
+        type: "error",
+        text: errorMessages[error] || `Error: ${error}`,
+      });
+    }
+  }, [searchParams]);
 
   // If already logged in, redirect to /hoy
   if (user) {
@@ -113,5 +131,17 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }
