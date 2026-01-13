@@ -132,9 +132,9 @@ Genera una alternativa más fácil:`
 }
 
 /**
- * Get the most urgent objective for a user that needs action
+ * Get all actionable objectives for a user, sorted by urgency
  */
-export async function getMostUrgentObjective(userId: string): Promise<ActionableObjective | null> {
+export async function getAllActionableObjectives(userId: string): Promise<ActionableObjective[]> {
   // Get active experiments
   const { data: experiments } = await supabaseServer
     .from("experiments")
@@ -145,7 +145,7 @@ export async function getMostUrgentObjective(userId: string): Promise<Actionable
     .order("created_at", { ascending: false })
     .limit(10);
 
-  if (!experiments || experiments.length === 0) return null;
+  if (!experiments || experiments.length === 0) return [];
 
   // Get pending steps for all experiments
   const { data: pendingSteps } = await supabaseServer
@@ -188,16 +188,34 @@ export async function getMostUrgentObjective(userId: string): Promise<Actionable
   // Sort by urgency (highest first)
   objectives.sort((a, b) => b.urgency - a.urgency);
 
-  const top = objectives[0];
-  if (!top) return null;
+  return objectives.map(obj => ({
+    id: obj.id,
+    title: obj.title,
+    days_without_progress: obj.days_without_progress,
+    streak_days: obj.streak_days,
+    pending_step: obj.pending_step,
+  }));
+}
 
-  return {
-    id: top.id,
-    title: top.title,
-    days_without_progress: top.days_without_progress,
-    streak_days: top.streak_days,
-    pending_step: top.pending_step,
-  };
+/**
+ * Get the most urgent objective for a user that needs action
+ */
+export async function getMostUrgentObjective(userId: string): Promise<ActionableObjective | null> {
+  const objectives = await getAllActionableObjectives(userId);
+  return objectives[0] || null;
+}
+
+/**
+ * Get objective at specific index (for rotation across slots)
+ * Falls back to first objective if index is out of bounds
+ */
+export async function getObjectiveAtIndex(userId: string, index: number): Promise<ActionableObjective | null> {
+  const objectives = await getAllActionableObjectives(userId);
+  if (objectives.length === 0) return null;
+
+  // Use modulo to wrap around if index exceeds number of objectives
+  const safeIndex = index % objectives.length;
+  return objectives[safeIndex];
 }
 
 /**
@@ -386,19 +404,29 @@ export async function processUserResponse(
 /**
  * Build actionable WhatsApp message for a user
  * Optimized for single-line template format (no newlines in WhatsApp templates)
+ *
+ * @param userId - The user ID
+ * @param slotIndex - Optional index to select different objectives (0=first, 1=second, etc.)
+ *                    This enables rotation across time slots to avoid repetition
  */
-export async function buildActionableMessage(userId: string): Promise<{
+export async function buildActionableMessage(userId: string, slotIndex: number = 0): Promise<{
   message: string;
   experimentId: string | null;
   actionSaved: boolean;
+  objectiveTitle: string | null;
+  actionText: string | null;
+  streakInfo: string | null;
 }> {
-  const objective = await getMostUrgentObjective(userId);
+  const objective = await getObjectiveAtIndex(userId, slotIndex);
 
   if (!objective) {
     return {
       message: `No tienes objetivos activos. ¿Qué quieres lograr? Entra a vicu.vercel.app`,
       experimentId: null,
       actionSaved: false,
+      objectiveTitle: null,
+      actionText: null,
+      streakInfo: null,
     };
   }
 
@@ -420,21 +448,25 @@ export async function buildActionableMessage(userId: string): Promise<{
   await savePendingAction(userId, objective.id, checkinId, actionText, isAiGenerated);
 
   // Build urgency context (human-friendly)
-  let urgencyHint = "";
+  let streakInfo: string | null = null;
   if (objective.days_without_progress >= 7 && objective.days_without_progress < 900) {
-    urgencyHint = ` - ${objective.days_without_progress} días pausado`;
+    streakInfo = `(${objective.days_without_progress} días pausado)`;
   } else if (objective.days_without_progress >= 3 && objective.days_without_progress < 7) {
-    urgencyHint = " - hace unos días";
+    streakInfo = "(hace unos días)";
   } else if (objective.streak_days >= 3) {
-    urgencyHint = ` - 🔥 racha ${objective.streak_days} días`;
+    streakInfo = `(racha ${objective.streak_days}d)`;
   }
 
-  // Single-line friendly format
+  // Single-line friendly format (for fallback/old template)
+  const urgencyHint = streakInfo ? ` - ${streakInfo.replace(/[()]/g, "")}` : "";
   const message = `${objective.title}${urgencyHint}. Hoy: ${actionText}. Responde 1=Listo, 2=Mañana, 3=Otra`;
 
   return {
     message,
     experimentId: objective.id,
     actionSaved: true,
+    objectiveTitle: objective.title,
+    actionText,
+    streakInfo,
   };
 }

@@ -357,3 +357,92 @@ export function buildReminderMessage(
 
   return message;
 }
+
+/**
+ * Send WhatsApp message using vicu_action template
+ * Template format: {{1}} objectives | {{2}} action | {{3}} response options
+ */
+export async function sendVicuActionTemplate(
+  to: string,
+  objectiveTitle: string,
+  actionText: string,
+  streakInfo?: string
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const { apiKey, phoneNumberId } = getKapsoConfig();
+
+  if (!apiKey) {
+    return { success: false, error: "KAPSO_API_KEY not configured" };
+  }
+
+  const cleanPhone = to.replace(/[\s\-+]/g, "");
+
+  // Build the message parts for template
+  // {{1}} = objective with context (emoji + title + streak/days info)
+  // {{2}} = today's action
+  // {{3}} = response options
+
+  const objectiveWithContext = streakInfo
+    ? `${objectiveTitle} ${streakInfo}`
+    : objectiveTitle;
+
+  const sanitize = (text: string) => text
+    .replace(/\n/g, " ")
+    .replace(/\t/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+    .substring(0, 200);
+
+  const payload: KapsoSendMessageRequest = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: cleanPhone,
+    type: "template",
+    template: {
+      name: "vicu_action",
+      language: {
+        code: "es",
+      },
+      components: [
+        {
+          type: "body",
+          parameters: [
+            {
+              type: "text",
+              text: sanitize(objectiveWithContext),
+            },
+            {
+              type: "text",
+              text: sanitize(actionText),
+            },
+          ],
+        },
+      ],
+    },
+  };
+
+  try {
+    const response = await fetch(`${KAPSO_API_BASE}/${phoneNumberId}/messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": apiKey,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[Kapso] vicu_action template failed:", response.status, errorText);
+      return { success: false, error: `HTTP ${response.status}: ${errorText}` };
+    }
+
+    const data: KapsoSendMessageResponse = await response.json();
+    const messageId = data.messages?.[0]?.id;
+
+    console.log("[Kapso] vicu_action template sent successfully:", messageId);
+    return { success: true, messageId };
+  } catch (error) {
+    console.error("[Kapso] Error sending vicu_action template:", error);
+    return { success: false, error: String(error) };
+  }
+}

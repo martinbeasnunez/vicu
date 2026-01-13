@@ -2,21 +2,24 @@
  * POST /api/kapso/smart-reminders
  *
  * Sistema de recordatorios WhatsApp para Vicu.
- * Enfoque HÍBRIDO para maximizar engagement:
+ * Enfoque HÍBRIDO con ROTACIÓN DE OBJETIVOS para maximizar engagement:
  *
  * HORARIOS (Bogotá/Lima UTC-5):
  * - 08:00 → MORNING - Resumen: todos los objetivos + sugerencia (informativo)
- * - 11:00 → MIDMORNING - Acción: 1 objetivo, responde 1/2/3 (interactivo)
- * - 14:00 → AFTERNOON - Acción: 1 objetivo, responde 1/2/3 (interactivo)
- * - 17:00 → EVENING - Acción: 1 objetivo, responde 1/2/3 (interactivo)
+ * - 11:00 → MIDMORNING - Acción: objetivo #1 (más urgente), responde 1/2/3
+ * - 14:00 → AFTERNOON - Acción: objetivo #2 (segundo más urgente), responde 1/2/3
+ * - 17:00 → EVENING - Acción: objetivo #3 (tercero más urgente), responde 1/2/3
  * - 21:00 → NIGHT - Resumen: qué hiciste hoy + plan mañana (reflexivo)
+ *
+ * ROTACIÓN: Cada slot del día toca un objetivo DIFERENTE para evitar
+ * enviar el mismo mensaje 3 veces al día. Usa template "vicu_action".
  *
  * Usa ?slot=MORNING para forzar un slot.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase-server";
-import { sendWhatsAppMessage, isKapsoConfigured, WhatsAppConfig } from "@/lib/kapso";
+import { sendWhatsAppMessage, sendVicuActionTemplate, isKapsoConfigured, WhatsAppConfig } from "@/lib/kapso";
 import { buildActionableMessage } from "@/lib/whatsapp-actions";
 
 // =============================================================================
@@ -644,7 +647,18 @@ export async function POST(request: NextRequest) {
         targetExpId = result.targetExp;
       } else {
         // Actionable message with 1/2/3 options
-        const actionResult = await buildActionableMessage(userId);
+        // Use slot index to rotate through different objectives:
+        // MIDMORNING = 0 (most urgent), AFTERNOON = 1, EVENING = 2
+        const slotIndexMap: Record<SlotType, number> = {
+          MORNING: 0,
+          MIDMORNING: 0,  // Most urgent
+          AFTERNOON: 1,   // Second most urgent
+          EVENING: 2,     // Third most urgent
+          NIGHT: 0,
+        };
+        const slotIndex = slotIndexMap[slot];
+
+        const actionResult = await buildActionableMessage(userId, slotIndex);
 
         const slotEmoji: Record<SlotType, string> = {
           MORNING: "☀️",
@@ -656,9 +670,50 @@ export async function POST(request: NextRequest) {
 
         fullMessage = `${slotEmoji[slot]} ${actionResult.message}`;
         targetExpId = actionResult.experimentId;
+
+        // Use vicu_action template if we have objective data
+        if (actionResult.objectiveTitle && actionResult.actionText) {
+          const sendResult = await sendVicuActionTemplate(
+            whatsappConfig.phone_number,
+            actionResult.objectiveTitle,
+            actionResult.actionText,
+            actionResult.streakInfo || undefined
+          );
+
+          if (!sendResult.success) {
+            console.error(`[Smart Reminders] Failed to send vicu_action to user ${userId}:`, sendResult.error);
+            results.push({
+              user_id: userId,
+              success: false,
+              reason: sendResult.error,
+            });
+            continue;
+          }
+
+          // Record reminder
+          await supabaseServer
+            .from("whatsapp_reminders")
+            .insert({
+              user_id: userId,
+              experiment_id: targetExpId,
+              message_content: fullMessage,
+              status: "sent",
+              kapso_message_id: sendResult.messageId,
+              slot_type: slot,
+            });
+
+          results.push({
+            user_id: userId,
+            success: true,
+            message_id: sendResult.messageId,
+          });
+
+          console.log(`[Smart Reminders] Sent ${slot} (vicu_action) to user ${userId}`);
+          continue;
+        }
       }
 
-      // Send message
+      // Fallback: Send message using generic template
       const sendResult = await sendWhatsAppMessage(whatsappConfig.phone_number, fullMessage);
 
       if (!sendResult.success) {
