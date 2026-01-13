@@ -8,8 +8,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signInWithEmail: (email: string) => Promise<{ error: Error | null }>;
-  verifyOtp: (email: string, token: string) => Promise<{ error: Error | null }>;
+  signInWithGoogle: () => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -50,39 +49,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const signInWithEmail = async (email: string) => {
+  const signInWithGoogle = async () => {
     try {
-      // Use OTP (6-digit code) instead of magic link
-      // This works across different browsers/devices - user just enters the code
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
+      const redirectUrl = process.env.NODE_ENV === "production"
+        ? "https://vicu.vercel.app/auth/callback"
+        : `${window.location.origin}/auth/callback`;
+
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
         options: {
-          shouldCreateUser: true,
+          redirectTo: redirectUrl,
         },
       });
       return { error: error as Error | null };
     } catch (error) {
-      return { error: error as Error };
-    }
-  };
-
-  const verifyOtp = async (email: string, token: string) => {
-    try {
-      // Email must be lowercase for Supabase to match correctly
-      const normalizedEmail = email.toLowerCase().trim();
-      console.log("[AUTH] Verifying OTP for:", normalizedEmail, "token:", token);
-
-      // Try with type "email" first (recommended), fallback to "magiclink" if needed
-      const { data, error } = await supabase.auth.verifyOtp({
-        email: normalizedEmail,
-        token,
-        type: "email",
-      });
-
-      console.log("[AUTH] Verify result:", { data: !!data?.user, error: error?.message });
-      return { error: error as Error | null };
-    } catch (error) {
-      console.error("[AUTH] Verify exception:", error);
       return { error: error as Error };
     }
   };
@@ -92,7 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signInWithEmail, verifyOtp, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   );
