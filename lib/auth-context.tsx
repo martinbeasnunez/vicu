@@ -68,13 +68,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const verifyOtp = async (email: string, token: string) => {
     try {
-      const { error } = await supabase.auth.verifyOtp({
+      console.log("[AUTH] Verifying OTP for:", email, "token length:", token.length);
+      const { data, error } = await supabase.auth.verifyOtp({
         email,
         token,
         type: "email",
       });
+      console.log("[AUTH] Verify result:", { data: !!data?.user, error: error?.message });
       return { error: error as Error | null };
     } catch (error) {
+      console.error("[AUTH] Verify exception:", error);
       return { error: error as Error };
     }
   };
