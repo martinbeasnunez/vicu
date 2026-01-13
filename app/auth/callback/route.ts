@@ -5,11 +5,15 @@ import { cookies } from "next/headers";
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
+  const token_hash = requestUrl.searchParams.get("token_hash");
+  const type = requestUrl.searchParams.get("type");
   const error_param = requestUrl.searchParams.get("error");
   const error_description = requestUrl.searchParams.get("error_description");
 
   console.log("[AUTH CALLBACK] Request URL:", request.url);
   console.log("[AUTH CALLBACK] Code:", code ? "present" : "missing");
+  console.log("[AUTH CALLBACK] Token hash:", token_hash ? "present" : "missing");
+  console.log("[AUTH CALLBACK] Type:", type);
 
   // Handle error from Supabase (e.g., expired link)
   if (error_param) {
@@ -18,11 +22,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(
       new URL(`/login?error=${encodeURIComponent(errorMessage)}`, request.url)
     );
-  }
-
-  if (!code) {
-    console.error("[AUTH CALLBACK] No code provided");
-    return NextResponse.redirect(new URL("/login?error=no_code", request.url));
   }
 
   const cookieStore = await cookies();
@@ -44,17 +43,40 @@ export async function GET(request: NextRequest) {
     }
   );
 
-  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+  // Handle token_hash (from email links without PKCE)
+  if (token_hash && type) {
+    const { data, error } = await supabase.auth.verifyOtp({
+      token_hash,
+      type: type as "email" | "magiclink" | "signup" | "recovery",
+    });
 
-  if (error) {
-    console.error("[AUTH CALLBACK] Error exchanging code:", error.message);
-    return NextResponse.redirect(
-      new URL(`/login?error=${encodeURIComponent(error.message)}`, request.url)
-    );
+    if (error) {
+      console.error("[AUTH CALLBACK] Error verifying token:", error.message);
+      return NextResponse.redirect(
+        new URL(`/login?error=${encodeURIComponent(error.message)}`, request.url)
+      );
+    }
+
+    console.log("[AUTH CALLBACK] Token verified! User:", data.user?.email);
+    return NextResponse.redirect(new URL("/hoy", request.url));
   }
 
-  console.log("[AUTH CALLBACK] Success! User:", data.user?.email);
+  // Handle code (from OAuth or PKCE flow)
+  if (code) {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
-  // Redirect to the main app
-  return NextResponse.redirect(new URL("/hoy", request.url));
+    if (error) {
+      console.error("[AUTH CALLBACK] Error exchanging code:", error.message);
+      return NextResponse.redirect(
+        new URL(`/login?error=${encodeURIComponent(error.message)}`, request.url)
+      );
+    }
+
+    console.log("[AUTH CALLBACK] Code exchanged! User:", data.user?.email);
+    return NextResponse.redirect(new URL("/hoy", request.url));
+  }
+
+  // No code or token_hash provided
+  console.error("[AUTH CALLBACK] No code or token_hash provided");
+  return NextResponse.redirect(new URL("/login?error=no_code", request.url));
 }

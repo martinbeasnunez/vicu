@@ -6,8 +6,11 @@ import { useAuth } from "@/lib/auth-context";
 
 function LoginForm() {
   const [loading, setLoading] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const { signInWithGoogle, user } = useAuth();
+  const [showEmailForm, setShowEmailForm] = useState(false);
+  const [email, setEmail] = useState("");
+  const { signInWithGoogle, signInWithEmail, user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -45,6 +48,26 @@ function LoginForm() {
     // If successful, the page will redirect to Google
   };
 
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+
+    setEmailLoading(true);
+    setMessage(null);
+
+    const { error } = await signInWithEmail(email.trim());
+
+    if (error) {
+      setMessage({ type: "error", text: "Error al enviar el enlace. Intenta de nuevo." });
+    } else {
+      setMessage({
+        type: "success",
+        text: "Te enviamos un enlace a tu correo. Revisa tu bandeja de entrada."
+      });
+    }
+    setEmailLoading(false);
+  };
+
   return (
     <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
@@ -63,9 +86,10 @@ function LoginForm() {
         <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700/50 shadow-xl">
           <h2 className="text-lg font-semibold text-white mb-2 text-center">Iniciar sesión</h2>
           <p className="text-sm text-slate-400 mb-6 text-center">
-            Usa tu cuenta de Google para entrar a Vicu
+            Elige cómo quieres entrar a Vicu
           </p>
 
+          {/* Google Button */}
           <button
             onClick={handleGoogleLogin}
             disabled={loading}
@@ -100,6 +124,68 @@ function LoginForm() {
               </>
             )}
           </button>
+
+          {/* Divider */}
+          <div className="flex items-center gap-3 my-4">
+            <div className="flex-1 h-px bg-slate-700" />
+            <span className="text-xs text-slate-500">o</span>
+            <div className="flex-1 h-px bg-slate-700" />
+          </div>
+
+          {/* Email option */}
+          {!showEmailForm ? (
+            <button
+              onClick={() => setShowEmailForm(true)}
+              className="w-full px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-3"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              <span>Continuar con Email</span>
+            </button>
+          ) : (
+            <form onSubmit={handleEmailLogin} className="space-y-3">
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="tu@email.com"
+                className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                autoFocus
+                disabled={emailLoading}
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEmailForm(false);
+                    setEmail("");
+                    setMessage(null);
+                  }}
+                  className="px-4 py-3 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-xl font-medium transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={emailLoading || !email.trim()}
+                  className="flex-1 px-4 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-600/50 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+                >
+                  {emailLoading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Enviando...</span>
+                    </>
+                  ) : (
+                    <span>Enviar enlace</span>
+                  )}
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 text-center">
+                Te enviaremos un enlace para iniciar sesión
+              </p>
+            </form>
+          )}
 
           {/* Message */}
           {message && (
