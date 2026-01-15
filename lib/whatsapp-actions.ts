@@ -148,12 +148,18 @@ export async function getAllActionableObjectives(userId: string): Promise<Action
   if (!experiments || experiments.length === 0) return [];
 
   // Get pending steps for all experiments
-  const { data: pendingSteps } = await supabaseServer
+  const { data: pendingSteps, error: pendingError } = await supabaseServer
     .from("experiment_checkins")
     .select("id, experiment_id, step_title, step_description")
     .in("experiment_id", experiments.map(e => e.id))
     .eq("status", "pending")
     .order("created_at", { ascending: true });
+
+  if (pendingError) {
+    console.error("[WhatsApp Actions] Error fetching pending steps:", pendingError);
+  }
+
+  console.log(`[WhatsApp Actions] Found ${pendingSteps?.length || 0} pending steps for ${experiments.length} experiments`);
 
   // Build map of first pending step per experiment
   const stepsByExp: Record<string, { id: string; title: string; description: string | null }> = {};
@@ -164,6 +170,7 @@ export async function getAllActionableObjectives(userId: string): Promise<Action
         title: s.step_title || "Avanzar en el objetivo",
         description: s.step_description,
       };
+      console.log(`[WhatsApp Actions] Experiment ${s.experiment_id} has pending step: ${s.id} - "${s.step_title}"`);
     }
   });
 
@@ -231,6 +238,13 @@ export async function savePendingAction(
   const expiresAt = new Date();
   expiresAt.setHours(expiresAt.getHours() + 24); // Expires in 24h
 
+  console.log(`[WhatsApp Actions] Saving pending action for user ${userId}:`, {
+    experimentId,
+    checkinId,
+    actionText: actionText?.substring(0, 50),
+    isAiGenerated,
+  });
+
   const { data, error } = await supabaseServer
     .from("whatsapp_pending_actions")
     .insert({
@@ -250,6 +264,7 @@ export async function savePendingAction(
     return null;
   }
 
+  console.log(`[WhatsApp Actions] Saved pending action with id ${data?.id}, checkin_id: ${checkinId}`);
   return data?.id || null;
 }
 
@@ -285,20 +300,35 @@ export async function processUserResponse(
 }> {
   const { experiment_id, checkin_id, action_text, is_ai_generated } = pendingAction;
 
+  console.log(`[WhatsApp Actions] Processing response "${response}" for user ${userId}:`, {
+    experiment_id,
+    checkin_id,
+    action_text: action_text?.substring(0, 50),
+    is_ai_generated,
+  });
+
   if (response === "1") {
     // DONE - Mark step as complete
 
     if (checkin_id) {
       // Mark existing checkin as done
-      await supabaseServer
+      console.log(`[WhatsApp Actions] Marking existing checkin ${checkin_id} as done`);
+      const { error } = await supabaseServer
         .from("experiment_checkins")
         .update({
           status: "done",
           completed_at: new Date().toISOString(),
         })
         .eq("id", checkin_id);
+
+      if (error) {
+        console.error(`[WhatsApp Actions] Error marking checkin as done:`, error);
+      } else {
+        console.log(`[WhatsApp Actions] Successfully marked checkin ${checkin_id} as done`);
+      }
     } else if (is_ai_generated) {
       // Create new checkin for AI-generated action and mark as done
+      console.log(`[WhatsApp Actions] Creating new checkin for AI-generated action`);
       await supabaseServer
         .from("experiment_checkins")
         .insert({
@@ -307,6 +337,8 @@ export async function processUserResponse(
           status: "done",
           completed_at: new Date().toISOString(),
         });
+    } else {
+      console.log(`[WhatsApp Actions] No checkin_id and not AI-generated - this is unexpected!`);
     }
 
     // Update experiment streak
