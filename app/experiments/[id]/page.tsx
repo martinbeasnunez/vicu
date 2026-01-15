@@ -3010,6 +3010,32 @@ function ExperimentPageContent() {
             </div>
             */}
 
+            {/* Mobile-only Status Selector */}
+            <div className="lg:hidden card-premium px-3 sm:px-5 py-3 sm:py-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider">Estado</h3>
+                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_BADGE_COLORS[experiment.status as ExperimentStatus]}`}>
+                  {STATUS_LABELS[experiment.status as ExperimentStatus]}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(Object.keys(STATUS_LABELS) as ExperimentStatus[]).map((status) => (
+                  <button
+                    key={status}
+                    onClick={() => handleStatusChange(status)}
+                    disabled={isStatusUpdating}
+                    className={`chip-interactive px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                      experiment.status === status
+                        ? STATUS_BADGE_COLORS[status]
+                        : "bg-white/5 text-slate-400 border-white/10 hover:border-white/20 active:scale-95"
+                    } disabled:opacity-50`}
+                  >
+                    {STATUS_LABELS[status]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Mobile-only Progress Tracking */}
             <div className="lg:hidden card-premium px-3 sm:px-5 py-3 sm:py-4">
               <h3 className="text-sm font-medium text-slate-400 mb-3">Seguimiento</h3>
