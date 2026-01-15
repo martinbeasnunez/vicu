@@ -18,16 +18,40 @@ interface DashboardData {
     total: number;
     active: number;
   };
-  steps: {
-    total: number;
-    completed: number;
-    completed_today: number;
-    completed_week: number;
-    completion_rate: number;
-  };
   reminders: {
     sent_today: number;
     sent_week: number;
+  };
+  funnel: {
+    registered: number;
+    has_objective: number;
+    has_whatsapp: number;
+    has_both: number;
+    has_activity: number;
+    active_7d: number;
+    rate_objective: number;
+    rate_whatsapp: number;
+    rate_both: number;
+    rate_activity: number;
+    rate_active_7d: number;
+  };
+  at_risk_users: Array<{
+    id: string;
+    email: string;
+    created_at: string;
+    whatsapp_active: boolean;
+    total_objectives: number;
+    total_checkins: number;
+    days_since_activity: number | null;
+    risk_reason: string;
+    registered_days_ago: number;
+  }>;
+  engagement: {
+    avg_checkins_per_user: number;
+    whatsapp_response_rate: number;
+    action_completion_rate: number;
+    total_checkins: number;
+    whatsapp_checkins: number;
   };
   daily_activity: Array<{
     date: string;
@@ -44,6 +68,10 @@ interface DashboardData {
     total_objectives: number;
     active_objectives: number;
     active_last_7d: boolean;
+    total_checkins: number;
+    whatsapp_checkins: number;
+    last_activity: string | null;
+    days_since_activity: number | null;
   }>;
   generated_at: string;
 }
@@ -218,6 +246,105 @@ export default function AdminDashboard() {
           />
         </div>
 
+        {/* Conversion Funnel */}
+        {data.funnel && (
+          <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 mb-8">
+            <h2 className="text-lg font-semibold mb-4">Funnel de Conversion</h2>
+            <div className="space-y-3">
+              {[
+                { label: "Registrados", value: data.funnel.registered, rate: 100, color: "bg-slate-500" },
+                { label: "Con objetivo", value: data.funnel.has_objective, rate: data.funnel.rate_objective, color: "bg-amber-500" },
+                { label: "Con WhatsApp", value: data.funnel.has_whatsapp, rate: data.funnel.rate_whatsapp, color: "bg-blue-500" },
+                { label: "Con ambos", value: data.funnel.has_both, rate: data.funnel.rate_both, color: "bg-purple-500" },
+                { label: "Con actividad", value: data.funnel.has_activity, rate: data.funnel.rate_activity, color: "bg-emerald-500" },
+                { label: "Activos 7d", value: data.funnel.active_7d, rate: data.funnel.rate_active_7d, color: "bg-green-400" },
+              ].map((step, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="w-28 text-sm text-slate-400">{step.label}</div>
+                  <div className="flex-1 h-6 bg-slate-700 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full ${step.color} transition-all duration-500`}
+                      style={{ width: `${step.rate}%` }}
+                    />
+                  </div>
+                  <div className="w-20 text-right">
+                    <span className="text-white font-medium">{step.value}</span>
+                    <span className="text-slate-400 text-sm ml-1">({step.rate}%)</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Engagement Metrics */}
+        {data.engagement && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <StatCard
+              title="Promedio checkins/user"
+              value={data.engagement.avg_checkins_per_user}
+              subtitle="Usuarios con actividad"
+            />
+            <StatCard
+              title="Respuesta WhatsApp"
+              value={`${data.engagement.whatsapp_response_rate}%`}
+              subtitle="Users que respondieron"
+            />
+            <StatCard
+              title="Completion rate"
+              value={`${data.engagement.action_completion_rate}%`}
+              subtitle="Acciones completadas"
+            />
+            <StatCard
+              title="Checkins total"
+              value={data.engagement.total_checkins}
+              subtitle={`${data.engagement.whatsapp_checkins} via WhatsApp`}
+            />
+          </div>
+        )}
+
+        {/* At-Risk Users */}
+        {data.at_risk_users && data.at_risk_users.length > 0 && (
+          <div className="bg-red-900/20 rounded-xl border border-red-800/50 overflow-hidden mb-8">
+            <div className="p-4 border-b border-red-800/50 flex items-center gap-2">
+              <span className="text-red-400 text-lg">⚠️</span>
+              <h2 className="text-lg font-semibold text-red-300">Usuarios en Riesgo ({data.at_risk_users.length})</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-red-900/30 text-left text-sm text-red-300">
+                    <th className="p-3">Email</th>
+                    <th className="p-3">Razon</th>
+                    <th className="p-3">Objetivos</th>
+                    <th className="p-3">Checkins</th>
+                    <th className="p-3">Dias desde registro</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.at_risk_users.slice(0, 10).map((u) => (
+                    <tr key={u.id} className="border-t border-red-800/30 hover:bg-red-900/20">
+                      <td className="p-3 text-sm text-slate-300">{u.email || "-"}</td>
+                      <td className="p-3">
+                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-800/50 text-red-300">
+                          {u.risk_reason}
+                        </span>
+                      </td>
+                      <td className="p-3 text-sm text-slate-400">{u.total_objectives}</td>
+                      <td className="p-3 text-sm text-slate-400">{u.total_checkins}</td>
+                      <td className="p-3 text-sm text-slate-400">{u.registered_days_ago}d</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {data.at_risk_users.length > 10 && (
+              <div className="p-3 text-center text-sm text-red-300/60">
+                +{data.at_risk_users.length - 10} mas usuarios en riesgo
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Daily Activity Chart */}
         {data.daily_activity && data.daily_activity.length > 0 && (
@@ -270,7 +397,7 @@ export default function AdminDashboard() {
         {data.users && data.users.length > 0 && (
           <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
             <div className="p-4 border-b border-slate-700">
-              <h2 className="text-lg font-semibold">Usuarios ({data.users.length})</h2>
+              <h2 className="text-lg font-semibold">Todos los Usuarios ({data.users.length})</h2>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -278,8 +405,9 @@ export default function AdminDashboard() {
                   <tr className="bg-slate-700/50 text-left text-sm text-slate-400">
                     <th className="p-3">Email</th>
                     <th className="p-3">WhatsApp</th>
-                    <th className="p-3">Objetivos</th>
-                    <th className="p-3">Activo 7d</th>
+                    <th className="p-3">Obj</th>
+                    <th className="p-3">Checkins</th>
+                    <th className="p-3">Ultima act.</th>
                     <th className="p-3">Registro</th>
                   </tr>
                 </thead>
@@ -296,12 +424,22 @@ export default function AdminDashboard() {
                           <span className="text-slate-500 text-sm">-</span>
                         )}
                       </td>
-                      <td className="p-3 text-sm">{u.active_objectives || 0}</td>
-                      <td className="p-3">
-                        {u.active_last_7d ? (
-                          <span className="text-emerald-400 text-sm">Si</span>
+                      <td className="p-3 text-sm">{u.total_objectives || 0}</td>
+                      <td className="p-3 text-sm">
+                        <span className={u.total_checkins > 0 ? "text-emerald-400" : "text-slate-500"}>
+                          {u.total_checkins || 0}
+                        </span>
+                        {u.whatsapp_checkins > 0 && (
+                          <span className="text-blue-400 text-xs ml-1">({u.whatsapp_checkins} WA)</span>
+                        )}
+                      </td>
+                      <td className="p-3 text-sm">
+                        {u.days_since_activity !== null ? (
+                          <span className={u.days_since_activity <= 7 ? "text-emerald-400" : "text-amber-400"}>
+                            {u.days_since_activity === 0 ? "Hoy" : `${u.days_since_activity}d`}
+                          </span>
                         ) : (
-                          <span className="text-slate-500 text-sm">-</span>
+                          <span className="text-slate-500">-</span>
                         )}
                       </td>
                       <td className="p-3 text-sm text-slate-400">{u.created_at ? formatDate(u.created_at) : "-"}</td>
