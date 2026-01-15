@@ -453,16 +453,19 @@ export async function processUserResponse(
 
     if (checkin_id) {
       // Mark existing checkin as done (connects WhatsApp response to VICU step)
-      const { error } = await supabaseServer
+      console.log(`[WhatsApp] Marking existing checkin ${checkin_id} as done`);
+
+      const { data: updatedCheckin, error } = await supabaseServer
         .from("experiment_checkins")
-        .update({
-          status: "done",
-          completed_at: new Date().toISOString(),
-        })
-        .eq("id", checkin_id);
+        .update({ status: "done" })
+        .eq("id", checkin_id)
+        .select("id")
+        .single();
 
       if (error) {
-        console.error(`[WhatsApp] Error marking checkin ${checkin_id} as done:`, error);
+        console.error(`[WhatsApp] Error marking checkin ${checkin_id} as done:`, JSON.stringify(error));
+      } else {
+        console.log(`[WhatsApp] Checkin ${updatedCheckin?.id} marked as done`);
       }
     } else if (is_ai_generated) {
       // Create new checkin for AI-generated action and mark as done

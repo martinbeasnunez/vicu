@@ -551,7 +551,7 @@ async function generatePersonalizedMessage(
 
 REGLAS CRÍTICAS:
 - Máximo 50 caracteres para el objetivo (parámetro 1)
-- Máximo 80 caracteres para la acción (parámetro 2)
+- Máximo 150 caracteres para la acción (parámetro 2) - asegúrate de que la oración esté COMPLETA
 - Sin emojis (el template ya los tiene)
 - NUNCA repetir frases de mensajes anteriores
 - Tono conversacional, como un amigo cercano
@@ -580,7 +580,7 @@ ${recentMessagesContext || "Sin historial previo"}
 FORMATO DE RESPUESTA (JSON):
 {
   "objective": "título corto del objetivo (máx 50 chars)",
-  "action": "acción apropiada para la hora, SIN 'Listo' al final (máx 80 chars)"
+  "action": "acción COMPLETA apropiada para la hora, SIN 'Listo' al final (máx 150 chars)"
 }`
         },
         {
@@ -601,7 +601,7 @@ FORMATO DE RESPUESTA (JSON):
 
     return {
       objectiveText: (response.objective || objective.title).slice(0, 50),
-      actionText: cleanAction.slice(0, 80),
+      actionText: cleanAction.slice(0, 150),
       style: selectedStyle,
       focus: selectedFocus,
     };
@@ -639,7 +639,7 @@ FORMATO DE RESPUESTA (JSON):
     const fallback = fallbackMessages[selectedStyle];
     return {
       objectiveText: fallback.objective.slice(0, 50),
-      actionText: fallback.action.slice(0, 80),
+      actionText: fallback.action.slice(0, 150),
       style: selectedStyle,
       focus: selectedFocus,
     };

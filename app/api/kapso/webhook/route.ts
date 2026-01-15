@@ -222,15 +222,24 @@ ${actionMsg}`);
 
     // Check if user has a pending action
     const pendingAction = await getPendingAction(userId);
+    console.log(`[Webhook] Pending action for ${userId}:`, pendingAction ? JSON.stringify({
+      id: pendingAction.id,
+      experiment_id: pendingAction.experiment_id,
+      checkin_id: pendingAction.checkin_id,
+      is_ai_generated: pendingAction.is_ai_generated,
+      action_text: pendingAction.action_text?.substring(0, 50),
+    }) : "none");
 
     if (pendingAction) {
       // Parse response
       const actionResponse = parseActionResponse(message.text);
+      console.log(`[Webhook] Parsed response: ${actionResponse}`);
 
       if (actionResponse) {
-        console.log(`[Webhook] Response ${actionResponse} → checkin_id: ${pendingAction.checkin_id || "AI-generated"}`);
+        console.log(`[Webhook] Processing response ${actionResponse} → checkin_id: ${pendingAction.checkin_id || "AI-generated"}, is_ai_generated: ${pendingAction.is_ai_generated}`);
 
         const result = await processUserResponse(userId, actionResponse, pendingAction);
+        console.log(`[Webhook] Result: success=${result.success}, streak=${result.newStreak}`);
 
         await sendWhatsAppMessage(userPhone, result.replyMessage);
 
