@@ -46,6 +46,19 @@ type MessageStyle =
   | "gentle"        // Suave, sin presión (para usuarios que no responden)
   | "curious";      // Muestra interés genuino en el progreso
 
+/**
+ * Focus areas for objectives - used when user has few objectives
+ * to create variety in messaging even with the same objective
+ */
+type ObjectiveFocus =
+  | "execution"     // Enfocarse en hacer la tarea principal
+  | "planning"      // Enfocarse en planificar el siguiente paso
+  | "reflection"    // Enfocarse en reflexionar sobre el progreso
+  | "learning"      // Enfocarse en aprender algo nuevo relacionado
+  | "networking"    // Enfocarse en conectar con otros (si aplica)
+  | "celebration"   // Enfocarse en celebrar pequeños logros
+  | "obstacle"      // Enfocarse en identificar/superar obstáculos
+
 interface MessageHistoryItem {
   message_content: string;
   sent_at: string;
@@ -62,9 +75,12 @@ interface UserEngagementProfile {
   total_completions: number;
   consecutive_no_response: number;
   last_response_at: string | null;
-  // NEW: Message history for variety
+  // Message history for variety
   recent_messages: MessageHistoryItem[];
   styles_used_recently: MessageStyle[];
+  // Focus areas used recently (for users with few objectives)
+  focuses_used_recently: ObjectiveFocus[];
+  total_objectives: number;
 }
 
 interface ObjectiveWithContext {
@@ -198,6 +214,64 @@ function getObjectiveIndexForToday(totalObjectives: number): number {
 }
 
 /**
+ * Get focus area for today - rotates through different aspects
+ * This creates variety even when user has only 1-2 objectives
+ *
+ * Each day focuses on a different aspect of the objective:
+ * - Monday: execution (hacer)
+ * - Tuesday: planning (planificar)
+ * - Wednesday: reflection (reflexionar)
+ * - Thursday: learning (aprender)
+ * - Friday: networking (conectar)
+ * - Saturday: celebration (celebrar)
+ * - Sunday: obstacle (superar obstáculos)
+ */
+function getFocusForToday(recentFocuses: string[]): ObjectiveFocus {
+  const allFocuses: ObjectiveFocus[] = [
+    "execution", "planning", "reflection", "learning",
+    "networking", "celebration", "obstacle"
+  ];
+
+  // Get day of week for base rotation
+  const dayOfWeek = new Date().getDay();
+  const baseFocus = allFocuses[dayOfWeek];
+
+  // If base focus was used recently, pick next available
+  if (recentFocuses.slice(0, 2).includes(baseFocus)) {
+    const available = allFocuses.filter(f => !recentFocuses.slice(0, 2).includes(f));
+    return available.length > 0 ? available[0] : baseFocus;
+  }
+
+  return baseFocus;
+}
+
+/**
+ * Detect focus from message content (for historical analysis)
+ */
+function detectFocusFromMessage(content: string): ObjectiveFocus {
+  const lower = content.toLowerCase();
+  if (lower.includes("planifica") || lower.includes("siguiente paso") || lower.includes("organiza")) {
+    return "planning";
+  }
+  if (lower.includes("reflexion") || lower.includes("piensa") || lower.includes("cómo te fue")) {
+    return "reflection";
+  }
+  if (lower.includes("aprende") || lower.includes("investiga") || lower.includes("lee sobre")) {
+    return "learning";
+  }
+  if (lower.includes("conecta") || lower.includes("habla con") || lower.includes("comparte")) {
+    return "networking";
+  }
+  if (lower.includes("celebra") || lower.includes("logro") || lower.includes("felicidades")) {
+    return "celebration";
+  }
+  if (lower.includes("obstáculo") || lower.includes("bloqueo") || lower.includes("difícil")) {
+    return "obstacle";
+  }
+  return "execution"; // default
+}
+
+/**
  * Detect message style from content (for historical messages without explicit style)
  */
 function detectMessageStyle(content: string): MessageStyle {
@@ -288,6 +362,19 @@ async function getUserEngagementProfile(userId: string): Promise<UserEngagementP
     .map(m => m.style_used)
     .filter((s): s is MessageStyle => s !== undefined);
 
+  // Detect which focuses were used recently (for variety with few objectives)
+  const focusesUsedRecently = recentMessages
+    .slice(0, 5)
+    .map(m => detectFocusFromMessage(m.message_content));
+
+  // Count user's total objectives
+  const { count: objectiveCount } = await supabaseServer
+    .from("experiments")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .in("status", ["queued", "building", "testing", "adjusting"]);
+
   return {
     user_id: userId,
     preferred_response_hour: preferredHour,
@@ -299,6 +386,8 @@ async function getUserEngagementProfile(userId: string): Promise<UserEngagementP
     last_response_at: recentActions?.find(a => a.status !== "pending")?.created_at || null,
     recent_messages: recentMessages,
     styles_used_recently: stylesUsedRecently,
+    focuses_used_recently: focusesUsedRecently,
+    total_objectives: objectiveCount || 0,
   };
 }
 
@@ -358,12 +447,13 @@ function selectMessageStyle(
 }
 
 /**
- * Generate AI-powered personalized message WITH MEMORY
+ * Generate AI-powered personalized message WITH MEMORY AND FOCUS ROTATION
  *
  * Key improvements:
  * 1. Includes history of recent messages to avoid repetition
  * 2. Varies message style (motivational, tactical, reflective, etc.)
  * 3. Adapts based on user response patterns
+ * 4. NEW: For users with few objectives, rotates FOCUS AREAS to create variety
  */
 async function generatePersonalizedMessage(
   objective: { title: string; streak_days: number; days_without_progress: number },
@@ -371,9 +461,15 @@ async function generatePersonalizedMessage(
   slot: SlotType,
   profile: UserEngagementProfile,
   respondedToday: boolean
-): Promise<{ objectiveText: string; actionText: string; style: MessageStyle }> {
+): Promise<{ objectiveText: string; actionText: string; style: MessageStyle; focus: ObjectiveFocus }> {
   // Select message style based on context and history
   const selectedStyle = selectMessageStyle(profile, slot, objective, respondedToday);
+
+  // For users with FEW objectives (1-2), rotate focus areas to create variety
+  const hasFewObjectives = profile.total_objectives <= 2;
+  const selectedFocus = hasFewObjectives
+    ? getFocusForToday(profile.focuses_used_recently)
+    : "execution"; // Default to execution if many objectives
 
   // Build recent messages summary for AI to avoid repetition
   const recentMessagesContext = profile.recent_messages
@@ -403,7 +499,23 @@ async function generatePersonalizedMessage(
     curious: "Mostrar interés genuino. Ejemplo: 'Cuéntame cómo va' o 'Me pregunto si ya avanzaste' o '¿Qué tal te fue?'",
   };
 
+  // Focus instructions - ONLY used when user has few objectives
+  const focusInstructions: Record<ObjectiveFocus, string> = {
+    execution: "Enfócate en HACER una acción específica del objetivo. Ejemplo: 'Haz X ahora'",
+    planning: "Enfócate en PLANIFICAR. Ejemplo: 'Define los 3 pasos para...' o 'Organiza tu siguiente movimiento'",
+    reflection: "Enfócate en REFLEXIONAR sobre el progreso. Ejemplo: '¿Qué aprendiste esta semana?' o 'Piensa en qué te falta'",
+    learning: "Enfócate en APRENDER algo nuevo relacionado. Ejemplo: 'Investiga sobre...' o 'Lee un artículo de...'",
+    networking: "Enfócate en CONECTAR con otros. Ejemplo: 'Habla con alguien que ya hizo esto' o 'Comparte tu progreso'",
+    celebration: "Enfócate en CELEBRAR pequeños logros. Ejemplo: 'Reconoce lo que ya lograste' o 'Date un momento para apreciar tu avance'",
+    obstacle: "Enfócate en IDENTIFICAR obstáculos. Ejemplo: '¿Qué te está frenando?' o 'Piensa en cómo superar ese bloqueo'",
+  };
+
   const preferredWord = profile.response_words[0] || "listo";
+
+  // Build focus context for AI (only if user has few objectives)
+  const focusContext = hasFewObjectives
+    ? `\n\nENFOQUE DEL DÍA: ${selectedFocus.toUpperCase()}\n${focusInstructions[selectedFocus]}\nIMPORTANTE: El usuario tiene solo ${profile.total_objectives} objetivo(s), así que varía el ENFOQUE para crear frescura.`
+    : "";
 
   try {
     const completion = await getOpenAI().chat.completions.create({
@@ -423,6 +535,7 @@ REGLAS CRÍTICAS:
 
 ESTILO A USAR: ${selectedStyle.toUpperCase()}
 ${styleInstructions[selectedStyle]}
+${focusContext}
 
 CONTEXTO DEL USUARIO:
 - Objetivo actual: ${objective.title}
@@ -443,7 +556,7 @@ FORMATO DE RESPUESTA (JSON):
         },
         {
           role: "user",
-          content: `Genera un mensaje ${selectedStyle} para el slot ${slot}. Recuerda: NO repetir nada de los mensajes anteriores.`
+          content: `Genera un mensaje ${selectedStyle}${hasFewObjectives ? ` con enfoque en ${selectedFocus}` : ""} para el slot ${slot}. Recuerda: NO repetir nada de los mensajes anteriores.`
         }
       ],
       temperature: 0.9, // Higher temperature for more creativity
@@ -457,6 +570,7 @@ FORMATO DE RESPUESTA (JSON):
       objectiveText: (response.objective || objective.title).slice(0, 50),
       actionText: (response.action || `${microAction}. ¿${preferredWord.charAt(0).toUpperCase() + preferredWord.slice(1)}?`).slice(0, 80),
       style: selectedStyle,
+      focus: selectedFocus,
     };
   } catch (error) {
     console.error("[Smart Reminders] AI generation failed:", error);
@@ -494,6 +608,7 @@ FORMATO DE RESPUESTA (JSON):
       objectiveText: fallback.objective.slice(0, 50),
       actionText: fallback.action.slice(0, 80),
       style: selectedStyle,
+      focus: selectedFocus,
     };
   }
 }
@@ -725,8 +840,8 @@ export async function POST(request: NextRequest) {
         ? selectedObjective.pending_step.title
         : await generateMicroAction(selectedObjective.title);
 
-      // Generate AI-personalized message with style
-      const { objectiveText, actionText, style } = await generatePersonalizedMessage(
+      // Generate AI-personalized message with style and focus
+      const { objectiveText, actionText, style, focus } = await generatePersonalizedMessage(
         {
           title: selectedObjective.title,
           streak_days: selectedObjective.streak_days,
@@ -764,13 +879,14 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // Record reminder with style for future reference
+      // Record reminder with style and focus for future reference
+      const focusTag = profile.total_objectives <= 2 ? `|${focus}` : "";
       await supabaseServer
         .from("whatsapp_reminders")
         .insert({
           user_id: userId,
           experiment_id: selectedObjective.id,
-          message_content: `[${style}] ${objectiveText} | ${actionText}`,
+          message_content: `[${style}${focusTag}] ${objectiveText} | ${actionText}`,
           status: "sent",
           kapso_message_id: sendResult.messageId,
           slot_type: slot,
@@ -782,7 +898,8 @@ export async function POST(request: NextRequest) {
         message_id: sendResult.messageId,
       });
 
-      console.log(`[Smart Reminders] Sent ${slot} [${style}] to user ${userId} - "${objectiveText}" | "${actionText}"`);
+      const focusLog = profile.total_objectives <= 2 ? ` focus:${focus}` : "";
+      console.log(`[Smart Reminders] Sent ${slot} [${style}${focusLog}] to user ${userId} (${profile.total_objectives} obj) - "${objectiveText}" | "${actionText}"`);
     }
 
     const sent = results.filter(r => r.success && !r.skipped).length;
