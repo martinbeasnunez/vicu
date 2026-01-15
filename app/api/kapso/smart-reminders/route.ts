@@ -678,12 +678,14 @@ async function getDayContext(userId: string): Promise<DayContext> {
     .eq("status", "pending")
     .order("created_at", { ascending: true });
 
+  // Use completed_at (not created_at) because a step might have been created days ago
+  // but completed today via WhatsApp response
   const { data: doneToday } = await supabaseServer
     .from("experiment_checkins")
     .select("experiment_id")
     .in("experiment_id", experimentIds)
     .eq("status", "done")
-    .gte("created_at", todayStr);
+    .gte("completed_at", todayStr);
 
   const stepsByExp: Record<string, PendingStep[]> = {};
   const doneByExp: Record<string, number> = {};
