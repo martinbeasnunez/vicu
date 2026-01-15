@@ -93,6 +93,9 @@ export default function AdminDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [emailPreview, setEmailPreview] = useState<{ count: number; users: { email: string }[] } | null>(null);
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailResult, setEmailResult] = useState<{ sent: number; failed: number } | null>(null);
 
   useEffect(() => {
     // Wait for auth to finish loading
@@ -277,6 +280,101 @@ export default function AdminDashboard() {
             </div>
           </div>
         )}
+
+        {/* Email Re-engagement Campaign */}
+        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-semibold">Email Re-engagement</h2>
+              <p className="text-slate-400 text-sm">Usuarios con 0 objetivos</p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  if (!session?.access_token) return;
+                  try {
+                    const res = await fetch("/api/admin/send-reengagement", {
+                      headers: { Authorization: `Bearer ${session.access_token}` },
+                    });
+                    const json = await res.json();
+                    setEmailPreview(json);
+                    setEmailResult(null);
+                  } catch (err) {
+                    console.error(err);
+                  }
+                }}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm transition-colors"
+              >
+                Ver lista
+              </button>
+              {emailPreview && emailPreview.count > 0 && (
+                <button
+                  onClick={async () => {
+                    if (!session?.access_token || emailSending) return;
+                    setEmailSending(true);
+                    try {
+                      const res = await fetch("/api/admin/send-reengagement", {
+                        method: "POST",
+                        headers: {
+                          Authorization: `Bearer ${session.access_token}`,
+                          "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({ dryRun: false }),
+                      });
+                      const json = await res.json();
+                      setEmailResult({ sent: json.sent, failed: json.failed });
+                    } catch (err) {
+                      console.error(err);
+                    } finally {
+                      setEmailSending(false);
+                    }
+                  }}
+                  disabled={emailSending}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-lg text-sm transition-colors flex items-center gap-2"
+                >
+                  {emailSending ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Enviando...
+                    </>
+                  ) : (
+                    <>Enviar emails ({emailPreview.count})</>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {emailResult && (
+            <div className="bg-emerald-900/30 border border-emerald-700/50 rounded-lg p-3 mb-4">
+              <p className="text-emerald-300">
+                Enviados: {emailResult.sent} | Fallidos: {emailResult.failed}
+              </p>
+            </div>
+          )}
+
+          {emailPreview && (
+            <div className="space-y-2">
+              {emailPreview.count === 0 ? (
+                <p className="text-slate-400 text-sm">No hay usuarios con 0 objetivos</p>
+              ) : (
+                <>
+                  <p className="text-slate-300 text-sm mb-2">{emailPreview.count} usuarios recibirian el email:</p>
+                  <div className="max-h-40 overflow-y-auto bg-slate-900/50 rounded-lg p-2">
+                    {emailPreview.users.slice(0, 20).map((u, i) => (
+                      <div key={i} className="text-sm text-slate-400 py-1 border-b border-slate-700/50 last:border-0">
+                        {u.email}
+                      </div>
+                    ))}
+                    {emailPreview.count > 20 && (
+                      <div className="text-xs text-slate-500 pt-2">+{emailPreview.count - 20} mas...</div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Engagement Metrics */}
         {data.engagement && (
