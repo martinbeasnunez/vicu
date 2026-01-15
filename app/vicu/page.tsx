@@ -20,6 +20,29 @@ interface Message {
 // Chat phase now includes "readback" for pilot-style confirmation before creating
 type ChatPhase = "conversation" | "analyzing" | "readback" | "ready" | "creating" | "error";
 
+// Country codes for phone input
+const COUNTRY_CODES = [
+  { code: "51", country: "Perú", flag: "🇵🇪" },
+  { code: "52", country: "México", flag: "🇲🇽" },
+  { code: "54", country: "Argentina", flag: "🇦🇷" },
+  { code: "56", country: "Chile", flag: "🇨🇱" },
+  { code: "57", country: "Colombia", flag: "🇨🇴" },
+  { code: "58", country: "Venezuela", flag: "🇻🇪" },
+  { code: "593", country: "Ecuador", flag: "🇪🇨" },
+  { code: "591", country: "Bolivia", flag: "🇧🇴" },
+  { code: "595", country: "Paraguay", flag: "🇵🇾" },
+  { code: "598", country: "Uruguay", flag: "🇺🇾" },
+  { code: "506", country: "Costa Rica", flag: "🇨🇷" },
+  { code: "507", country: "Panamá", flag: "🇵🇦" },
+  { code: "503", country: "El Salvador", flag: "🇸🇻" },
+  { code: "502", country: "Guatemala", flag: "🇬🇹" },
+  { code: "504", country: "Honduras", flag: "🇭🇳" },
+  { code: "505", country: "Nicaragua", flag: "🇳🇮" },
+  { code: "1", country: "USA/Canadá", flag: "🇺🇸" },
+  { code: "34", country: "España", flag: "🇪🇸" },
+  { code: "55", country: "Brasil", flag: "🇧🇷" },
+];
+
 // Slot filling system - track which key info pieces we have gathered
 // Maximum 5 slots to avoid overwhelming the user
 interface SlotState {
@@ -65,7 +88,7 @@ function VicuPageContent() {
       id: "1",
       role: "vicu",
       content:
-        "¡Hola! Soy Vicu, tu compañero para cumplir metas. 🎯\n\nCuéntame qué quieres lograr. Puede ser algo personal (bajar de peso, aprender algo nuevo), de trabajo (conseguir clientes, cambiar de empleo), o cualquier proyecto que tengas en mente.",
+        "¡Hola! Soy Vicu.\n\n¿Qué quieres lograr? Solo cuéntame en tus palabras, yo me encargo de crear el plan.",
     },
   ]);
   const [inputValue, setInputValue] = useState("");
@@ -85,6 +108,9 @@ function VicuPageContent() {
   const [whatsappSaving, setWhatsappSaving] = useState(false); // WhatsApp save loading state
   const [hasWhatsApp, setHasWhatsApp] = useState<boolean | null>(null); // null = loading, true/false = checked
   const [whatsappCollected, setWhatsappCollected] = useState(false); // Track if we collected WhatsApp in this session
+  const [selectedCountry, setSelectedCountry] = useState(COUNTRY_CODES[0]); // Default to Peru
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [countrySearch, setCountrySearch] = useState("");
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -783,29 +809,90 @@ function VicuPageContent() {
                       </div>
 
                       <div className="space-y-3">
-                        <input
-                          type="tel"
-                          value={whatsappPhone}
-                          onChange={(e) => setWhatsappPhone(e.target.value.replace(/[^0-9]/g, ""))}
-                          placeholder="51987654321"
-                          className="w-full px-4 py-3 rounded-xl bg-slate-800/50 border border-white/10 text-slate-50 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all"
-                          style={{ fontSize: "16px" }}
-                        />
-                        <p className="text-xs text-slate-500">
-                          Con código de país (ej: 51 para Perú)
-                        </p>
+                        {/* Phone input with country selector */}
+                        <div className="flex gap-2">
+                          {/* Country selector */}
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={() => setShowCountryPicker(!showCountryPicker)}
+                              className="flex items-center gap-1 px-3 py-3 rounded-xl bg-slate-800/50 border border-white/10 text-slate-50 hover:border-emerald-500/50 transition-all min-w-[90px]"
+                            >
+                              <span className="text-lg">{selectedCountry.flag}</span>
+                              <span className="text-sm">+{selectedCountry.code}</span>
+                              <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </button>
+
+                            {/* Country dropdown */}
+                            {showCountryPicker && (
+                              <div className="absolute top-full left-0 mt-1 w-64 bg-slate-800 border border-white/10 rounded-xl shadow-xl z-50 max-h-64 overflow-hidden">
+                                {/* Search input */}
+                                <div className="p-2 border-b border-white/10">
+                                  <input
+                                    type="text"
+                                    value={countrySearch}
+                                    onChange={(e) => setCountrySearch(e.target.value)}
+                                    placeholder="Buscar país..."
+                                    className="w-full px-3 py-2 rounded-lg bg-slate-700/50 border border-white/10 text-slate-50 placeholder-slate-500 text-sm focus:outline-none focus:border-emerald-500/50"
+                                    autoFocus
+                                  />
+                                </div>
+                                {/* Country list */}
+                                <div className="overflow-y-auto max-h-48">
+                                  {COUNTRY_CODES
+                                    .filter(c =>
+                                      c.country.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                                      c.code.includes(countrySearch)
+                                    )
+                                    .map((country) => (
+                                      <button
+                                        key={country.code}
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedCountry(country);
+                                          setShowCountryPicker(false);
+                                          setCountrySearch("");
+                                        }}
+                                        className={`w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-700/50 transition-colors text-left ${
+                                          selectedCountry.code === country.code ? "bg-emerald-500/20" : ""
+                                        }`}
+                                      >
+                                        <span className="text-lg">{country.flag}</span>
+                                        <span className="text-sm text-slate-200">{country.country}</span>
+                                        <span className="text-xs text-slate-400 ml-auto">+{country.code}</span>
+                                      </button>
+                                    ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Phone number input */}
+                          <input
+                            type="tel"
+                            value={whatsappPhone}
+                            onChange={(e) => setWhatsappPhone(e.target.value.replace(/[^0-9]/g, ""))}
+                            placeholder="987654321"
+                            className="flex-1 px-4 py-3 rounded-xl bg-slate-800/50 border border-white/10 text-slate-50 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all"
+                            style={{ fontSize: "16px" }}
+                          />
+                        </div>
 
                         <button
                           onClick={async () => {
-                            if (!whatsappPhone || whatsappPhone.length < 10) {
+                            if (!whatsappPhone || whatsappPhone.length < 7) {
                               return;
                             }
                             setWhatsappSaving(true);
                             try {
+                              // Combine country code + phone number
+                              const fullPhone = selectedCountry.code + whatsappPhone;
                               const res = await fetch("/api/whatsapp/config", {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ phone_number: whatsappPhone }),
+                                body: JSON.stringify({ phone_number: fullPhone }),
                               });
                               const data = await res.json();
                               if (data.success) {
@@ -819,7 +906,7 @@ function VicuPageContent() {
                               setWhatsappSaving(false);
                             }
                           }}
-                          disabled={whatsappSaving || !whatsappPhone || whatsappPhone.length < 10}
+                          disabled={whatsappSaving || !whatsappPhone || whatsappPhone.length < 7}
                           className="w-full px-4 py-3 rounded-xl bg-emerald-500 text-white font-medium hover:bg-emerald-400 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {whatsappSaving ? (
