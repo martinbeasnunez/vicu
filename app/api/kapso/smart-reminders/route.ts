@@ -132,6 +132,30 @@ function getOpenAI(): OpenAI {
 // Helpers
 // =============================================================================
 
+/**
+ * Check if today is a weekend day and apply weekend rules:
+ * - Sunday (0): No messages at all
+ * - Saturday (6): Only MORNING slot
+ */
+function isWeekendRestricted(slot: SlotType): { skip: boolean; reason?: string } {
+  const now = new Date();
+  const bogotaOffset = -5 * 60;
+  const bogotaTime = new Date(now.getTime() + (bogotaOffset - now.getTimezoneOffset()) * 60000);
+  const dayOfWeek = bogotaTime.getDay(); // 0=Sunday, 6=Saturday
+
+  // Sunday: No messages
+  if (dayOfWeek === 0) {
+    return { skip: true, reason: "Sunday - rest day, no messages" };
+  }
+
+  // Saturday: Only MORNING
+  if (dayOfWeek === 6 && slot !== "MORNING") {
+    return { skip: true, reason: "Saturday - only MORNING message" };
+  }
+
+  return { skip: false };
+}
+
 function getCurrentSlot(): SlotType | null {
   const now = new Date();
   const bogotaOffset = -5 * 60;
@@ -735,6 +759,16 @@ export async function POST(request: NextRequest) {
         success: true,
         skipped: true,
         reason: "No slot matches current time (slots: MORNING 8am, MIDDAY 2pm, EVENING 8pm)",
+      });
+    }
+
+    // Check weekend restrictions (Sunday=no messages, Saturday=only MORNING)
+    const weekendCheck = isWeekendRestricted(slot);
+    if (weekendCheck.skip && !forcedSlot) {
+      return NextResponse.json({
+        success: true,
+        skipped: true,
+        reason: weekendCheck.reason,
       });
     }
 
