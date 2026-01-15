@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const results: { email: string; success: boolean; error?: string }[] = [];
+    const results: { email: string; success: boolean; error?: string; emailId?: string }[] = [];
     const resend = new Resend(process.env.RESEND_API_KEY);
 
     for (const user of targetUsers) {
@@ -184,8 +184,8 @@ export async function POST(request: NextRequest) {
             emailOptions.scheduledAt = scheduleDate.toISOString();
           }
 
-          await resend.emails.send(emailOptions);
-          results.push({ email: user.email, success: true });
+          const { data: emailData } = await resend.emails.send(emailOptions);
+          results.push({ email: user.email, success: true, emailId: emailData?.id });
         } catch (err) {
           results.push({ email: user.email, success: false, error: String(err) });
         }
@@ -193,6 +193,7 @@ export async function POST(request: NextRequest) {
     }
 
     const successCount = results.filter(r => r.success).length;
+    const emailIds = results.filter(r => r.emailId).map(r => r.emailId);
 
     return NextResponse.json({
       success: true,
@@ -201,6 +202,7 @@ export async function POST(request: NextRequest) {
       total: targetUsers.length,
       sent: successCount,
       failed: results.filter(r => !r.success).length,
+      emailIds, // Return IDs so we can cancel them
       results,
     });
   } catch (error) {
@@ -256,6 +258,58 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Preview error:", error);
+    return NextResponse.json({ error: String(error) }, { status: 500 });
+  }
+}
+
+// DELETE - Cancel scheduled emails
+export async function DELETE(request: NextRequest) {
+  const supabase = getSupabase();
+
+  // Verify admin access
+  const authHeader = request.headers.get("authorization");
+  let isAdmin = false;
+
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.split(" ")[1];
+    const { data: { user } } = await supabase.auth.getUser(token);
+    isAdmin = user?.email === ADMIN_EMAIL;
+  }
+
+  if (!isAdmin) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    const { emailIds } = body;
+
+    if (!emailIds || !Array.isArray(emailIds) || emailIds.length === 0) {
+      return NextResponse.json({ error: "No email IDs provided" }, { status: 400 });
+    }
+
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    const results: { id: string; success: boolean; error?: string }[] = [];
+
+    for (const emailId of emailIds) {
+      try {
+        await resend.emails.cancel(emailId);
+        results.push({ id: emailId, success: true });
+      } catch (err) {
+        results.push({ id: emailId, success: false, error: String(err) });
+      }
+    }
+
+    const cancelled = results.filter(r => r.success).length;
+
+    return NextResponse.json({
+      success: true,
+      cancelled,
+      failed: results.length - cancelled,
+      results,
+    });
+  } catch (error) {
+    console.error("Cancel error:", error);
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }

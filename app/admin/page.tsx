@@ -95,8 +95,9 @@ export default function AdminDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [emailPreview, setEmailPreview] = useState<{ count: number; users: { email: string }[] } | null>(null);
   const [emailSending, setEmailSending] = useState(false);
-  const [emailResult, setEmailResult] = useState<{ sent: number; failed: number; scheduled?: string } | null>(null);
+  const [emailResult, setEmailResult] = useState<{ sent: number; failed: number; scheduled?: string; emailIds?: string[] } | null>(null);
   const [emailSchedule, setEmailSchedule] = useState("8am");
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     // Wait for auth to finish loading
@@ -338,7 +339,7 @@ export default function AdminDashboard() {
                           }),
                         });
                         const json = await res.json();
-                        setEmailResult({ sent: json.sent, failed: json.failed, scheduled: json.scheduled });
+                        setEmailResult({ sent: json.sent, failed: json.failed, scheduled: json.scheduled, emailIds: json.emailIds });
                       } catch (err) {
                         console.error(err);
                       } finally {
@@ -363,7 +364,7 @@ export default function AdminDashboard() {
           </div>
 
           {emailResult && (
-            <div className="bg-emerald-900/30 border border-emerald-700/50 rounded-lg p-3 mb-4">
+            <div className="bg-emerald-900/30 border border-emerald-700/50 rounded-lg p-3 mb-4 flex items-center justify-between">
               <p className="text-emerald-300">
                 {emailResult.scheduled ? (
                   <>Programados: {emailResult.sent} para {new Date(emailResult.scheduled).toLocaleString("es-PE", { timeZone: "America/Lima" })}</>
@@ -371,6 +372,37 @@ export default function AdminDashboard() {
                   <>Enviados: {emailResult.sent} | Fallidos: {emailResult.failed}</>
                 )}
               </p>
+              {emailResult.scheduled && emailResult.emailIds && emailResult.emailIds.length > 0 && (
+                <button
+                  onClick={async () => {
+                    if (!session?.access_token || cancelling) return;
+                    setCancelling(true);
+                    try {
+                      const res = await fetch("/api/admin/send-reengagement", {
+                        method: "DELETE",
+                        headers: {
+                          Authorization: `Bearer ${session.access_token}`,
+                          "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({ emailIds: emailResult.emailIds }),
+                      });
+                      const json = await res.json();
+                      if (json.success) {
+                        setEmailResult(null);
+                        setEmailPreview(null);
+                      }
+                    } catch (err) {
+                      console.error(err);
+                    } finally {
+                      setCancelling(false);
+                    }
+                  }}
+                  disabled={cancelling}
+                  className="px-3 py-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 rounded-lg text-sm transition-colors"
+                >
+                  {cancelling ? "Cancelando..." : "Cancelar"}
+                </button>
+              )}
             </div>
           )}
 
