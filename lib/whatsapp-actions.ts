@@ -314,14 +314,20 @@ export async function processUserResponse(
       }
     } else if (is_ai_generated) {
       // Create new checkin for AI-generated action and mark as done
-      await supabaseServer
+      const { error: insertError } = await supabaseServer
         .from("experiment_checkins")
         .insert({
           experiment_id,
           step_title: action_text,
+          step_description: `Micro-paso completado vía WhatsApp`,
           status: "done",
           completed_at: new Date().toISOString(),
+          source: "whatsapp",
         });
+
+      if (insertError) {
+        console.error(`[WhatsApp] Error creating checkin:`, insertError);
+      }
     }
 
     // Update experiment streak
@@ -370,6 +376,19 @@ export async function processUserResponse(
 
   if (response === "2") {
     // LATER - Postpone
+    // If AI-generated, save as pending step so it appears in VICU
+    if (is_ai_generated && !checkin_id) {
+      await supabaseServer
+        .from("experiment_checkins")
+        .insert({
+          experiment_id,
+          step_title: action_text,
+          step_description: `Micro-paso sugerido vía WhatsApp`,
+          status: "pending",
+          source: "whatsapp",
+        });
+    }
+
     await supabaseServer
       .from("whatsapp_pending_actions")
       .update({ status: "skipped" })
