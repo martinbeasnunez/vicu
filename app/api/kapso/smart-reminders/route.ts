@@ -1,13 +1,15 @@
 /**
  * POST /api/kapso/smart-reminders
  *
- * Sistema de recordatorios WhatsApp para Vicu - COACH INTELIGENTE
+ * Sistema de recordatorios WhatsApp para Vicu - COACH INTELIGENTE CON MEMORIA
  *
  * FILOSOFÍA:
  * - 3 mensajes máximo por día (menos spam, más impacto)
- * - AI genera mensajes personalizados según el perfil del usuario
+ * - AI genera mensajes personalizados Y ÚNICOS (nunca repite)
  * - Rotación de objetivos por día (lunes=obj1, martes=obj2, etc.)
  * - Aprende del usuario: hora de respuesta, palabras que usa, patrones
+ * - Varía estilos: motivacional, táctico, reflexivo, celebratorio
+ * - MEMORIA: revisa últimos 10 mensajes para no repetir
  *
  * HORARIOS (Bogotá/Lima UTC-5):
  * - 08:00 → MORNING - Mensaje accionable del día (objetivo rotativo)
@@ -33,6 +35,24 @@ import OpenAI from "openai";
 
 type SlotType = "MORNING" | "MIDDAY" | "EVENING";
 
+/**
+ * Message styles to create variety and avoid repetition
+ */
+type MessageStyle =
+  | "motivational"  // Energético, inspirador
+  | "tactical"      // Específico, paso a paso
+  | "reflective"    // Pregunta, hace pensar
+  | "celebratory"   // Celebra logros/rachas
+  | "gentle"        // Suave, sin presión (para usuarios que no responden)
+  | "curious";      // Muestra interés genuino en el progreso
+
+interface MessageHistoryItem {
+  message_content: string;
+  sent_at: string;
+  user_response: string | null;
+  style_used?: MessageStyle;
+}
+
 interface UserEngagementProfile {
   user_id: string;
   preferred_response_hour: number | null;
@@ -42,6 +62,9 @@ interface UserEngagementProfile {
   total_completions: number;
   consecutive_no_response: number;
   last_response_at: string | null;
+  // NEW: Message history for variety
+  recent_messages: MessageHistoryItem[];
+  styles_used_recently: MessageStyle[];
 }
 
 interface ObjectiveWithContext {
@@ -175,7 +198,30 @@ function getObjectiveIndexForToday(totalObjectives: number): number {
 }
 
 /**
- * Get user engagement profile from past interactions
+ * Detect message style from content (for historical messages without explicit style)
+ */
+function detectMessageStyle(content: string): MessageStyle {
+  const lower = content.toLowerCase();
+  if (lower.includes("felicidades") || lower.includes("racha") || lower.includes("increíble") || lower.includes("genial")) {
+    return "celebratory";
+  }
+  if (lower.includes("?") && (lower.includes("cómo") || lower.includes("qué tal") || lower.includes("has pensado"))) {
+    return "reflective";
+  }
+  if (lower.includes("paso") || lower.includes("primero") || lower.includes("empieza") || lower.includes("específico")) {
+    return "tactical";
+  }
+  if (lower.includes("sin presión") || lower.includes("cuando puedas") || lower.includes("tranquilo")) {
+    return "gentle";
+  }
+  if (lower.includes("curioso") || lower.includes("me pregunto") || lower.includes("cuéntame")) {
+    return "curious";
+  }
+  return "motivational"; // default
+}
+
+/**
+ * Get user engagement profile from past interactions INCLUDING message history
  */
 async function getUserEngagementProfile(userId: string): Promise<UserEngagementProfile> {
   // Get recent responses from pending actions
@@ -186,13 +232,13 @@ async function getUserEngagementProfile(userId: string): Promise<UserEngagementP
     .order("created_at", { ascending: false })
     .limit(30);
 
-  // Get recent reminders to calculate response rate
+  // Get recent reminders INCLUDING message content for history
   const { data: recentReminders } = await supabaseServer
     .from("whatsapp_reminders")
-    .select("sent_at, status, responded_at, user_response")
+    .select("sent_at, status, responded_at, user_response, message_content")
     .eq("user_id", userId)
     .order("sent_at", { ascending: false })
-    .limit(30);
+    .limit(15); // Last 15 messages for context
 
   const totalResponses = recentActions?.filter(a => a.status !== "pending").length || 0;
   const totalCompletions = recentActions?.filter(a => a.status === "done").length || 0;
@@ -228,20 +274,96 @@ async function getUserEngagementProfile(userId: string): Promise<UserEngagementP
     preferredHour = Math.round(hours.reduce((a, b) => a + b, 0) / hours.length);
   }
 
+  // BUILD MESSAGE HISTORY for AI context
+  const recentMessages: MessageHistoryItem[] = (recentReminders || []).map(r => ({
+    message_content: r.message_content,
+    sent_at: r.sent_at,
+    user_response: r.user_response,
+    style_used: detectMessageStyle(r.message_content),
+  }));
+
+  // Detect which styles were used recently (last 5 messages)
+  const stylesUsedRecently = recentMessages
+    .slice(0, 5)
+    .map(m => m.style_used)
+    .filter((s): s is MessageStyle => s !== undefined);
+
   return {
     user_id: userId,
     preferred_response_hour: preferredHour,
     response_words: responseWords.length > 0 ? responseWords : ["listo"],
-    avg_response_time_minutes: null, // TODO: calculate
+    avg_response_time_minutes: null,
     total_responses: totalResponses,
     total_completions: totalCompletions,
     consecutive_no_response: consecutiveNoResponse,
     last_response_at: recentActions?.find(a => a.status !== "pending")?.created_at || null,
+    recent_messages: recentMessages,
+    styles_used_recently: stylesUsedRecently,
   };
 }
 
 /**
- * Generate AI-powered personalized message
+ * Select the best message style based on context and history
+ */
+function selectMessageStyle(
+  profile: UserEngagementProfile,
+  slot: SlotType,
+  objective: { streak_days: number; days_without_progress: number },
+  respondedToday: boolean
+): MessageStyle {
+  const recentStyles = profile.styles_used_recently;
+
+  // Available styles
+  const allStyles: MessageStyle[] = ["motivational", "tactical", "reflective", "celebratory", "gentle", "curious"];
+
+  // Filter out recently used styles to ensure variety
+  let availableStyles = allStyles.filter(s => !recentStyles.slice(0, 2).includes(s));
+  if (availableStyles.length === 0) availableStyles = allStyles;
+
+  // Context-based preference
+  if (profile.consecutive_no_response >= 3) {
+    // User hasn't responded - use gentle or curious
+    return availableStyles.includes("gentle") ? "gentle" : "curious";
+  }
+
+  if (objective.streak_days >= 3 && respondedToday) {
+    // Has streak and responded today - celebrate!
+    return availableStyles.includes("celebratory") ? "celebratory" : "motivational";
+  }
+
+  if (objective.days_without_progress >= 5) {
+    // Long pause - be gentle
+    return availableStyles.includes("gentle") ? "gentle" : "reflective";
+  }
+
+  if (slot === "MORNING") {
+    // Morning - prefer motivational or tactical
+    return availableStyles.includes("motivational") ? "motivational" : "tactical";
+  }
+
+  if (slot === "MIDDAY") {
+    // Midday follow-up - reflective or curious
+    return availableStyles.includes("reflective") ? "reflective" : "curious";
+  }
+
+  if (slot === "EVENING") {
+    // Evening - wrap up, celebratory if did something, gentle if not
+    return respondedToday
+      ? (availableStyles.includes("celebratory") ? "celebratory" : "motivational")
+      : (availableStyles.includes("gentle") ? "gentle" : "reflective");
+  }
+
+  // Random from available for variety
+  return availableStyles[Math.floor(Math.random() * availableStyles.length)];
+}
+
+/**
+ * Generate AI-powered personalized message WITH MEMORY
+ *
+ * Key improvements:
+ * 1. Includes history of recent messages to avoid repetition
+ * 2. Varies message style (motivational, tactical, reflective, etc.)
+ * 3. Adapts based on user response patterns
  */
 async function generatePersonalizedMessage(
   objective: { title: string; streak_days: number; days_without_progress: number },
@@ -249,29 +371,37 @@ async function generatePersonalizedMessage(
   slot: SlotType,
   profile: UserEngagementProfile,
   respondedToday: boolean
-): Promise<{ objectiveText: string; actionText: string }> {
+): Promise<{ objectiveText: string; actionText: string; style: MessageStyle }> {
+  // Select message style based on context and history
+  const selectedStyle = selectMessageStyle(profile, slot, objective, respondedToday);
+
+  // Build recent messages summary for AI to avoid repetition
+  const recentMessagesContext = profile.recent_messages
+    .slice(0, 8)
+    .map((m, i) => `${i + 1}. "${m.message_content}" ${m.user_response ? `(respondió: ${m.user_response})` : "(sin respuesta)"}`)
+    .join("\n");
+
   // Build context for AI
   const streakContext = objective.streak_days >= 3
-    ? `racha de ${objective.streak_days} días`
+    ? `racha de ${objective.streak_days} días consecutivos`
     : objective.days_without_progress >= 3
     ? `${objective.days_without_progress} días sin avance`
     : "objetivo activo";
 
   const userContext = profile.consecutive_no_response >= 3
-    ? "Usuario no ha respondido en varios días, ser gentil y no presionar"
+    ? "Usuario no ha respondido en varios días - SER MUY GENTIL, sin presionar"
     : profile.total_completions > 5
     ? "Usuario comprometido con historial de completar tareas"
     : "Usuario nuevo o con poca interacción";
 
-  const slotContext = {
-    MORNING: "Mensaje de la mañana, energético pero no abrumador",
-    MIDDAY: respondedToday
-      ? "Ya respondió hoy, no enviar"
-      : "Follow-up de medio día, recordatorio gentil",
-    EVENING: respondedToday
-      ? "Celebrar el logro del día"
-      : "Cierre del día, última oportunidad sin presión",
-  }[slot];
+  const styleInstructions: Record<MessageStyle, string> = {
+    motivational: "Tono energético e inspirador. Ejemplo: 'Hoy es el día para avanzar' o 'Tu futuro yo te agradecerá'",
+    tactical: "Tono práctico y específico. Dar un paso concreto. Ejemplo: 'Empieza con solo 5 minutos' o 'El primer paso es...'",
+    reflective: "Hacer una pregunta que invite a reflexionar. Ejemplo: '¿Qué pasaría si hoy avanzas?' o '¿Cómo te sentirías al completar esto?'",
+    celebratory: "Celebrar logros o racha. Ejemplo: 'Increíble racha!' o 'Vas muy bien!'",
+    gentle: "Sin ninguna presión. Ejemplo: 'Cuando puedas' o 'Sin presión, pero aquí estoy' o 'Solo un recordatorio amable'",
+    curious: "Mostrar interés genuino. Ejemplo: 'Cuéntame cómo va' o 'Me pregunto si ya avanzaste' o '¿Qué tal te fue?'",
+  };
 
   const preferredWord = profile.response_words[0] || "listo";
 
@@ -281,58 +411,89 @@ async function generatePersonalizedMessage(
       messages: [
         {
           role: "system",
-          content: `Eres Vicu, un coach de objetivos por WhatsApp. Genera mensajes cortos y efectivos.
+          content: `Eres Vicu, un coach de objetivos por WhatsApp. Genera mensajes ÚNICOS y personalizados.
 
-REGLAS:
+REGLAS CRÍTICAS:
 - Máximo 50 caracteres para el objetivo (parámetro 1)
 - Máximo 80 caracteres para la acción (parámetro 2)
 - Sin emojis (el template ya los tiene)
-- Tono conversacional, como un amigo
-- Si el usuario tiene racha, mencionarla brevemente
-- Si lleva días sin avance, ser gentil no culposo
-- Usar la palabra preferida del usuario para responder: "${preferredWord}"
+- NUNCA repetir frases de mensajes anteriores
+- Tono conversacional, como un amigo cercano
+- Terminar con invitación a responder usando: "${preferredWord}"
 
-CONTEXTO:
-- Objetivo: ${objective.title}
+ESTILO A USAR: ${selectedStyle.toUpperCase()}
+${styleInstructions[selectedStyle]}
+
+CONTEXTO DEL USUARIO:
+- Objetivo actual: ${objective.title}
 - Estado: ${streakContext}
 - Micro-acción sugerida: ${microAction}
-- Perfil usuario: ${userContext}
-- Momento: ${slotContext}
+- Perfil: ${userContext}
+- Momento del día: ${slot}
+- Respondió hoy: ${respondedToday ? "Sí" : "No"}
+
+MENSAJES ANTERIORES (NO REPETIR ESTAS FRASES):
+${recentMessagesContext || "Sin historial previo - puedes ser creativo"}
 
 FORMATO DE RESPUESTA (JSON):
 {
-  "objective": "título corto del objetivo con contexto",
-  "action": "acción específica + invitación a responder"
+  "objective": "título corto del objetivo (máx 50 chars)",
+  "action": "acción única y creativa + invitación a responder (máx 80 chars)"
 }`
         },
         {
           role: "user",
-          content: `Genera el mensaje para el slot ${slot}`
+          content: `Genera un mensaje ${selectedStyle} para el slot ${slot}. Recuerda: NO repetir nada de los mensajes anteriores.`
         }
       ],
-      temperature: 0.7,
-      max_tokens: 150,
+      temperature: 0.9, // Higher temperature for more creativity
+      max_tokens: 200,
       response_format: { type: "json_object" },
     });
 
     const response = JSON.parse(completion.choices[0]?.message?.content || "{}");
 
     return {
-      objectiveText: response.objective || `${objective.title}`,
-      actionText: response.action || `${microAction}. Responde ${preferredWord} cuando termines`,
+      objectiveText: (response.objective || objective.title).slice(0, 50),
+      actionText: (response.action || `${microAction}. ¿${preferredWord.charAt(0).toUpperCase() + preferredWord.slice(1)}?`).slice(0, 80),
+      style: selectedStyle,
     };
   } catch (error) {
     console.error("[Smart Reminders] AI generation failed:", error);
-    // Fallback to simple format
-    const streakInfo = objective.streak_days >= 3
-      ? ` (racha ${objective.streak_days}d)`
-      : objective.days_without_progress >= 7
-      ? ` (${objective.days_without_progress}d pausado)`
-      : "";
 
+    // Smart fallback with style variation
+    const fallbackMessages: Record<MessageStyle, { objective: string; action: string }> = {
+      motivational: {
+        objective: objective.title,
+        action: `Hoy es buen día para avanzar. ¿${preferredWord}?`,
+      },
+      tactical: {
+        objective: objective.title,
+        action: `Paso simple: ${microAction.slice(0, 40)}. ¿${preferredWord}?`,
+      },
+      reflective: {
+        objective: objective.title,
+        action: `¿Qué tal si hoy avanzas un poco? Responde ${preferredWord}`,
+      },
+      celebratory: {
+        objective: objective.streak_days >= 3 ? `${objective.title} (racha ${objective.streak_days}d!)` : objective.title,
+        action: `Sigue así! ${microAction.slice(0, 35)}. ¿${preferredWord}?`,
+      },
+      gentle: {
+        objective: objective.title,
+        action: `Sin presión, pero aquí estoy. ¿${preferredWord} cuando puedas?`,
+      },
+      curious: {
+        objective: objective.title,
+        action: `Cuéntame cómo va. Responde ${preferredWord} si avanzaste`,
+      },
+    };
+
+    const fallback = fallbackMessages[selectedStyle];
     return {
-      objectiveText: `${objective.title}${streakInfo}`,
-      actionText: `${microAction}. Responde ${preferredWord} cuando termines`,
+      objectiveText: fallback.objective.slice(0, 50),
+      actionText: fallback.action.slice(0, 80),
+      style: selectedStyle,
     };
   }
 }
@@ -564,8 +725,8 @@ export async function POST(request: NextRequest) {
         ? selectedObjective.pending_step.title
         : await generateMicroAction(selectedObjective.title);
 
-      // Generate AI-personalized message
-      const { objectiveText, actionText } = await generatePersonalizedMessage(
+      // Generate AI-personalized message with style
+      const { objectiveText, actionText, style } = await generatePersonalizedMessage(
         {
           title: selectedObjective.title,
           streak_days: selectedObjective.streak_days,
@@ -603,13 +764,13 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // Record reminder
+      // Record reminder with style for future reference
       await supabaseServer
         .from("whatsapp_reminders")
         .insert({
           user_id: userId,
           experiment_id: selectedObjective.id,
-          message_content: `${objectiveText} | ${actionText}`,
+          message_content: `[${style}] ${objectiveText} | ${actionText}`,
           status: "sent",
           kapso_message_id: sendResult.messageId,
           slot_type: slot,
@@ -621,7 +782,7 @@ export async function POST(request: NextRequest) {
         message_id: sendResult.messageId,
       });
 
-      console.log(`[Smart Reminders] Sent ${slot} to user ${userId} - objective: ${selectedObjective.title}`);
+      console.log(`[Smart Reminders] Sent ${slot} [${style}] to user ${userId} - "${objectiveText}" | "${actionText}"`);
     }
 
     const sent = results.filter(r => r.success && !r.skipped).length;
