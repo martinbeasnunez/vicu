@@ -405,10 +405,10 @@ export default function AdminDashboard() {
                 <thead>
                   <tr className="bg-slate-700/50 text-left text-sm text-slate-400">
                     <th className="p-3">Email</th>
-                    <th className="p-3">WhatsApp</th>
                     <th className="p-3">Obj</th>
-                    <th className="p-3">Actividad</th>
-                    <th className="p-3">Ultima act.</th>
+                    <th className="p-3">Pasos</th>
+                    <th className="p-3">WhatsApp</th>
+                    <th className="p-3">Visto</th>
                     <th className="p-3">Registro</th>
                   </tr>
                 </thead>
@@ -416,35 +416,30 @@ export default function AdminDashboard() {
                   {data.users.map((u) => (
                     <tr key={u.id} className="border-t border-slate-700/50 hover:bg-slate-700/30">
                       <td className="p-3 text-sm">{u.email || "-"}</td>
-                      <td className="p-3">
-                        {u.whatsapp_active ? (
-                          <span className="text-emerald-400 text-sm" title={u.phone || ""}>
-                            {u.phone ? `+${u.phone.slice(0, 2)}...${u.phone.slice(-4)}` : "Si"}
-                          </span>
-                        ) : (
-                          <span className="text-slate-500 text-sm">-</span>
-                        )}
-                      </td>
                       <td className="p-3 text-sm">{u.total_objectives || 0}</td>
                       <td className="p-3 text-sm">
-                        {/* Total activity: checkins + WA interactions */}
-                        <span className={(u.total_checkins + u.whatsapp_interactions) > 0 ? "text-emerald-400" : "text-slate-500"}>
-                          {u.total_checkins + u.whatsapp_interactions || 0}
+                        <span className={u.total_checkins > 0 ? "text-emerald-400" : "text-slate-500"}>
+                          {u.total_checkins || 0}
                         </span>
-                        {/* Breakdown tooltip */}
-                        {(u.total_checkins > 0 || u.whatsapp_interactions > 0) && (
-                          <span className="text-slate-500 text-xs ml-1" title={`${u.total_checkins} checkins, ${u.whatsapp_interactions} respuestas WA`}>
-                            ({u.total_checkins}c/{u.whatsapp_interactions}wa)
-                          </span>
+                      </td>
+                      <td className="p-3 text-sm">
+                        {u.whatsapp_active ? (
+                          u.whatsapp_interactions > 0 ? (
+                            <span className="text-emerald-400">{u.whatsapp_interactions} resp</span>
+                          ) : (
+                            <span className="text-amber-400">activo</span>
+                          )
+                        ) : (
+                          <span className="text-slate-500">-</span>
                         )}
                       </td>
                       <td className="p-3 text-sm">
                         {u.days_since_activity !== null ? (
                           <span className={u.days_since_activity <= 7 ? "text-emerald-400" : "text-amber-400"}>
-                            {u.days_since_activity === 0 ? "Hoy" : `${u.days_since_activity}d`}
+                            {u.days_since_activity === 0 ? "Hoy" : `hace ${u.days_since_activity}d`}
                           </span>
                         ) : (
-                          <span className="text-slate-500">-</span>
+                          <span className="text-slate-500">nunca</span>
                         )}
                       </td>
                       <td className="p-3 text-sm text-slate-400">{u.created_at ? formatDate(u.created_at) : "-"}</td>
