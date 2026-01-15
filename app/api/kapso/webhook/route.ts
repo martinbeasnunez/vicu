@@ -223,19 +223,12 @@ ${actionMsg}`);
     // Check if user has a pending action
     const pendingAction = await getPendingAction(userId);
 
-    console.log(`[Webhook] Pending action for user ${userId}:`, pendingAction ? {
-      id: pendingAction.id,
-      checkin_id: pendingAction.checkin_id,
-      is_ai_generated: pendingAction.is_ai_generated,
-      action_text: pendingAction.action_text?.substring(0, 50),
-    } : null);
-
     if (pendingAction) {
       // Parse response
       const actionResponse = parseActionResponse(message.text);
 
       if (actionResponse) {
-        console.log(`[Webhook] Processing action response: ${actionResponse}, checkin_id: ${pendingAction.checkin_id}`);
+        console.log(`[Webhook] Response ${actionResponse} → checkin_id: ${pendingAction.checkin_id || "AI-generated"}`);
 
         const result = await processUserResponse(userId, actionResponse, pendingAction);
 
