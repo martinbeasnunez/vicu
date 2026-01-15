@@ -466,19 +466,24 @@ export async function processUserResponse(
       }
     } else if (is_ai_generated) {
       // Create new checkin for AI-generated action and mark as done
-      const { error: insertError } = await supabaseServer
+      console.log(`[WhatsApp] Creating checkin for AI-generated step: "${action_text}" for experiment ${experiment_id}`);
+
+      const { data: insertedCheckin, error: insertError } = await supabaseServer
         .from("experiment_checkins")
         .insert({
           experiment_id,
           step_title: action_text,
           step_description: `Micro-paso completado vía WhatsApp`,
           status: "done",
-          completed_at: new Date().toISOString(),
           source: "whatsapp",
-        });
+        })
+        .select("id")
+        .single();
 
       if (insertError) {
-        console.error(`[WhatsApp] Error creating checkin:`, insertError);
+        console.error(`[WhatsApp] Error creating checkin:`, JSON.stringify(insertError));
+      } else {
+        console.log(`[WhatsApp] Checkin created successfully: ${insertedCheckin?.id}`);
       }
     }
 
@@ -530,7 +535,9 @@ export async function processUserResponse(
     // LATER - Postpone
     // If AI-generated, save as pending step so it appears in VICU
     if (is_ai_generated && !checkin_id) {
-      await supabaseServer
+      console.log(`[WhatsApp] Creating pending checkin for later: "${action_text}"`);
+
+      const { data: pendingCheckin, error: pendingError } = await supabaseServer
         .from("experiment_checkins")
         .insert({
           experiment_id,
@@ -538,7 +545,15 @@ export async function processUserResponse(
           step_description: `Micro-paso sugerido vía WhatsApp`,
           status: "pending",
           source: "whatsapp",
-        });
+        })
+        .select("id")
+        .single();
+
+      if (pendingError) {
+        console.error(`[WhatsApp] Error creating pending checkin:`, JSON.stringify(pendingError));
+      } else {
+        console.log(`[WhatsApp] Pending checkin created: ${pendingCheckin?.id}`);
+      }
     }
 
     await supabaseServer
