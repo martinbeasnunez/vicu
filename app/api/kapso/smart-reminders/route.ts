@@ -555,27 +555,32 @@ REGLAS CRÍTICAS:
 - Sin emojis (el template ya los tiene)
 - NUNCA repetir frases de mensajes anteriores
 - Tono conversacional, como un amigo cercano
-- Terminar con invitación a responder usando: "${preferredWord}"
+- NO terminar con "Listo", "Responde", ni llamados a la acción (el template ya tiene botones)
+- La acción debe ser RELEVANTE para la hora actual
 
 ESTILO A USAR: ${selectedStyle.toUpperCase()}
 ${styleInstructions[selectedStyle]}
 ${focusContext}
 
-CONTEXTO DEL USUARIO:
-- Objetivo actual: ${objective.title}
-- Estado: ${streakContext}
-- Micro-acción sugerida: ${microAction}
-- Perfil: ${userContext}
-- Momento del día: ${slot}
-- Respondió hoy: ${respondedToday ? "Sí" : "No"}
+HORA ACTUAL: Son las ${new Date().toLocaleTimeString("es-CO", { timeZone: "America/Bogota", hour: "2-digit", minute: "2-digit" })} en Bogotá.
+- Si es de NOCHE (8pm-11pm): Sugiere reflexión, planificación para mañana, o micro-acciones que se pueden hacer desde el celular/casa
+- Si es de MAÑANA (6am-12pm): Sugiere acciones energéticas para empezar el día
+- Si es de TARDE (12pm-8pm): Sugiere acciones ejecutables en el momento
 
-MENSAJES ANTERIORES (NO REPETIR ESTAS FRASES):
-${recentMessagesContext || "Sin historial previo - puedes ser creativo"}
+CONTEXTO DEL USUARIO:
+- Objetivo: ${objective.title}
+- Estado: ${streakContext}
+- Micro-acción base: ${microAction}
+- Perfil: ${userContext}
+- Slot: ${slot}
+
+MENSAJES ANTERIORES (NO REPETIR):
+${recentMessagesContext || "Sin historial previo"}
 
 FORMATO DE RESPUESTA (JSON):
 {
   "objective": "título corto del objetivo (máx 50 chars)",
-  "action": "acción única y creativa + invitación a responder (máx 80 chars)"
+  "action": "acción apropiada para la hora, SIN 'Listo' al final (máx 80 chars)"
 }`
         },
         {
@@ -590,40 +595,44 @@ FORMATO DE RESPUESTA (JSON):
 
     const response = JSON.parse(completion.choices[0]?.message?.content || "{}");
 
+    // Clean up: remove "Listo" or similar at the end if AI added it
+    let cleanAction = response.action || microAction;
+    cleanAction = cleanAction.replace(/\s*(listo|responde|¿listo\??)\s*$/i, "").trim();
+
     return {
       objectiveText: (response.objective || objective.title).slice(0, 50),
-      actionText: (response.action || `${microAction}. ¿${preferredWord.charAt(0).toUpperCase() + preferredWord.slice(1)}?`).slice(0, 80),
+      actionText: cleanAction.slice(0, 80),
       style: selectedStyle,
       focus: selectedFocus,
     };
   } catch (error) {
     console.error("[Smart Reminders] AI generation failed:", error);
 
-    // Smart fallback with style variation
+    // Smart fallback without "Listo" (template has buttons)
     const fallbackMessages: Record<MessageStyle, { objective: string; action: string }> = {
       motivational: {
         objective: objective.title,
-        action: `Hoy es buen día para avanzar. ¿${preferredWord}?`,
+        action: `Hoy es un gran día para avanzar en esto`,
       },
       tactical: {
         objective: objective.title,
-        action: `Paso simple: ${microAction.slice(0, 40)}. ¿${preferredWord}?`,
+        action: `Paso simple: ${microAction.slice(0, 50)}`,
       },
       reflective: {
         objective: objective.title,
-        action: `¿Qué tal si hoy avanzas un poco? Responde ${preferredWord}`,
+        action: `¿Qué pasaría si hoy avanzas un poco?`,
       },
       celebratory: {
         objective: objective.streak_days >= 3 ? `${objective.title} (racha ${objective.streak_days}d!)` : objective.title,
-        action: `Sigue así! ${microAction.slice(0, 35)}. ¿${preferredWord}?`,
+        action: `Vas muy bien, sigue así con: ${microAction.slice(0, 30)}`,
       },
       gentle: {
         objective: objective.title,
-        action: `Sin presión, pero aquí estoy. ¿${preferredWord} cuando puedas?`,
+        action: `Sin presión, cuando puedas: ${microAction.slice(0, 35)}`,
       },
       curious: {
         objective: objective.title,
-        action: `Cuéntame cómo va. Responde ${preferredWord} si avanzaste`,
+        action: `¿Cómo vas con esto? Me da curiosidad saber`,
       },
     };
 
