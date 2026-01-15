@@ -75,19 +75,33 @@ export async function GET(request: NextRequest) {
       .from("whatsapp_reminders")
       .select("user_id, sent_at, message_status");
 
-    // Get pending actions (to track response rates)
+    // Get pending actions (to track response rates AND WhatsApp interactions)
     const { data: pendingActions } = await supabase
       .from("whatsapp_pending_actions")
-      .select("user_id, created_at, was_completed");
+      .select("user_id, created_at, was_completed, status, updated_at");
+
+    // Get recent WhatsApp interactions (users who responded to messages)
+    const { data: recentWhatsappInteractions } = await supabase
+      .from("whatsapp_pending_actions")
+      .select("user_id, updated_at")
+      .neq("status", "pending") // They responded (completed, skipped, etc)
+      .gte("updated_at", weekAgo.toISOString());
 
     // Map checkins to users via experiments
     const experimentToUser = new Map(
       experiments?.map(e => [e.id, e.user_id]) || []
     );
     const activeUserIds = new Set<string>();
+
+    // Add users with recent checkins
     recentCheckins?.forEach(c => {
       const userId = experimentToUser.get(c.experiment_id);
       if (userId) activeUserIds.add(userId);
+    });
+
+    // Also add users who responded to WhatsApp messages recently
+    recentWhatsappInteractions?.forEach(i => {
+      if (i.user_id) activeUserIds.add(i.user_id);
     });
 
     // Get reminders
@@ -117,8 +131,18 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // Get last activity date per user
+    // Count WhatsApp interactions per user (responded to messages)
+    const whatsappInteractionsByUser = new Map<string, number>();
+    pendingActions?.forEach(a => {
+      if (a.user_id && a.status !== "pending") {
+        whatsappInteractionsByUser.set(a.user_id, (whatsappInteractionsByUser.get(a.user_id) || 0) + 1);
+      }
+    });
+
+    // Get last activity date per user (checkins + WhatsApp interactions)
     const lastActivityByUser = new Map<string, Date>();
+
+    // From checkins
     allCheckins?.forEach(c => {
       const userId = experimentToUser.get(c.experiment_id);
       if (userId) {
@@ -126,6 +150,17 @@ export async function GET(request: NextRequest) {
         const current = lastActivityByUser.get(userId);
         if (!current || checkinDate > current) {
           lastActivityByUser.set(userId, checkinDate);
+        }
+      }
+    });
+
+    // From WhatsApp interactions (when they responded)
+    pendingActions?.forEach(a => {
+      if (a.user_id && a.status !== "pending" && a.updated_at) {
+        const interactionDate = new Date(a.updated_at);
+        const current = lastActivityByUser.get(a.user_id);
+        if (!current || interactionDate > current) {
+          lastActivityByUser.set(a.user_id, interactionDate);
         }
       }
     });
@@ -148,6 +183,7 @@ export async function GET(request: NextRequest) {
         active_last_7d: activeUserIds.has(u.id),
         total_checkins: checkinsByUser.get(u.id) || 0,
         whatsapp_checkins: whatsappCheckinsByUser.get(u.id) || 0,
+        whatsapp_interactions: whatsappInteractionsByUser.get(u.id) || 0,
         last_activity: lastActivity?.toISOString() || null,
         days_since_activity: daysSinceActivity,
       };

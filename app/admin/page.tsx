@@ -70,6 +70,7 @@ interface DashboardData {
     active_last_7d: boolean;
     total_checkins: number;
     whatsapp_checkins: number;
+    whatsapp_interactions: number;
     last_activity: string | null;
     days_since_activity: number | null;
   }>;
@@ -406,7 +407,7 @@ export default function AdminDashboard() {
                     <th className="p-3">Email</th>
                     <th className="p-3">WhatsApp</th>
                     <th className="p-3">Obj</th>
-                    <th className="p-3">Checkins</th>
+                    <th className="p-3">Actividad</th>
                     <th className="p-3">Ultima act.</th>
                     <th className="p-3">Registro</th>
                   </tr>
@@ -426,11 +427,15 @@ export default function AdminDashboard() {
                       </td>
                       <td className="p-3 text-sm">{u.total_objectives || 0}</td>
                       <td className="p-3 text-sm">
-                        <span className={u.total_checkins > 0 ? "text-emerald-400" : "text-slate-500"}>
-                          {u.total_checkins || 0}
+                        {/* Total activity: checkins + WA interactions */}
+                        <span className={(u.total_checkins + u.whatsapp_interactions) > 0 ? "text-emerald-400" : "text-slate-500"}>
+                          {u.total_checkins + u.whatsapp_interactions || 0}
                         </span>
-                        {u.whatsapp_checkins > 0 && (
-                          <span className="text-blue-400 text-xs ml-1">({u.whatsapp_checkins} WA)</span>
+                        {/* Breakdown tooltip */}
+                        {(u.total_checkins > 0 || u.whatsapp_interactions > 0) && (
+                          <span className="text-slate-500 text-xs ml-1" title={`${u.total_checkins} checkins, ${u.whatsapp_interactions} respuestas WA`}>
+                            ({u.total_checkins}c/{u.whatsapp_interactions}wa)
+                          </span>
                         )}
                       </td>
                       <td className="p-3 text-sm">
