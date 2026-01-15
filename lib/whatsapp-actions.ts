@@ -36,6 +36,8 @@ export interface ActionableObjective {
     id: string;
     title: string;
     description: string | null;
+    effort: string | null; // "~5 min", "~20 min", etc.
+    days_pending: number;  // How many days this step has been pending
   } | null;
 }
 
@@ -96,6 +98,152 @@ EJEMPLOS:
 }
 
 /**
+ * Smart decision: Should we use the pending step or generate a micro-action?
+ *
+ * This function evaluates the full context to decide what generates the most value:
+ * - Time of day (morning=action, evening=reflection/planning)
+ * - Step effort (quick steps always usable, long steps need right moment)
+ * - How long the step has been pending (stuck = try different approach)
+ * - Step type (calls/meetings need business hours, thinking can be anytime)
+ */
+export interface SmartActionDecision {
+  useExistingStep: boolean;
+  action: string;
+  checkinId: string | null;
+  isAiGenerated: boolean;
+  reason: string;
+}
+
+export async function decideSmartAction(
+  objective: ActionableObjective,
+  slot: "MORNING" | "MIDDAY" | "EVENING"
+): Promise<SmartActionDecision> {
+  const pendingStep = objective.pending_step;
+
+  // No pending step = always generate micro-action
+  if (!pendingStep) {
+    const microAction = await generateMicroAction(objective.title);
+    return {
+      useExistingStep: false,
+      action: microAction,
+      checkinId: null,
+      isAiGenerated: true,
+      reason: "no_pending_steps",
+    };
+  }
+
+  const stepTitle = pendingStep.title.toLowerCase();
+  const effort = pendingStep.effort || "~5 min";
+  const daysPending = pendingStep.days_pending;
+
+  // Parse effort to minutes
+  const effortMinutes = effort.includes("20") ? 20 : effort.includes("10") ? 10 : 5;
+
+  // Get current hour (Bogotá time)
+  const now = new Date();
+  const bogotaOffset = -5 * 60;
+  const bogotaTime = new Date(now.getTime() + (bogotaOffset - now.getTimezoneOffset()) * 60000);
+  const currentHour = bogotaTime.getHours();
+
+  // =============================================================================
+  // SMART RULES
+  // =============================================================================
+
+  // Rule 1: Quick steps (~5 min) are always usable
+  if (effortMinutes <= 5) {
+    return {
+      useExistingStep: true,
+      action: pendingStep.title,
+      checkinId: pendingStep.id,
+      isAiGenerated: false,
+      reason: "quick_step_always_good",
+    };
+  }
+
+  // Rule 2: Steps requiring external interaction (calls, visits, purchases)
+  const needsExternalAction =
+    stepTitle.includes("llamar") ||
+    stepTitle.includes("call") ||
+    stepTitle.includes("ir a") ||
+    stepTitle.includes("visitar") ||
+    stepTitle.includes("comprar") ||
+    stepTitle.includes("banco") ||
+    stepTitle.includes("tienda") ||
+    stepTitle.includes("concesionario");
+
+  if (needsExternalAction) {
+    // These need business hours (9am-6pm)
+    if (currentHour < 9 || currentHour >= 18) {
+      const microAction = await generateMicroAction(
+        objective.title,
+        `El paso pendiente es "${pendingStep.title}" pero no es horario para hacerlo. Genera un micro-paso de preparación o investigación relacionado.`
+      );
+      return {
+        useExistingStep: false,
+        action: microAction,
+        checkinId: null,
+        isAiGenerated: true,
+        reason: "external_action_outside_hours",
+      };
+    }
+  }
+
+  // Rule 3: Evening (8pm+) prefers reflection/planning over heavy action
+  if (slot === "EVENING" && effortMinutes >= 20) {
+    const microAction = await generateMicroAction(
+      objective.title,
+      `Es de noche. El paso pendiente "${pendingStep.title}" requiere ${effort}. Genera algo más ligero: reflexión, planificación o una micro-acción de 2 min.`
+    );
+    return {
+      useExistingStep: false,
+      action: microAction,
+      checkinId: null,
+      isAiGenerated: true,
+      reason: "evening_prefers_light_action",
+    };
+  }
+
+  // Rule 4: Step stuck for too long (3+ days) = try different approach
+  if (daysPending >= 3) {
+    const microAction = await generateMicroAction(
+      objective.title,
+      `El paso "${pendingStep.title}" lleva ${daysPending} días sin hacerse. Genera una alternativa más pequeña o un primer paso que desbloquee al usuario.`
+    );
+    return {
+      useExistingStep: false,
+      action: microAction,
+      checkinId: null,
+      isAiGenerated: true,
+      reason: "step_stuck_too_long",
+    };
+  }
+
+  // Rule 5: Midday during work hours - prefer quick wins
+  if (slot === "MIDDAY" && currentHour >= 12 && currentHour <= 15 && effortMinutes >= 20) {
+    const microAction = await generateMicroAction(
+      objective.title,
+      `Es hora de almuerzo/trabajo. El paso "${pendingStep.title}" requiere ${effort}. Genera algo de 2-5 min que se pueda hacer en un break.`
+    );
+    return {
+      useExistingStep: false,
+      action: microAction,
+      checkinId: null,
+      isAiGenerated: true,
+      reason: "midday_prefers_quick_win",
+    };
+  }
+
+  // Default: Use the existing step
+  return {
+    useExistingStep: true,
+    action: pendingStep.title,
+    checkinId: pendingStep.id,
+    isAiGenerated: false,
+    reason: "existing_step_appropriate",
+  };
+}
+
+/**
  * Generate an alternative micro-action (easier than the original)
  */
 export async function generateAlternativeAction(
@@ -150,7 +298,7 @@ export async function getAllActionableObjectives(userId: string): Promise<Action
   // Get pending steps for all experiments
   const { data: pendingSteps, error: pendingError } = await supabaseServer
     .from("experiment_checkins")
-    .select("id, experiment_id, step_title, step_description")
+    .select("id, experiment_id, step_title, step_description, effort, created_at")
     .in("experiment_id", experiments.map(e => e.id))
     .eq("status", "pending")
     .order("created_at", { ascending: true });
@@ -160,19 +308,23 @@ export async function getAllActionableObjectives(userId: string): Promise<Action
   }
 
   // Build map of first pending step per experiment
-  const stepsByExp: Record<string, { id: string; title: string; description: string | null }> = {};
+  const now = new Date();
+  const stepsByExp: Record<string, { id: string; title: string; description: string | null; effort: string | null; days_pending: number }> = {};
   pendingSteps?.forEach(s => {
     if (!stepsByExp[s.experiment_id]) {
+      const createdAt = s.created_at ? new Date(s.created_at) : now;
+      const daysPending = Math.floor((now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
       stepsByExp[s.experiment_id] = {
         id: s.id,
         title: s.step_title || "Avanzar en el objetivo",
         description: s.step_description,
+        effort: s.effort,
+        days_pending: daysPending,
       };
     }
   });
 
   // Calculate urgency and sort
-  const now = new Date();
   const objectives = experiments.map(exp => {
     const lastCheckin = exp.last_checkin_at ? new Date(exp.last_checkin_at) : null;
     const daysWithout = lastCheckin

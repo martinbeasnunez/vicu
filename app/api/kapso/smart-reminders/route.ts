@@ -24,7 +24,7 @@ import { supabaseServer } from "@/lib/supabase-server";
 import { sendVicuActionTemplate, isKapsoConfigured, WhatsAppConfig } from "@/lib/kapso";
 import {
   getAllActionableObjectives,
-  generateMicroAction,
+  decideSmartAction,
   savePendingAction
 } from "@/lib/whatsapp-actions";
 import OpenAI from "openai";
@@ -871,10 +871,8 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // Generate micro-action for the objective
-      const microAction = selectedObjective.pending_step
-        ? selectedObjective.pending_step.title
-        : await generateMicroAction(selectedObjective.title);
+      // SMART DECISION: Evaluate context to decide best action
+      const smartDecision = await decideSmartAction(selectedObjective, slot);
 
       // Generate AI-personalized message with style and focus
       const { objectiveText, actionText, style, focus } = await generatePersonalizedMessage(
@@ -883,7 +881,7 @@ export async function POST(request: NextRequest) {
           streak_days: selectedObjective.streak_days,
           days_without_progress: selectedObjective.days_without_progress,
         },
-        microAction,
+        smartDecision.action,
         slot,
         profile,
         respondedToday
@@ -893,9 +891,9 @@ export async function POST(request: NextRequest) {
       await savePendingAction(
         userId,
         selectedObjective.id,
-        selectedObjective.pending_step?.id || null,
-        microAction,
-        !selectedObjective.pending_step // is AI generated
+        smartDecision.checkinId,
+        smartDecision.action,
+        smartDecision.isAiGenerated
       );
 
       // Send via vicu_action template
@@ -935,7 +933,7 @@ export async function POST(request: NextRequest) {
       });
 
       const focusLog = profile.total_objectives <= 2 ? ` focus:${focus}` : "";
-      console.log(`[Smart Reminders] Sent ${slot} [${style}${focusLog}] to user ${userId} (${profile.total_objectives} obj) - "${objectiveText}" | "${actionText}"`);
+      console.log(`[Smart Reminders] Sent ${slot} [${style}${focusLog}] to user ${userId} - decision:${smartDecision.reason} - "${objectiveText}" | "${actionText}"`);
     }
 
     const sent = results.filter(r => r.success && !r.skipped).length;
