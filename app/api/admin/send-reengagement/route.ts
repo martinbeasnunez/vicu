@@ -30,7 +30,41 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { userIds, dryRun = true } = body;
+    const { userIds, dryRun = true, scheduledAt } = body;
+
+    // Calculate scheduledAt if provided (ISO string or relative like "8am")
+    let scheduleDate: Date | undefined;
+    if (scheduledAt) {
+      if (scheduledAt.includes("T")) {
+        // Full ISO string
+        scheduleDate = new Date(scheduledAt);
+      } else if (scheduledAt.match(/^\d{1,2}(am|pm)$/i)) {
+        // Simple format like "8am" or "2pm" - schedule for today/tomorrow Peru time (UTC-5)
+        const match = scheduledAt.match(/^(\d{1,2})(am|pm)$/i);
+        if (match) {
+          let hour = parseInt(match[1]);
+          const isPM = match[2].toLowerCase() === "pm";
+          if (isPM && hour !== 12) hour += 12;
+          if (!isPM && hour === 12) hour = 0;
+
+          // Create date in Peru timezone (UTC-5)
+          const now = new Date();
+          const peruOffset = -5 * 60; // minutes
+          const peruNow = new Date(now.getTime() + (peruOffset + now.getTimezoneOffset()) * 60000);
+
+          scheduleDate = new Date(peruNow);
+          scheduleDate.setHours(hour, 0, 0, 0);
+
+          // If the time has passed today, schedule for tomorrow
+          if (scheduleDate <= peruNow) {
+            scheduleDate.setDate(scheduleDate.getDate() + 1);
+          }
+
+          // Convert back to UTC for Resend
+          scheduleDate = new Date(scheduleDate.getTime() - (peruOffset + now.getTimezoneOffset()) * 60000);
+        }
+      }
+    }
 
     // Get users to email
     const { data: authUsers } = await supabase.auth.admin.listUsers();
@@ -114,7 +148,7 @@ export async function POST(request: NextRequest) {
       </p>
     </div>
 
-    <a href="https://vicu.life/vicu" style="display: block; background-color: #6366f1; color: #ffffff; text-decoration: none; padding: 16px 24px; border-radius: 12px; font-weight: 600; font-size: 16px; text-align: center; margin: 0 0 24px 0;">
+    <a href="https://vicu.app/vicu" style="display: block; background-color: #6366f1; color: #ffffff; text-decoration: none; padding: 16px 24px; border-radius: 12px; font-weight: 600; font-size: 16px; text-align: center; margin: 0 0 24px 0;">
       Crear mi objetivo →
     </a>
 
@@ -137,13 +171,20 @@ export async function POST(request: NextRequest) {
         results.push({ email: user.email, success: true, error: "dry-run" });
       } else {
         try {
-          await resend.emails.send({
-            from: "Martin de Vicu <martin@vicu.life>",
+          const emailOptions: Parameters<typeof resend.emails.send>[0] = {
+            from: "Martin de Vicu <martin@vicu.app>",
             to: user.email,
             subject: "¿Qué te detuvo?",
             html: emailHtml,
             replyTo: "martin@getlavado.com",
-          });
+          };
+
+          // Add scheduling if provided
+          if (scheduleDate) {
+            emailOptions.scheduledAt = scheduleDate.toISOString();
+          }
+
+          await resend.emails.send(emailOptions);
           results.push({ email: user.email, success: true });
         } catch (err) {
           results.push({ email: user.email, success: false, error: String(err) });
@@ -156,6 +197,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       dryRun,
+      scheduled: scheduleDate ? scheduleDate.toISOString() : null,
       total: targetUsers.length,
       sent: successCount,
       failed: results.filter(r => !r.success).length,

@@ -95,7 +95,8 @@ export default function AdminDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [emailPreview, setEmailPreview] = useState<{ count: number; users: { email: string }[] } | null>(null);
   const [emailSending, setEmailSending] = useState(false);
-  const [emailResult, setEmailResult] = useState<{ sent: number; failed: number } | null>(null);
+  const [emailResult, setEmailResult] = useState<{ sent: number; failed: number; scheduled?: string } | null>(null);
+  const [emailSchedule, setEmailSchedule] = useState("8am");
 
   useEffect(() => {
     // Wait for auth to finish loading
@@ -308,39 +309,55 @@ export default function AdminDashboard() {
                 Ver lista
               </button>
               {emailPreview && emailPreview.count > 0 && (
-                <button
-                  onClick={async () => {
-                    if (!session?.access_token || emailSending) return;
-                    setEmailSending(true);
-                    try {
-                      const res = await fetch("/api/admin/send-reengagement", {
-                        method: "POST",
-                        headers: {
-                          Authorization: `Bearer ${session.access_token}`,
-                          "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({ dryRun: false }),
-                      });
-                      const json = await res.json();
-                      setEmailResult({ sent: json.sent, failed: json.failed });
-                    } catch (err) {
-                      console.error(err);
-                    } finally {
-                      setEmailSending(false);
-                    }
-                  }}
-                  disabled={emailSending}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-lg text-sm transition-colors flex items-center gap-2"
-                >
-                  {emailSending ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Enviando...
-                    </>
-                  ) : (
-                    <>Enviar emails ({emailPreview.count})</>
-                  )}
-                </button>
+                <>
+                  <select
+                    value={emailSchedule}
+                    onChange={(e) => setEmailSchedule(e.target.value)}
+                    className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm"
+                  >
+                    <option value="">Ahora</option>
+                    <option value="8am">8am Peru</option>
+                    <option value="9am">9am Peru</option>
+                    <option value="10am">10am Peru</option>
+                    <option value="12pm">12pm Peru</option>
+                  </select>
+                  <button
+                    onClick={async () => {
+                      if (!session?.access_token || emailSending) return;
+                      setEmailSending(true);
+                      try {
+                        const res = await fetch("/api/admin/send-reengagement", {
+                          method: "POST",
+                          headers: {
+                            Authorization: `Bearer ${session.access_token}`,
+                            "Content-Type": "application/json",
+                          },
+                          body: JSON.stringify({
+                            dryRun: false,
+                            scheduledAt: emailSchedule || undefined,
+                          }),
+                        });
+                        const json = await res.json();
+                        setEmailResult({ sent: json.sent, failed: json.failed, scheduled: json.scheduled });
+                      } catch (err) {
+                        console.error(err);
+                      } finally {
+                        setEmailSending(false);
+                      }
+                    }}
+                    disabled={emailSending}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-lg text-sm transition-colors flex items-center gap-2"
+                  >
+                    {emailSending ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Enviando...
+                      </>
+                    ) : (
+                      <>{emailSchedule ? `Programar ${emailPreview.count}` : `Enviar ${emailPreview.count}`}</>
+                    )}
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -348,7 +365,11 @@ export default function AdminDashboard() {
           {emailResult && (
             <div className="bg-emerald-900/30 border border-emerald-700/50 rounded-lg p-3 mb-4">
               <p className="text-emerald-300">
-                Enviados: {emailResult.sent} | Fallidos: {emailResult.failed}
+                {emailResult.scheduled ? (
+                  <>Programados: {emailResult.sent} para {new Date(emailResult.scheduled).toLocaleString("es-PE", { timeZone: "America/Lima" })}</>
+                ) : (
+                  <>Enviados: {emailResult.sent} | Fallidos: {emailResult.failed}</>
+                )}
               </p>
             </div>
           )}
