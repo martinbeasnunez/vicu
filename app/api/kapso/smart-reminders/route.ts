@@ -801,9 +801,16 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Smart Reminders] Found ${activeConfigs.length} users with WhatsApp enabled`);
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayStr = today.toISOString();
+    // Calculate "today" in Bogotá timezone (UTC-5)
+    const now = new Date();
+    const bogotaOffset = -5 * 60; // UTC-5 in minutes
+    const bogotaTime = new Date(now.getTime() + (bogotaOffset - now.getTimezoneOffset()) * 60000);
+    const todayBogota = new Date(bogotaTime);
+    todayBogota.setHours(0, 0, 0, 0);
+    // Convert back to UTC for database queries
+    const todayStr = new Date(todayBogota.getTime() - (bogotaOffset - now.getTimezoneOffset()) * 60000).toISOString();
+
+    console.log(`[Smart Reminders] Today in Bogotá: ${bogotaTime.toISOString()}, todayStr: ${todayStr}`);
 
     const results: Array<{
       user_id: string;
