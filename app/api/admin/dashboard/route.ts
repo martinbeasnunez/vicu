@@ -281,46 +281,52 @@ export async function GET(request: NextRequest) {
     };
 
     // === WHATSAPP INSIGHTS ===
-    // Get all reminders with response data
+    // Use whatsapp_pending_actions for response tracking (this is where responses are actually saved)
+    const { data: whatsappActions } = await supabase
+      .from("whatsapp_pending_actions")
+      .select("id, user_id, status, created_at, updated_at");
+
+    // Get reminders for sent count
     const { data: whatsappRemindersDetailed } = await supabase
       .from("whatsapp_reminders")
-      .select("id, user_id, status, user_response, response_action, sent_at, responded_at");
+      .select("id, user_id, sent_at");
 
-    // Response breakdown (done, later, stuck)
+    // Response breakdown based on pending_actions status
+    // status: "pending" | "done" | "skipped" | "alternative_requested"
     const responseBreakdown = {
       done: 0,
-      later: 0,
-      stuck: 0,
-      no_response: 0,
+      later: 0, // "skipped" means "later/mañana"
+      stuck: 0, // "alternative_requested" means they asked for easier task
+      no_response: 0, // "pending" that expired
     };
 
     const responseTimes: number[] = [];
 
-    whatsappRemindersDetailed?.forEach(r => {
-      if (r.response_action === 'done') {
+    whatsappActions?.forEach(a => {
+      if (a.status === 'done') {
         responseBreakdown.done++;
-      } else if (r.response_action === 'later') {
+      } else if (a.status === 'skipped') {
         responseBreakdown.later++;
-      } else if (r.response_action === 'stuck') {
+      } else if (a.status === 'alternative_requested') {
         responseBreakdown.stuck++;
-      } else if (!r.responded_at) {
+      } else if (a.status === 'pending') {
         responseBreakdown.no_response++;
       }
 
-      // Calculate response time in minutes
-      if (r.sent_at && r.responded_at) {
-        const sentTime = new Date(r.sent_at).getTime();
-        const respondedTime = new Date(r.responded_at).getTime();
-        const diffMinutes = (respondedTime - sentTime) / (1000 * 60);
+      // Calculate response time in minutes (from created_at to updated_at when status changed)
+      if (a.created_at && a.updated_at && a.status !== 'pending') {
+        const createdTime = new Date(a.created_at).getTime();
+        const updatedTime = new Date(a.updated_at).getTime();
+        const diffMinutes = (updatedTime - createdTime) / (1000 * 60);
         if (diffMinutes > 0 && diffMinutes < 24 * 60) { // Within 24 hours
           responseTimes.push(diffMinutes);
         }
       }
     });
 
-    const totalReminders = whatsappRemindersDetailed?.length || 0;
+    const totalActions = whatsappActions?.length || 0;
     const totalResponded = responseBreakdown.done + responseBreakdown.later + responseBreakdown.stuck;
-    const overallResponseRate = totalReminders > 0 ? Math.round((totalResponded / totalReminders) * 100) : 0;
+    const overallResponseRate = totalActions > 0 ? Math.round((totalResponded / totalActions) * 100) : 0;
 
     // Average response time
     const avgResponseTimeMinutes = responseTimes.length > 0
@@ -358,26 +364,28 @@ export async function GET(request: NextRequest) {
       const nextDate = new Date(date);
       nextDate.setDate(nextDate.getDate() + 1);
 
-      const remindersSentDay = whatsappRemindersDetailed?.filter(r => {
-        const d = new Date(r.sent_at);
+      // Actions sent (created) that day
+      const actionsSentDay = whatsappActions?.filter(a => {
+        const d = new Date(a.created_at);
         return d >= date && d < nextDate;
       }).length || 0;
 
-      const responsesDay = whatsappRemindersDetailed?.filter(r => {
-        if (!r.responded_at) return false;
-        const d = new Date(r.responded_at);
+      // Actions responded (updated with non-pending status) that day
+      const responsesDay = whatsappActions?.filter(a => {
+        if (a.status === 'pending' || !a.updated_at) return false;
+        const d = new Date(a.updated_at);
         return d >= date && d < nextDate;
       }).length || 0;
 
       whatsappDailyActivity.push({
         date: date.toISOString().split("T")[0],
-        sent: remindersSentDay,
+        sent: actionsSentDay,
         responded: responsesDay,
       });
     }
 
     const whatsappInsights = {
-      total_reminders: totalReminders,
+      total_reminders: totalActions,
       total_responded: totalResponded,
       response_rate: overallResponseRate,
       avg_response_time_minutes: avgResponseTimeMinutes,
