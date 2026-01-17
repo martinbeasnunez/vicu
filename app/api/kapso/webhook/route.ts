@@ -4,6 +4,7 @@ import { sendWhatsAppMessage } from "@/lib/kapso";
 import {
   getPendingAction,
   processUserResponse,
+  processFeedbackResponse,
   buildActionableMessage,
 } from "@/lib/whatsapp-actions";
 
@@ -131,6 +132,53 @@ function parseActionResponse(text: string): "1" | "2" | "3" | null {
 }
 
 /**
+ * Parse feedback response (A, B, C) after asking why user is skipping
+ */
+function parseFeedbackResponse(text: string): "A" | "B" | "C" | null {
+  const trimmed = text.trim().toLowerCase();
+
+  // Direct letters
+  if (trimmed === "a" || trimmed.startsWith("a ") || trimmed.startsWith("a)") || trimmed.startsWith("a.")) return "A";
+  if (trimmed === "b" || trimmed.startsWith("b ") || trimmed.startsWith("b)") || trimmed.startsWith("b.")) return "B";
+  if (trimmed === "c" || trimmed.startsWith("c ") || trimmed.startsWith("c)") || trimmed.startsWith("c.")) return "C";
+
+  // Text variants for "A" (too hard)
+  if (
+    trimmed.includes("dificil") ||
+    trimmed.includes("difícil") ||
+    trimmed.includes("complicado") ||
+    trimmed.includes("mucho") ||
+    trimmed.includes("no puedo")
+  ) {
+    return "A";
+  }
+
+  // Text variants for "B" (bad timing)
+  if (
+    trimmed.includes("momento") ||
+    trimmed.includes("tiempo") ||
+    trimmed.includes("ocupado") ||
+    trimmed.includes("ahora no") ||
+    trimmed.includes("más tarde")
+  ) {
+    return "B";
+  }
+
+  // Text variants for "C" (lost interest)
+  if (
+    trimmed.includes("no me interesa") ||
+    trimmed.includes("ya no") ||
+    trimmed.includes("no quiero") ||
+    trimmed.includes("cambiar de") ||
+    trimmed.includes("otro objetivo")
+  ) {
+    return "C";
+  }
+
+  return null;
+}
+
+/**
  * POST /api/kapso/webhook
  */
 export async function POST(request: NextRequest) {
@@ -229,6 +277,27 @@ ${actionMsg}`);
       is_ai_generated: pendingAction.is_ai_generated,
       action_text: pendingAction.action_text?.substring(0, 50),
     }) : "none");
+
+    // First, check if this is a feedback response (A/B/C) to the "¿qué te frena?" question
+    const feedbackResponse = parseFeedbackResponse(message.text);
+    if (feedbackResponse) {
+      console.log(`[Webhook] Parsed feedback response: ${feedbackResponse}`);
+
+      const result = await processFeedbackResponse(
+        userId,
+        feedbackResponse,
+        pendingAction?.experiment_id
+      );
+      console.log(`[Webhook] Feedback result: success=${result.success}`);
+
+      await sendWhatsAppMessage(userPhone, result.replyMessage);
+
+      return NextResponse.json({
+        success: true,
+        action: "feedback_processed",
+        feedback: feedbackResponse,
+      });
+    }
 
     if (pendingAction) {
       // Parse response

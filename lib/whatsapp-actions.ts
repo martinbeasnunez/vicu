@@ -59,12 +59,47 @@ function getOpenAI(): OpenAI {
 // =============================================================================
 
 /**
+ * Get consecutive skip count for a user on an objective
+ */
+export async function getConsecutiveSkips(userId: string, experimentId: string): Promise<number> {
+  const { data: recentActions } = await supabaseServer
+    .from("whatsapp_pending_actions")
+    .select("status")
+    .eq("user_id", userId)
+    .eq("experiment_id", experimentId)
+    .order("created_at", { ascending: false })
+    .limit(10);
+
+  if (!recentActions) return 0;
+
+  let consecutiveSkips = 0;
+  for (const action of recentActions) {
+    if (action.status === "skipped") {
+      consecutiveSkips++;
+    } else {
+      break; // Stop counting when we hit a non-skip
+    }
+  }
+  return consecutiveSkips;
+}
+
+/**
  * Generate a micro-action for an objective that has no pending steps
+ * Now accepts skipCount to generate progressively smaller actions
  */
 export async function generateMicroAction(
   objectiveTitle: string,
-  context?: string
+  context?: string,
+  skipCount: number = 0
 ): Promise<string> {
+  // Adjust difficulty based on skip count
+  let difficultyPrompt = "";
+  if (skipCount >= 3) {
+    difficultyPrompt = "\n\nIMPORTANTE: El usuario ha pospuesto varias veces. Genera algo SÚPER pequeño que tome menos de 30 segundos.";
+  } else if (skipCount >= 2) {
+    difficultyPrompt = "\n\nNota: El usuario pospuso antes. Genera algo más pequeño que tome menos de 1 minuto.";
+  }
+
   const completion = await getOpenAI().chat.completions.create({
     model: "gpt-4o-mini",
     messages: [
@@ -83,7 +118,7 @@ EJEMPLOS:
 - Objetivo: "Bajar de peso" → "Hacer 10 sentadillas"
 - Objetivo: "Aprender inglés" → "Ver un video de 2 min en inglés"
 - Objetivo: "Reducir redes sociales" → "Desinstalar una app de tu celular"
-- Objetivo: "Ahorrar dinero" → "Transferir $10 a tu cuenta de ahorros"`
+- Objetivo: "Ahorrar dinero" → "Transferir $10 a tu cuenta de ahorros"${difficultyPrompt}`
       },
       {
         role: "user",
@@ -434,6 +469,70 @@ export async function getPendingAction(userId: string): Promise<PendingAction | 
 }
 
 /**
+ * Process feedback response (A=too hard, B=bad timing, C=lost interest)
+ */
+export async function processFeedbackResponse(
+  userId: string,
+  feedback: "A" | "B" | "C",
+  experimentId?: string
+): Promise<{ success: boolean; replyMessage: string }> {
+  console.log(`[WhatsApp] Processing feedback ${feedback} from user ${userId}`);
+
+  if (feedback === "A") {
+    // Too hard - generate a tiny action
+    const objective = experimentId
+      ? await supabaseServer
+          .from("experiments")
+          .select("title")
+          .eq("id", experimentId)
+          .single()
+          .then((r) => r.data)
+      : await getMostUrgentObjective(userId);
+
+    const title = objective?.title || "tu objetivo";
+    const tinyAction = await generateMicroAction(
+      title,
+      "El usuario dice que es muy difícil. Genera algo SÚPER pequeño de 30 segundos máximo.",
+      5 // High skip count for tiny action
+    );
+
+    // Save the tiny action
+    if (experimentId || objective) {
+      const expId = experimentId || (objective as ActionableObjective)?.id;
+      if (expId) {
+        await savePendingAction(userId, expId, null, tinyAction, true);
+      }
+    }
+
+    return {
+      success: true,
+      replyMessage: `Entendido, vamos más pequeño:\n→ ${tinyAction}\n\n1️⃣ Listo  2️⃣ Mañana`,
+    };
+  }
+
+  if (feedback === "B") {
+    // Bad timing - acknowledge and reschedule
+    return {
+      success: true,
+      replyMessage: "👍 Perfecto, no es el momento. Te escribo mañana en mejor horario.",
+    };
+  }
+
+  if (feedback === "C") {
+    // Lost interest - offer to pause or suggest revisiting
+    return {
+      success: true,
+      replyMessage: `Gracias por ser honesto. Puedes pausar este objetivo en vicu.app si ya no te interesa.\n\nO si prefieres, te mando recordatorios de otro objetivo que sí te motive. 💪`,
+    };
+  }
+
+  return {
+    success: false,
+    replyMessage: "No entendí. Responde A, B o C.",
+  };
+}
+
+/**
  * Process user response (1=done, 2=later, 3=alternative)
  */
 export async function processUserResponse(
@@ -564,6 +663,26 @@ export async function processUserResponse(
       .update({ status: "skipped" })
       .eq("id", pendingAction.id);
 
+    // Check consecutive skips to adapt response
+    const consecutiveSkips = await getConsecutiveSkips(userId, experiment_id);
+    console.log(`[WhatsApp] User has ${consecutiveSkips} consecutive skips on this objective`);
+
+    // After 3+ skips, ask what's blocking them
+    if (consecutiveSkips >= 3) {
+      return {
+        success: true,
+        replyMessage: `Entendido. Noto que has pospuesto varias veces.\n\n¿Qué te está frenando?\nA) Es muy difícil\nB) No es buen momento\nC) Ya no me interesa`,
+      };
+    }
+
+    // After 2 skips, acknowledge and offer smaller action next time
+    if (consecutiveSkips >= 2) {
+      return {
+        success: true,
+        replyMessage: "👍 Ok. Mañana te mando algo más pequeño.",
+      };
+    }
+
     return {
       success: true,
       replyMessage: "👍 Te recuerdo mañana temprano.",
@@ -634,36 +753,55 @@ export async function buildActionableMessage(userId: string, slotIndex: number =
     };
   }
 
+  // Get consecutive skips to adjust action difficulty
+  const consecutiveSkips = await getConsecutiveSkips(userId, objective.id);
+
   let actionText: string;
   let checkinId: string | null = null;
   let isAiGenerated = false;
 
-  if (objective.pending_step) {
-    // Use existing step
+  if (objective.pending_step && consecutiveSkips < 2) {
+    // Use existing step only if not repeatedly skipping
     actionText = objective.pending_step.title;
     checkinId = objective.pending_step.id;
   } else {
-    // Generate micro-action with AI
-    actionText = await generateMicroAction(objective.title);
+    // Generate micro-action with AI (smaller if many skips)
+    const context = consecutiveSkips >= 2
+      ? `El usuario ha pospuesto ${consecutiveSkips} veces. Necesita algo MÁS PEQUEÑO.`
+      : undefined;
+    actionText = await generateMicroAction(objective.title, context, consecutiveSkips);
     isAiGenerated = true;
   }
 
   // Save pending action for later processing
   await savePendingAction(userId, objective.id, checkinId, actionText, isAiGenerated);
 
-  // Build urgency context (human-friendly)
+  // Build streak info with more visibility
   let streakInfo: string | null = null;
-  if (objective.days_without_progress >= 7 && objective.days_without_progress < 900) {
-    streakInfo = `(${objective.days_without_progress} días pausado)`;
-  } else if (objective.days_without_progress >= 3 && objective.days_without_progress < 7) {
-    streakInfo = "(hace unos días)";
+  let streakEmoji = "";
+
+  if (objective.streak_days >= 7) {
+    streakInfo = `🔥 Racha: ${objective.streak_days} días`;
+    streakEmoji = "🔥";
   } else if (objective.streak_days >= 3) {
-    streakInfo = `(racha ${objective.streak_days}d)`;
+    streakInfo = `Racha: ${objective.streak_days}d`;
+    streakEmoji = "⚡";
+  } else if (objective.days_without_progress >= 7 && objective.days_without_progress < 900) {
+    streakInfo = `${objective.days_without_progress}d pausado`;
+    streakEmoji = "😴";
+  } else if (objective.days_without_progress >= 3 && objective.days_without_progress < 7) {
+    streakEmoji = "👀";
   }
 
-  // Single-line friendly format (for fallback/old template)
-  const urgencyHint = streakInfo ? ` - ${streakInfo.replace(/[()]/g, "")}` : "";
-  const message = `${objective.title}${urgencyHint}. Hoy: ${actionText}. Responde 1=Listo, 2=Mañana, 3=Otra`;
+  // Build message with clear streak visibility
+  let message: string;
+  if (objective.streak_days >= 3) {
+    message = `${streakEmoji} ${objective.title}\n🔥 Racha: ${objective.streak_days} días - ¡no la pierdas!\n\nHoy: ${actionText}\n\n1️⃣ Listo  2️⃣ Mañana  3️⃣ Otra`;
+  } else if (consecutiveSkips >= 2) {
+    message = `${objective.title}\n\n💡 Algo más pequeño:\n→ ${actionText}\n\n1️⃣ Listo  2️⃣ Mañana`;
+  } else {
+    message = `${streakEmoji} ${objective.title}\n\nHoy: ${actionText}\n\n1️⃣ Listo  2️⃣ Mañana  3️⃣ Otra`;
+  }
 
   return {
     message,
