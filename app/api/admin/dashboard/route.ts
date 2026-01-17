@@ -282,9 +282,14 @@ export async function GET(request: NextRequest) {
 
     // === WHATSAPP INSIGHTS ===
     // Use whatsapp_pending_actions for response tracking (this is where responses are actually saved)
-    const { data: whatsappActions } = await supabase
+    const { data: whatsappActions, error: actionsError } = await supabase
       .from("whatsapp_pending_actions")
-      .select("id, user_id, status, created_at, updated_at");
+      .select("id, user_id, status, created_at, expires_at");
+
+    if (actionsError) {
+      console.error("Error fetching whatsapp_pending_actions:", actionsError);
+    }
+    console.log("WhatsApp actions count:", whatsappActions?.length || 0);
 
     // Get reminders for sent count
     const { data: whatsappRemindersDetailed } = await supabase
@@ -313,15 +318,8 @@ export async function GET(request: NextRequest) {
         responseBreakdown.no_response++;
       }
 
-      // Calculate response time in minutes (from created_at to updated_at when status changed)
-      if (a.created_at && a.updated_at && a.status !== 'pending') {
-        const createdTime = new Date(a.created_at).getTime();
-        const updatedTime = new Date(a.updated_at).getTime();
-        const diffMinutes = (updatedTime - createdTime) / (1000 * 60);
-        if (diffMinutes > 0 && diffMinutes < 24 * 60) { // Within 24 hours
-          responseTimes.push(diffMinutes);
-        }
-      }
+      // Note: updated_at doesn't exist in the table, so we can't calculate response time accurately
+      // For now, skip response time calculation
     });
 
     const totalActions = whatsappActions?.length || 0;
@@ -370,10 +368,10 @@ export async function GET(request: NextRequest) {
         return d >= date && d < nextDate;
       }).length || 0;
 
-      // Actions responded (updated with non-pending status) that day
+      // Actions responded (with non-pending status) - use created_at as proxy since no updated_at
       const responsesDay = whatsappActions?.filter(a => {
-        if (a.status === 'pending' || !a.updated_at) return false;
-        const d = new Date(a.updated_at);
+        if (a.status === 'pending') return false;
+        const d = new Date(a.created_at);
         return d >= date && d < nextDate;
       }).length || 0;
 
