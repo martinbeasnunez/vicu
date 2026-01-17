@@ -725,6 +725,118 @@ export async function processUserResponse(
 }
 
 /**
+ * Generate attention-grabbing hook for WhatsApp notification preview
+ * First ~27 characters must create curiosity/urgency to make user open the message
+ */
+function generateAttentionHook(
+  objective: ActionableObjective,
+  consecutiveSkips: number
+): string {
+  const now = new Date();
+  const hour = now.getHours();
+  const dayOfWeek = now.getDay(); // 0=Sunday, 1=Monday...
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+  // Priority 1: Streak at risk (high urgency)
+  if (objective.streak_days >= 3) {
+    const streakHooks = [
+      `🔥 ${objective.streak_days} días... ¿hoy también?`,
+      `⚡ Día ${objective.streak_days + 1} te espera`,
+      `🎯 Tu racha de ${objective.streak_days}d en juego`,
+      `💪 ${objective.streak_days} días seguidos, ¿y hoy?`,
+      `🏆 Racha de ${objective.streak_days}... ¡no pares!`,
+    ];
+    return streakHooks[Math.floor(Math.random() * streakHooks.length)];
+  }
+
+  // Priority 2: After skips (empathy + tiny action)
+  if (consecutiveSkips >= 2) {
+    const skipHooks = [
+      "💡 Algo más fácil hoy",
+      "🎯 Solo 30 segundos, ¿va?",
+      "✨ Prueba esto (es mini)",
+      "🌱 Un paso pequeñito",
+      "⚡ Versión express para ti",
+    ];
+    return skipHooks[Math.floor(Math.random() * skipHooks.length)];
+  }
+
+  // Priority 3: Long pause (re-engagement)
+  if (objective.days_without_progress >= 7 && objective.days_without_progress < 900) {
+    const pauseHooks = [
+      "👋 Te extrañamos por aquí",
+      "🌅 Nuevo día, nueva chance",
+      "💭 ¿Retomamos esto?",
+      "🚀 Un pequeño paso hoy",
+      "✨ Nunca es tarde para...",
+    ];
+    return pauseHooks[Math.floor(Math.random() * pauseHooks.length)];
+  }
+
+  // Priority 4: Time-based hooks
+  if (hour >= 6 && hour < 10) {
+    // Morning hooks
+    const morningHooks = [
+      "☀️ Buenos días, 2 min?",
+      "🌅 Empieza tu día con esto",
+      "⚡ Algo rápido antes de...",
+      "🎯 Tu momento del día",
+      "💪 Arranca con todo",
+    ];
+    return morningHooks[Math.floor(Math.random() * morningHooks.length)];
+  }
+
+  if (hour >= 12 && hour < 14) {
+    // Midday hooks
+    const middayHooks = [
+      "🍽️ Antes de comer...",
+      "⏰ Tienes 2 min libres?",
+      "💡 Pausa productiva",
+      "🎯 Un avance rápido",
+      "✨ Aprovecha este break",
+    ];
+    return middayHooks[Math.floor(Math.random() * middayHooks.length)];
+  }
+
+  if (hour >= 18 && hour < 22) {
+    // Evening hooks
+    const eveningHooks = [
+      "🌙 Cierra el día con esto",
+      "✅ Último empujón del día",
+      "🎯 2 min antes de dormir",
+      "💫 Termina bien tu día",
+      "🏁 Una cosa más y listo",
+    ];
+    return eveningHooks[Math.floor(Math.random() * eveningHooks.length)];
+  }
+
+  // Priority 5: Weekend vs weekday
+  if (isWeekend) {
+    const weekendHooks = [
+      "🎉 Fin de semana + 2 min",
+      "☕ Momento relax, avanza",
+      "🌴 Aprovecha el finde",
+      "✨ Hoy tienes tiempo, no?",
+      "🎯 Rápido y a disfrutar",
+    ];
+    return weekendHooks[Math.floor(Math.random() * weekendHooks.length)];
+  }
+
+  // Default: Generic curiosity hooks
+  const genericHooks = [
+    "⚡ 2 minutos cambian todo",
+    "🎯 Tu yo del futuro...",
+    "💡 Algo pequeño, gran imp...",
+    "🚀 Un paso, solo uno",
+    "✨ ¿Listo para avanzar?",
+    "🎲 Tienes 2 min? Mira esto",
+    "💪 Tu siguiente movimiento",
+    "🌟 Hoy puedes con esto",
+  ];
+  return genericHooks[Math.floor(Math.random() * genericHooks.length)];
+}
+
+/**
  * Build actionable WhatsApp message for a user
  * Optimized for single-line template format (no newlines in WhatsApp templates)
  *
@@ -776,31 +888,28 @@ export async function buildActionableMessage(userId: string, slotIndex: number =
   // Save pending action for later processing
   await savePendingAction(userId, objective.id, checkinId, actionText, isAiGenerated);
 
-  // Build streak info with more visibility
+  // Build streak info
   let streakInfo: string | null = null;
-  let streakEmoji = "";
-
   if (objective.streak_days >= 7) {
     streakInfo = `🔥 Racha: ${objective.streak_days} días`;
-    streakEmoji = "🔥";
   } else if (objective.streak_days >= 3) {
     streakInfo = `Racha: ${objective.streak_days}d`;
-    streakEmoji = "⚡";
-  } else if (objective.days_without_progress >= 7 && objective.days_without_progress < 900) {
-    streakInfo = `${objective.days_without_progress}d pausado`;
-    streakEmoji = "😴";
-  } else if (objective.days_without_progress >= 3 && objective.days_without_progress < 7) {
-    streakEmoji = "👀";
   }
 
-  // Build message with clear streak visibility
+  // === HOOK SYSTEM ===
+  // First ~27 chars are the notification preview - must grab attention!
+  // Different hooks based on context to keep it fresh
+
+  const hook = generateAttentionHook(objective, consecutiveSkips);
+
+  // Build message with hook first (for preview) then content
   let message: string;
   if (objective.streak_days >= 3) {
-    message = `${streakEmoji} ${objective.title}\n🔥 Racha: ${objective.streak_days} días - ¡no la pierdas!\n\nHoy: ${actionText}\n\n1️⃣ Listo  2️⃣ Mañana  3️⃣ Otra`;
+    message = `${hook}\n\n🔥 ${objective.streak_days} días seguidos - ¡no cortes!\n\n→ ${actionText}\n\n1️⃣ Listo  2️⃣ Mañana  3️⃣ Otra`;
   } else if (consecutiveSkips >= 2) {
-    message = `${objective.title}\n\n💡 Algo más pequeño:\n→ ${actionText}\n\n1️⃣ Listo  2️⃣ Mañana`;
+    message = `${hook}\n\n→ ${actionText}\n\n1️⃣ Listo  2️⃣ Mañana`;
   } else {
-    message = `${streakEmoji} ${objective.title}\n\nHoy: ${actionText}\n\n1️⃣ Listo  2️⃣ Mañana  3️⃣ Otra`;
+    message = `${hook}\n\n→ ${actionText}\n\n1️⃣ Listo  2️⃣ Mañana  3️⃣ Otra`;
   }
 
   return {
