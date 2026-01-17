@@ -59,6 +59,31 @@ interface DashboardData {
     objectives_created: number;
     reminders_sent: number;
   }>;
+  whatsapp_insights: {
+    total_reminders: number;
+    total_responded: number;
+    response_rate: number;
+    avg_response_time_minutes: number;
+    response_breakdown: {
+      done: number;
+      later: number;
+      stuck: number;
+      no_response: number;
+    };
+    comparison: {
+      whatsapp_users: number;
+      non_whatsapp_users: number;
+      whatsapp_retention_rate: number;
+      non_whatsapp_retention_rate: number;
+      whatsapp_avg_checkins: number;
+      non_whatsapp_avg_checkins: number;
+    };
+    daily_activity: Array<{
+      date: string;
+      sent: number;
+      responded: number;
+    }>;
+  };
   users: Array<{
     id: string;
     email: string;
@@ -280,6 +305,156 @@ export default function AdminDashboard() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* WhatsApp Insights */}
+        {data.whatsapp_insights && (
+          <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 mb-8">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-2xl">📱</span>
+              <h2 className="text-lg font-semibold">WhatsApp Insights</h2>
+            </div>
+
+            {/* Key Metrics */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="bg-slate-700/50 rounded-lg p-3">
+                <p className="text-slate-400 text-xs">Tasa de Respuesta</p>
+                <p className="text-2xl font-bold text-emerald-400">{data.whatsapp_insights.response_rate}%</p>
+                <p className="text-xs text-slate-500">{data.whatsapp_insights.total_responded} de {data.whatsapp_insights.total_reminders}</p>
+              </div>
+              <div className="bg-slate-700/50 rounded-lg p-3">
+                <p className="text-slate-400 text-xs">Tiempo Promedio</p>
+                <p className="text-2xl font-bold text-blue-400">
+                  {data.whatsapp_insights.avg_response_time_minutes < 60
+                    ? `${data.whatsapp_insights.avg_response_time_minutes}m`
+                    : `${Math.round(data.whatsapp_insights.avg_response_time_minutes / 60)}h`}
+                </p>
+                <p className="text-xs text-slate-500">en responder</p>
+              </div>
+              <div className="bg-slate-700/50 rounded-lg p-3">
+                <p className="text-slate-400 text-xs">Usuarios WhatsApp</p>
+                <p className="text-2xl font-bold text-white">{data.whatsapp_insights.comparison.whatsapp_users}</p>
+                <p className="text-xs text-slate-500">con recordatorios activos</p>
+              </div>
+              <div className="bg-slate-700/50 rounded-lg p-3">
+                <p className="text-slate-400 text-xs">Total Recordatorios</p>
+                <p className="text-2xl font-bold text-white">{data.whatsapp_insights.total_reminders}</p>
+                <p className="text-xs text-slate-500">enviados</p>
+              </div>
+            </div>
+
+            {/* Response Breakdown */}
+            <div className="grid md:grid-cols-2 gap-6">
+              <div>
+                <p className="text-sm text-slate-400 mb-3">Desglose de Respuestas</p>
+                <div className="space-y-2">
+                  {[
+                    { label: "Lo hice", value: data.whatsapp_insights.response_breakdown.done, color: "bg-emerald-500", emoji: "✅" },
+                    { label: "Mas tarde", value: data.whatsapp_insights.response_breakdown.later, color: "bg-amber-500", emoji: "⏰" },
+                    { label: "Me trabe", value: data.whatsapp_insights.response_breakdown.stuck, color: "bg-red-500", emoji: "🤔" },
+                    { label: "Sin respuesta", value: data.whatsapp_insights.response_breakdown.no_response, color: "bg-slate-600", emoji: "😶" },
+                  ].map((item, i) => {
+                    const total = data.whatsapp_insights.total_reminders || 1;
+                    const pct = Math.round((item.value / total) * 100);
+                    return (
+                      <div key={i} className="flex items-center gap-3">
+                        <span className="w-6 text-center">{item.emoji}</span>
+                        <div className="flex-1">
+                          <div className="flex justify-between text-sm mb-1">
+                            <span className="text-slate-300">{item.label}</span>
+                            <span className="text-slate-400">{item.value} ({pct}%)</span>
+                          </div>
+                          <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+                            <div className={`h-full ${item.color}`} style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Comparison: WhatsApp vs No WhatsApp */}
+              <div>
+                <p className="text-sm text-slate-400 mb-3">WhatsApp vs Sin WhatsApp</p>
+                <div className="bg-slate-900/50 rounded-lg p-4">
+                  <div className="grid grid-cols-2 gap-4 text-center mb-4">
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1">Con WhatsApp</p>
+                      <p className="text-3xl font-bold text-emerald-400">{data.whatsapp_insights.comparison.whatsapp_retention_rate}%</p>
+                      <p className="text-xs text-slate-500">retención</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1">Sin WhatsApp</p>
+                      <p className="text-3xl font-bold text-slate-400">{data.whatsapp_insights.comparison.non_whatsapp_retention_rate}%</p>
+                      <p className="text-xs text-slate-500">retención</p>
+                    </div>
+                  </div>
+                  <div className="border-t border-slate-700 pt-4">
+                    <div className="grid grid-cols-2 gap-4 text-center">
+                      <div>
+                        <p className="text-lg font-semibold text-emerald-400">{data.whatsapp_insights.comparison.whatsapp_avg_checkins}</p>
+                        <p className="text-xs text-slate-500">checkins promedio</p>
+                      </div>
+                      <div>
+                        <p className="text-lg font-semibold text-slate-400">{data.whatsapp_insights.comparison.non_whatsapp_avg_checkins}</p>
+                        <p className="text-xs text-slate-500">checkins promedio</p>
+                      </div>
+                    </div>
+                  </div>
+                  {data.whatsapp_insights.comparison.whatsapp_retention_rate > data.whatsapp_insights.comparison.non_whatsapp_retention_rate && (
+                    <div className="mt-4 p-2 bg-emerald-900/30 border border-emerald-700/50 rounded text-center">
+                      <p className="text-sm text-emerald-300">
+                        WhatsApp mejora retención en {data.whatsapp_insights.comparison.whatsapp_retention_rate - data.whatsapp_insights.comparison.non_whatsapp_retention_rate} puntos
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Daily Activity Chart */}
+            {data.whatsapp_insights.daily_activity && data.whatsapp_insights.daily_activity.length > 0 && (
+              <div className="mt-6">
+                <p className="text-sm text-slate-400 mb-3">Actividad ultimos 7 dias</p>
+                <div className="flex items-end gap-2 h-24">
+                  {data.whatsapp_insights.daily_activity.map((day, i) => {
+                    const maxSent = Math.max(...data.whatsapp_insights.daily_activity.map(d => d.sent), 1);
+                    return (
+                      <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                        <div className="flex gap-0.5 text-[10px]">
+                          <span className="text-blue-400">{day.sent}</span>
+                          <span className="text-slate-500">/</span>
+                          <span className="text-emerald-400">{day.responded}</span>
+                        </div>
+                        <div className="w-full flex gap-1 items-end h-16">
+                          <div
+                            className="flex-1 bg-blue-500/60 rounded-t"
+                            style={{ height: `${(day.sent / maxSent) * 100}%`, minHeight: day.sent > 0 ? 4 : 0 }}
+                          />
+                          <div
+                            className="flex-1 bg-emerald-500 rounded-t"
+                            style={{ height: `${(day.responded / maxSent) * 100}%`, minHeight: day.responded > 0 ? 4 : 0 }}
+                          />
+                        </div>
+                        <span className="text-[10px] text-slate-500">{formatDate(day.date)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex gap-4 mt-2 text-xs justify-center">
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 bg-blue-500/60 rounded" />
+                    <span className="text-slate-400">Enviados</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 bg-emerald-500 rounded" />
+                    <span className="text-slate-400">Respondidos</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

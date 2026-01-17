@@ -280,6 +280,119 @@ export async function GET(request: NextRequest) {
       whatsapp_checkins: allCheckins?.filter(c => c.source === 'whatsapp').length || 0,
     };
 
+    // === WHATSAPP INSIGHTS ===
+    // Get all reminders with response data
+    const { data: whatsappRemindersDetailed } = await supabase
+      .from("whatsapp_reminders")
+      .select("id, user_id, status, user_response, response_action, sent_at, responded_at");
+
+    // Response breakdown (done, later, stuck)
+    const responseBreakdown = {
+      done: 0,
+      later: 0,
+      stuck: 0,
+      no_response: 0,
+    };
+
+    const responseTimes: number[] = [];
+
+    whatsappRemindersDetailed?.forEach(r => {
+      if (r.response_action === 'done') {
+        responseBreakdown.done++;
+      } else if (r.response_action === 'later') {
+        responseBreakdown.later++;
+      } else if (r.response_action === 'stuck') {
+        responseBreakdown.stuck++;
+      } else if (!r.responded_at) {
+        responseBreakdown.no_response++;
+      }
+
+      // Calculate response time in minutes
+      if (r.sent_at && r.responded_at) {
+        const sentTime = new Date(r.sent_at).getTime();
+        const respondedTime = new Date(r.responded_at).getTime();
+        const diffMinutes = (respondedTime - sentTime) / (1000 * 60);
+        if (diffMinutes > 0 && diffMinutes < 24 * 60) { // Within 24 hours
+          responseTimes.push(diffMinutes);
+        }
+      }
+    });
+
+    const totalReminders = whatsappRemindersDetailed?.length || 0;
+    const totalResponded = responseBreakdown.done + responseBreakdown.later + responseBreakdown.stuck;
+    const overallResponseRate = totalReminders > 0 ? Math.round((totalResponded / totalReminders) * 100) : 0;
+
+    // Average response time
+    const avgResponseTimeMinutes = responseTimes.length > 0
+      ? Math.round(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length)
+      : 0;
+
+    // Compare WhatsApp users vs non-WhatsApp users retention
+    const whatsappUsersList = enrichedUsers.filter(u => u.whatsapp_active);
+    const nonWhatsappUsersList = enrichedUsers.filter(u => !u.whatsapp_active && u.total_objectives > 0);
+
+    const whatsappUsersWithCheckins = whatsappUsersList.filter(u => u.total_checkins > 0).length;
+    const nonWhatsappUsersWithCheckins = nonWhatsappUsersList.filter(u => u.total_checkins > 0).length;
+
+    const whatsappRetentionRate = whatsappUsersList.length > 0
+      ? Math.round((whatsappUsersWithCheckins / whatsappUsersList.length) * 100)
+      : 0;
+    const nonWhatsappRetentionRate = nonWhatsappUsersList.length > 0
+      ? Math.round((nonWhatsappUsersWithCheckins / nonWhatsappUsersList.length) * 100)
+      : 0;
+
+    // Average checkins comparison
+    const avgCheckinsWhatsapp = whatsappUsersList.length > 0
+      ? Math.round((whatsappUsersList.reduce((sum, u) => sum + u.total_checkins, 0) / whatsappUsersList.length) * 10) / 10
+      : 0;
+    const avgCheckinsNonWhatsapp = nonWhatsappUsersList.length > 0
+      ? Math.round((nonWhatsappUsersList.reduce((sum, u) => sum + u.total_checkins, 0) / nonWhatsappUsersList.length) * 10) / 10
+      : 0;
+
+    // Daily WhatsApp activity (last 7 days)
+    const whatsappDailyActivity = [];
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      date.setHours(0, 0, 0, 0);
+      const nextDate = new Date(date);
+      nextDate.setDate(nextDate.getDate() + 1);
+
+      const remindersSentDay = whatsappRemindersDetailed?.filter(r => {
+        const d = new Date(r.sent_at);
+        return d >= date && d < nextDate;
+      }).length || 0;
+
+      const responsesDay = whatsappRemindersDetailed?.filter(r => {
+        if (!r.responded_at) return false;
+        const d = new Date(r.responded_at);
+        return d >= date && d < nextDate;
+      }).length || 0;
+
+      whatsappDailyActivity.push({
+        date: date.toISOString().split("T")[0],
+        sent: remindersSentDay,
+        responded: responsesDay,
+      });
+    }
+
+    const whatsappInsights = {
+      total_reminders: totalReminders,
+      total_responded: totalResponded,
+      response_rate: overallResponseRate,
+      avg_response_time_minutes: avgResponseTimeMinutes,
+      response_breakdown: responseBreakdown,
+      comparison: {
+        whatsapp_users: whatsappUsersList.length,
+        non_whatsapp_users: nonWhatsappUsersList.length,
+        whatsapp_retention_rate: whatsappRetentionRate,
+        non_whatsapp_retention_rate: nonWhatsappRetentionRate,
+        whatsapp_avg_checkins: avgCheckinsWhatsapp,
+        non_whatsapp_avg_checkins: avgCheckinsNonWhatsapp,
+      },
+      daily_activity: whatsappDailyActivity,
+    };
+
     // Calculate remaining totals
     const whatsappActiveCount = enrichedUsers.filter(u => u.whatsapp_active).length;
     const totalObjectives = experiments?.length || 0;
@@ -349,6 +462,7 @@ export async function GET(request: NextRequest) {
       funnel,
       at_risk_users: atRiskUsers,
       engagement,
+      whatsapp_insights: whatsappInsights,
       daily_activity: dailyActivity,
       users: enrichedUsers,
       generated_at: new Date().toISOString(),
