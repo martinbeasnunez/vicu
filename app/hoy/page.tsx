@@ -17,6 +17,7 @@ import { XpGainAnimation, BadgeUnlockAnimation, LevelUpAnimation } from "@/compo
 import LoadingScreen from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth-context";
 import { AuthGuard } from "@/components/auth-guard";
+import ProfileSlideOver from "@/components/ProfileSlideOver";
 
 // Country codes for phone selector
 const COUNTRY_CODES = [
@@ -205,6 +206,10 @@ function HoyPageContent() {
   // Stats explanation tooltip
   const [showStatsHelp, setShowStatsHelp] = useState(false);
 
+  // Profile slide-over
+  const [showProfile, setShowProfile] = useState(false);
+  const [whatsappPhoneNumber, setWhatsappPhoneNumber] = useState<string | undefined>();
+
   // Close country dropdown on outside click
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -279,9 +284,11 @@ function HoyPageContent() {
         if (data.success && data.is_configured) {
           setWhatsappConfigured(true);
           setWhatsappEnabled(data.is_active ?? false);
+          setWhatsappPhoneNumber(data.config?.phone_number);
         } else {
           setWhatsappConfigured(false);
           setWhatsappEnabled(false);
+          setWhatsappPhoneNumber(undefined);
         }
       } catch {
         setWhatsappConfigured(false);
@@ -900,20 +907,20 @@ function HoyPageContent() {
               </div>
             </div>
 
-            {/* Sign out button */}
+            {/* Profile button */}
             <div className="relative group">
               <button
-                onClick={() => signOut()}
+                onClick={() => setShowProfile(true)}
                 className="p-1.5 sm:p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-700 transition-all"
-                title="Cerrar sesión"
+                title="Tu perfil"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
               </button>
               {/* Tooltip */}
               <div className="absolute right-0 top-full mt-2 w-32 p-2 bg-slate-800 border border-slate-700 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 text-xs text-slate-300 text-center">
-                Cerrar sesión
+                Tu perfil
               </div>
             </div>
 
@@ -1559,6 +1566,20 @@ function HoyPageContent() {
           </div>
         </div>
       )}
+
+      {/* Profile Slide-Over */}
+      <ProfileSlideOver
+        isOpen={showProfile}
+        onClose={() => setShowProfile(false)}
+        userEmail={user?.email || ""}
+        userStats={userStats}
+        whatsappPhone={whatsappPhoneNumber}
+        onWhatsappConfigure={() => {
+          setShowProfile(false);
+          setShowWhatsappModal(true);
+        }}
+        onSignOut={signOut}
+      />
     </div>
   );
 }

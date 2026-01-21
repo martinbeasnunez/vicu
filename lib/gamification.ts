@@ -145,6 +145,13 @@ export const BADGE_DEFINITIONS: Omit<Badge, "unlockedAt">[] = [
   },
 ];
 
+// Badge info lookup map (for displaying badges)
+export const BADGE_INFO: Record<string, { name: string; icon: string; description: string }> =
+  BADGE_DEFINITIONS.reduce((acc, badge) => {
+    acc[badge.id] = { name: badge.name, icon: badge.icon, description: badge.description };
+    return acc;
+  }, {} as Record<string, { name: string; icon: string; description: string }>);
+
 // User stats interface
 export interface UserStats {
   id: string;
