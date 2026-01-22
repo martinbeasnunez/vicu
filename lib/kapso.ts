@@ -521,3 +521,144 @@ export async function sendVicuActionTemplate(
     return { success: false, error: String(error) };
   }
 }
+
+/**
+ * Send reminder to helper about pending assignment
+ */
+export async function sendAssignmentReminder(
+  to: string,
+  helperName: string,
+  ownerName: string,
+  taskTitle: string,
+  publicUrl: string,
+  reminderNumber: 1 | 2
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const { apiKey, phoneNumberId } = getKapsoConfig();
+
+  if (!apiKey) {
+    return { success: false, error: "KAPSO_API_KEY not configured" };
+  }
+
+  const cleanPhone = to.replace(/[\s\-+]/g, "");
+
+  // Build reminder message
+  let message: string;
+
+  if (reminderNumber === 1) {
+    // Day 2: Gentle reminder
+    message = `Hey ${helperName}! 👋\n\n`;
+    message += `¿Pudiste ayudar a ${ownerName} con esto?\n`;
+    message += `📌 "${taskTitle}"\n\n`;
+    message += `Si ya lo hiciste, márcalo aquí:\n👉 ${publicUrl}`;
+  } else {
+    // Day 5: Final reminder
+    message = `Hola ${helperName}! 🙏\n\n`;
+    message += `Último recordatorio sobre la ayuda que ${ownerName} te pidió:\n`;
+    message += `📌 "${taskTitle}"\n\n`;
+    message += `Si no puedes ayudar, no hay problema - solo avísale:\n👉 ${publicUrl}`;
+  }
+
+  const payload: KapsoSendMessageRequest = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: cleanPhone,
+    type: "text",
+    text: {
+      body: message,
+      preview_url: true,
+    },
+  };
+
+  try {
+    const response = await fetch(`${KAPSO_API_BASE}/${phoneNumberId}/messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": apiKey,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[Kapso] Assignment reminder failed:", response.status, errorText);
+      return { success: false, error: `HTTP ${response.status}` };
+    }
+
+    const data: KapsoSendMessageResponse = await response.json();
+    const messageId = data.messages?.[0]?.id;
+
+    console.log("[Kapso] Assignment reminder sent:", messageId);
+    return { success: true, messageId };
+  } catch (error) {
+    console.error("[Kapso] Error sending assignment reminder:", error);
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * Notify owner about assignment status
+ */
+export async function sendOwnerNotification(
+  to: string,
+  helperName: string,
+  taskTitle: string,
+  status: "no_response" | "expired"
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const { apiKey, phoneNumberId } = getKapsoConfig();
+
+  if (!apiKey) {
+    return { success: false, error: "KAPSO_API_KEY not configured" };
+  }
+
+  const cleanPhone = to.replace(/[\s\-+]/g, "");
+
+  let message: string;
+
+  if (status === "no_response") {
+    message = `⚠️ ${helperName} aún no responde sobre:\n`;
+    message += `"${taskTitle}"\n\n`;
+    message += `Considera buscar otra persona que te pueda ayudar.`;
+  } else {
+    message = `⏰ La solicitud a ${helperName} expiró:\n`;
+    message += `"${taskTitle}"\n\n`;
+    message += `¿Quieres pedirle ayuda a alguien más?`;
+  }
+
+  const payload: KapsoSendMessageRequest = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: cleanPhone,
+    type: "text",
+    text: {
+      body: message,
+      preview_url: false,
+    },
+  };
+
+  try {
+    const response = await fetch(`${KAPSO_API_BASE}/${phoneNumberId}/messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": apiKey,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[Kapso] Owner notification failed:", response.status, errorText);
+      return { success: false, error: `HTTP ${response.status}` };
+    }
+
+    const data: KapsoSendMessageResponse = await response.json();
+    const messageId = data.messages?.[0]?.id;
+
+    console.log("[Kapso] Owner notification sent:", messageId);
+    return { success: true, messageId };
+  } catch (error) {
+    console.error("[Kapso] Error sending owner notification:", error);
+    return { success: false, error: String(error) };
+  }
+}
