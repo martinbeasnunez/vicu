@@ -1733,7 +1733,7 @@ function ExperimentPageContent() {
       const checkinIds = checkins.map(c => c.id);
       const { data: assignmentsData, error } = await supabase
         .from("step_assignments")
-        .select("id, checkin_id, helper_name, status, responded_at")
+        .select("id, checkin_id, helper_name, helper_contact, status, access_token, notification_sent_at, responded_at, response_message")
         .in("checkin_id", checkinIds);
       if (error) {
         console.warn("Could not fetch step assignments:", error.message);
