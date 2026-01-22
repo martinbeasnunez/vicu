@@ -359,6 +359,80 @@ export function buildReminderMessage(
 }
 
 /**
+ * Send WhatsApp message for help assignment
+ * Uses a simple text message since this is a notification to an external person
+ * Note: This requires the recipient to have messaged first (24h window) OR a pre-approved template
+ * For now, we'll use a simple approach that works within the 24h window
+ */
+export async function sendAssignmentNotification(
+  to: string,
+  helperName: string,
+  ownerName: string,
+  actionTitle: string,
+  customMessage: string | null,
+  publicUrl: string
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const { apiKey, phoneNumberId } = getKapsoConfig();
+
+  if (!apiKey) {
+    return { success: false, error: "KAPSO_API_KEY not configured" };
+  }
+
+  const cleanPhone = to.replace(/[\s\-+]/g, "");
+
+  // Build the message
+  let message = `Hola ${helperName}!\n\n`;
+  message += `${ownerName} te pidió una mano con:\n\n`;
+  message += `"${actionTitle}"\n\n`;
+
+  if (customMessage) {
+    message += `${customMessage}\n\n`;
+  }
+
+  message += `Responde aquí:\n${publicUrl}`;
+
+  // Try to send as a regular message first (works if within 24h window)
+  // If this fails, the user will need to share the link manually
+  const payload: KapsoSendMessageRequest = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: cleanPhone,
+    type: "text",
+    text: {
+      body: message,
+      preview_url: true,
+    },
+  };
+
+  try {
+    const response = await fetch(`${KAPSO_API_BASE}/${phoneNumberId}/messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": apiKey,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[Kapso] Assignment notification failed:", response.status, errorText);
+      // Return success: false but don't throw - the link is still valid
+      return { success: false, error: `WhatsApp envío falló: ${response.status}` };
+    }
+
+    const data: KapsoSendMessageResponse = await response.json();
+    const messageId = data.messages?.[0]?.id;
+
+    console.log("[Kapso] Assignment notification sent successfully:", messageId);
+    return { success: true, messageId };
+  } catch (error) {
+    console.error("[Kapso] Error sending assignment notification:", error);
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
  * Send WhatsApp message using vicu_action template
  * Template format: {{1}} objectives | {{2}} action | {{3}} response options
  */

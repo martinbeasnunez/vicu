@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { formatSuggestedDate } from "@/lib/experiment-helpers";
+import { Users } from "lucide-react";
+import AssignmentBadge, { ActionAssignment } from "./AssignmentBadge";
 
 interface ExperimentAction {
   id: string;
@@ -26,6 +28,8 @@ interface AttackPlanSectionProps {
   onGenerateMore?: () => void;
   isGenerating?: boolean;
   copiedId: string | null;
+  assignmentsByAction?: Record<string, ActionAssignment[]>;
+  onRequestHelp?: (action: ExperimentAction) => void;
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -51,6 +55,8 @@ export default function AttackPlanSection({
   onGenerateMore,
   isGenerating = false,
   copiedId,
+  assignmentsByAction = {},
+  onRequestHelp,
 }: AttackPlanSectionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
@@ -189,7 +195,16 @@ export default function AttackPlanSection({
                         {action.content}
                       </pre>
 
-                      <div className="flex gap-2">
+                      {/* Assignment badges */}
+                      {assignmentsByAction[action.id]?.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {assignmentsByAction[action.id].map((assignment) => (
+                            <AssignmentBadge key={assignment.id} assignment={assignment} />
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex flex-wrap gap-2">
                         <button
                           onClick={() => onCopyContent(action.id, action.content)}
                           className={`text-sm px-4 py-2 rounded-lg transition-all duration-200 flex items-center gap-2 ${
@@ -215,15 +230,27 @@ export default function AttackPlanSection({
                           )}
                         </button>
                         {(action.status === "pending" || action.status === "in_progress") && (
-                          <button
-                            onClick={() => onMarkDone(action.id)}
-                            className="text-sm px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 transition-all duration-200 flex items-center gap-2"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                            Marcar hecho
-                          </button>
+                          <>
+                            <button
+                              onClick={() => onMarkDone(action.id)}
+                              className="text-sm px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 transition-all duration-200 flex items-center gap-2"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              Marcar hecho
+                            </button>
+                            {onRequestHelp && (
+                              <button
+                                onClick={() => onRequestHelp(action)}
+                                className="text-sm px-4 py-2 rounded-lg bg-white/5 text-slate-300 border border-white/10 hover:bg-amber-500/10 hover:border-amber-500/30 hover:text-amber-400 transition-all duration-200 flex items-center gap-2"
+                                title="Pedir ayuda a alguien"
+                              >
+                                <Users className="w-4 h-4" />
+                                Pedir ayuda
+                              </button>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>

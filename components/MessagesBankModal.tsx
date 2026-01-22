@@ -1,6 +1,7 @@
 "use client";
 
 import AttackPlanSection from "./AttackPlanSection";
+import { ActionAssignment } from "./AssignmentBadge";
 
 interface ExperimentAction {
   id: string;
@@ -27,6 +28,8 @@ interface MessagesBankModalProps {
   generatingChannel: string | null;
   copiedId: string | null;
   actionsError: boolean;
+  assignmentsByAction?: Record<string, ActionAssignment[]>;
+  onRequestHelp?: (action: ExperimentAction) => void;
 }
 
 export default function MessagesBankModal({
@@ -40,6 +43,8 @@ export default function MessagesBankModal({
   generatingChannel,
   copiedId,
   actionsError,
+  assignmentsByAction = {},
+  onRequestHelp,
 }: MessagesBankModalProps) {
   if (!isOpen) return null;
 
@@ -106,6 +111,8 @@ export default function MessagesBankModal({
                   onGenerateMore={() => onGenerateMore(channel)}
                   isGenerating={generatingChannel === channel}
                   copiedId={copiedId}
+                  assignmentsByAction={assignmentsByAction}
+                  onRequestHelp={onRequestHelp}
                 />
               ))}
             </div>

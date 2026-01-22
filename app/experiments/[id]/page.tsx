@@ -23,6 +23,8 @@ import {
 import AttackPlanSection from "@/components/AttackPlanSection";
 import MessagesBankModal from "@/components/MessagesBankModal";
 import LoadingScreen from "@/components/LoadingScreen";
+import PedirAyudaModal from "@/components/PedirAyudaModal";
+import { ActionAssignment } from "@/components/AssignmentBadge";
 import type { CurrentState, EffortLevel, NextStepResponse } from "@/app/api/next-step/route";
 import type { VicuRecommendationData, ExperimentStage } from "@/app/api/generate-recommendation/route";
 
@@ -529,6 +531,10 @@ function ExperimentPageContent() {
 
   // Messages bank modal state
   const [isMessagesBankOpen, setIsMessagesBankOpen] = useState(false);
+
+  // Pedir ayuda (assignments) state
+  const [assignmentsByAction, setAssignmentsByAction] = useState<Record<string, ActionAssignment[]>>({});
+  const [pedirAyudaAction, setPedirAyudaAction] = useState<ExperimentAction | null>(null);
 
   // Step detail modal state
   const [selectedStep, setSelectedStep] = useState<ExperimentCheckin | null>(null);
@@ -1679,6 +1685,38 @@ function ExperimentPageContent() {
     }
   }, [id]);
 
+  // Fetch assignments for all actions
+  const fetchAssignments = useCallback(async () => {
+    if (actions.length === 0) return;
+    try {
+      const actionIds = actions.map(a => a.id);
+      const { data: assignmentsData, error } = await supabase
+        .from("action_assignments")
+        .select("id, action_id, helper_name, status, responded_at")
+        .in("action_id", actionIds);
+      if (error) {
+        console.warn("Could not fetch assignments:", error.message);
+        return;
+      }
+      if (assignmentsData) {
+        // Group by action_id
+        const grouped: Record<string, ActionAssignment[]> = {};
+        assignmentsData.forEach((a) => {
+          if (!grouped[a.action_id]) grouped[a.action_id] = [];
+          grouped[a.action_id].push({
+            id: a.id,
+            helper_name: a.helper_name,
+            status: a.status,
+            responded_at: a.responded_at,
+          });
+        });
+        setAssignmentsByAction(grouped);
+      }
+    } catch (err) {
+      console.warn("Error fetching assignments:", err);
+    }
+  }, [actions]);
+
   const fetchCheckins = useCallback(async () => {
     try {
       const { data: checkinsData, error } = await supabase
@@ -1730,6 +1768,13 @@ function ExperimentPageContent() {
     }
     fetchData();
   }, [id, fetchActions, fetchCheckins]);
+
+  // Fetch assignments when actions change
+  useEffect(() => {
+    if (actions.length > 0) {
+      fetchAssignments();
+    }
+  }, [actions, fetchAssignments]);
 
   // Check if user has WhatsApp configured - show modal if not
   useEffect(() => {
@@ -1804,6 +1849,28 @@ function ExperimentPageContent() {
     } catch (error) {
       console.error("Error marking action as done:", error);
     }
+  };
+
+  // Handler for when a help request is successfully created
+  const handleAssignmentCreated = (assignment: { id: string; helper_name: string; status: string; public_url: string }) => {
+    if (!pedirAyudaAction) return;
+    // Add the new assignment to the local state
+    setAssignmentsByAction((prev) => ({
+      ...prev,
+      [pedirAyudaAction.id]: [
+        ...(prev[pedirAyudaAction.id] || []),
+        {
+          id: assignment.id,
+          helper_name: assignment.helper_name,
+          status: assignment.status as "pending" | "completed" | "declined" | "expired",
+          responded_at: null,
+        },
+      ],
+    }));
+    // Copy the public URL to clipboard
+    navigator.clipboard.writeText(assignment.public_url);
+    setToast(`Link copiado. Envíalo a ${assignment.helper_name}`);
+    setTimeout(() => setToast(null), 4000);
   };
 
   const handleGenerateMore = async (channel: string) => {
@@ -3419,7 +3486,19 @@ function ExperimentPageContent() {
         generatingChannel={generatingChannel}
         copiedId={copiedId}
         actionsError={actionsError}
+        assignmentsByAction={assignmentsByAction}
+        onRequestHelp={(action) => setPedirAyudaAction(action)}
       />
+
+      {/* Pedir Ayuda Modal */}
+      {pedirAyudaAction && (
+        <PedirAyudaModal
+          isOpen={!!pedirAyudaAction}
+          onClose={() => setPedirAyudaAction(null)}
+          action={pedirAyudaAction}
+          onSuccess={handleAssignmentCreated}
+        />
+      )}
 
       {/* Step Detail Modal - Rediseñado */}
       {selectedStep && (
