@@ -3859,11 +3859,25 @@ function ExperimentPageContent() {
               {/* Actions */}
               <div className="flex gap-3">
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     const url = `${process.env.NEXT_PUBLIC_APP_URL || "https://vicu.vercel.app"}/s/${selectedAssignmentDetail.access_token}`;
-                    navigator.clipboard.writeText(url);
-                    setToast("Link copiado");
-                    setToastType("vicu-success");
+                    try {
+                      await navigator.clipboard.writeText(url);
+                      setToast("Link copiado");
+                      setToastType("vicu-success");
+                    } catch {
+                      // Fallback for older browsers
+                      const textArea = document.createElement("textarea");
+                      textArea.value = url;
+                      textArea.style.position = "fixed";
+                      textArea.style.opacity = "0";
+                      document.body.appendChild(textArea);
+                      textArea.select();
+                      document.execCommand("copy");
+                      document.body.removeChild(textArea);
+                      setToast("Link copiado");
+                      setToastType("vicu-success");
+                    }
                   }}
                   className="flex-1 py-3 px-4 rounded-xl font-medium bg-slate-700 hover:bg-slate-600 text-white transition-all flex items-center justify-center gap-2"
                 >
