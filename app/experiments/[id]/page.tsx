@@ -1917,26 +1917,40 @@ function ExperimentPageContent() {
   };
 
   // Handler for when a step help request is successfully created
-  const handleStepAssignmentCreated = (assignment: { id: string; helper_name: string; status: string; public_url: string }) => {
+  const handleStepAssignmentCreated = (data: {
+    id: string;
+    helper_name: string;
+    helper_contact: string;
+    status: string;
+    public_url: string;
+    access_token: string;
+    notification_sent: boolean;
+  }) => {
     if (!pedirAyudaCheckin) return;
-    // Add the new assignment to the local state
+    // Add the new assignment to the local state with all necessary fields
     setStepAssignmentsByCheckin((prev) => ({
       ...prev,
       [pedirAyudaCheckin.id]: [
         ...(prev[pedirAyudaCheckin.id] || []),
         {
-          id: assignment.id,
+          id: data.id,
           checkin_id: pedirAyudaCheckin.id,
-          helper_name: assignment.helper_name,
-          status: assignment.status as "pending" | "completed" | "declined" | "expired",
+          assigned_by: "",
+          helper_name: data.helper_name,
+          helper_contact: data.helper_contact,
+          contact_type: "whatsapp" as const,
+          custom_message: null,
+          status: data.status as "pending" | "completed" | "declined" | "expired",
+          access_token: data.access_token,
+          token_expires_at: "",
+          response_message: null,
           responded_at: null,
-        } as StepAssignment,
+          notification_sent_at: data.notification_sent ? new Date().toISOString() : null,
+          notification_message_id: null,
+          created_at: new Date().toISOString(),
+        },
       ],
     }));
-    // Copy the public URL to clipboard
-    navigator.clipboard.writeText(assignment.public_url);
-    setToast(`Link copiado. Envíalo a ${assignment.helper_name}`);
-    setTimeout(() => setToast(null), 4000);
   };
 
   const handleGenerateMore = async (channel: string) => {
@@ -3674,15 +3688,15 @@ function ExperimentPageContent() {
                   checkin_id: data.checkin.id,
                   assigned_by: "",
                   helper_name: data.assignment!.helper_name,
-                  helper_contact: "",
+                  helper_contact: data.assignment!.helper_contact,
                   contact_type: "whatsapp",
                   custom_message: null,
                   status: "pending",
-                  access_token: "",
+                  access_token: data.assignment!.access_token,
                   token_expires_at: "",
                   response_message: null,
                   responded_at: null,
-                  notification_sent_at: null,
+                  notification_sent_at: data.assignment!.notification_sent ? new Date().toISOString() : null,
                   notification_message_id: null,
                   created_at: new Date().toISOString(),
                 }],

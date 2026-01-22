@@ -13,7 +13,10 @@ interface CrearPasoConAyudaModalProps {
     assignment?: {
       id: string;
       helper_name: string;
+      helper_contact: string;
       public_url: string;
+      access_token: string;
+      notification_sent: boolean;
     };
   }) => void;
 }
@@ -114,7 +117,10 @@ export default function CrearPasoConAyudaModal({
           assignment: {
             id: assignData.assignment.id,
             helper_name: assignData.assignment.helper_name,
+            helper_contact: assignData.assignment.helper_contact,
             public_url: assignData.public_url,
+            access_token: assignData.assignment.access_token,
+            notification_sent: assignData.notification_sent === true,
           },
         });
       } else {

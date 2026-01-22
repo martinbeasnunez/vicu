@@ -13,11 +13,14 @@ interface PedirAyudaStepModalProps {
   isOpen: boolean;
   onClose: () => void;
   checkin: ExperimentCheckin;
-  onSuccess: (assignment: {
+  onSuccess: (data: {
     id: string;
     helper_name: string;
+    helper_contact: string;
     status: string;
     public_url: string;
+    access_token: string;
+    notification_sent: boolean;
   }) => void;
 }
 
@@ -79,8 +82,11 @@ export default function PedirAyudaStepModal({
       onSuccess({
         id: data.assignment.id,
         helper_name: data.assignment.helper_name,
+        helper_contact: data.assignment.helper_contact,
         status: data.assignment.status,
         public_url: data.public_url,
+        access_token: data.assignment.access_token,
+        notification_sent: data.notification_sent === true,
       });
     } catch {
       setError("Error de conexión");
