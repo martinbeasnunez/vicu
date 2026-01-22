@@ -381,15 +381,16 @@ export async function sendAssignmentNotification(
   const cleanPhone = to.replace(/[\s\-+]/g, "");
 
   // Build the message
-  let message = `Hola ${helperName}!\n\n`;
-  message += `${ownerName} te pidió una mano con:\n\n`;
-  message += `"${actionTitle}"\n\n`;
+  let message = `Hola ${helperName}! 👋\n\n`;
+  message += `Soy VICU, la AI que ayuda a ${ownerName} a cumplir sus metas.\n\n`;
+  message += `${ownerName} necesita tu ayuda con:\n`;
+  message += `📌 "${actionTitle}"\n\n`;
 
   if (customMessage) {
     message += `${customMessage}\n\n`;
   }
 
-  message += `Responde aquí:\n${publicUrl}`;
+  message += `¿Puedes echarle una mano?\n👉 ${publicUrl}`;
 
   // Try to send as a regular message first (works if within 24h window)
   // If this fails, the user will need to share the link manually
