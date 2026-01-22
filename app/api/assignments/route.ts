@@ -115,14 +115,24 @@ export async function POST(request: NextRequest) {
 
     // Try to send WhatsApp notification if contact_type is whatsapp
     if (contact_type === "whatsapp" && isKapsoConfigured()) {
-      // Get owner's name from profile
+      // Get owner's name from profile or extract from email
       const { data: profile } = await supabaseServer
         .from("profiles")
         .select("full_name")
         .eq("id", userId)
         .single();
 
-      const ownerName = profile?.full_name || "Alguien";
+      // Get user email as fallback
+      const { data: authUser } = await supabaseServer.auth.admin.getUserById(userId);
+      const email = authUser?.user?.email;
+      // Extract name from email: "martin.beas@..." -> "Martin"
+      const emailName = email ? email.split("@")[0].split(/[._-]/)[0] : null;
+      const capitalizedEmailName = emailName
+        ? emailName.charAt(0).toUpperCase() + emailName.slice(1).toLowerCase()
+        : null;
+
+      // Use full_name first, then first part of email, then fallback
+      const ownerName = profile?.full_name || capitalizedEmailName || "Alguien";
 
       const result = await sendAssignmentNotification(
         helper_contact,
