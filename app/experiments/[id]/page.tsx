@@ -25,6 +25,7 @@ import MessagesBankModal from "@/components/MessagesBankModal";
 import LoadingScreen from "@/components/LoadingScreen";
 import PedirAyudaModal from "@/components/PedirAyudaModal";
 import PedirAyudaStepModal from "@/components/PedirAyudaStepModal";
+import CrearPasoConAyudaModal from "@/components/CrearPasoConAyudaModal";
 import { ActionAssignment } from "@/components/AssignmentBadge";
 import { StepAssignment } from "@/app/api/step-assignments/route";
 import type { CurrentState, EffortLevel, NextStepResponse } from "@/app/api/next-step/route";
@@ -541,6 +542,7 @@ function ExperimentPageContent() {
   // Pedir ayuda para pasos (step assignments) state
   const [stepAssignmentsByCheckin, setStepAssignmentsByCheckin] = useState<Record<string, StepAssignment[]>>({});
   const [pedirAyudaCheckin, setPedirAyudaCheckin] = useState<ExperimentCheckin | null>(null);
+  const [showCrearPasoModal, setShowCrearPasoModal] = useState(false);
 
   // Step detail modal state
   const [selectedStep, setSelectedStep] = useState<ExperimentCheckin | null>(null);
@@ -2812,27 +2814,40 @@ function ExperimentPageContent() {
                       Lo que viene y lo que ya hiciste
                     </p>
                   </div>
-                  {/* Regenerate steps button */}
-                  <button
-                    onClick={handleRegenerateSteps}
-                    disabled={isRegeneratingSteps}
-                    className="flex items-center gap-2 px-3 py-1.5 text-xs text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all disabled:opacity-50 disabled:cursor-wait"
-                    title="Regenerar pasos con IA (útil si el objetivo cambió)"
-                  >
-                    {isRegeneratingSteps ? (
-                      <>
-                        <div className="w-3.5 h-3.5 border-2 border-indigo-400/30 border-t-indigo-400 rounded-full animate-spin" />
-                        <span>Regenerando...</span>
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        <span>Regenerar pasos</span>
-                      </>
-                    )}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {/* Add step button */}
+                    <button
+                      onClick={() => setShowCrearPasoModal(true)}
+                      className="flex items-center gap-2 px-3 py-1.5 text-xs text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-all"
+                      title="Agregar un paso manualmente"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      <span>Agregar paso</span>
+                    </button>
+                    {/* Regenerate steps button */}
+                    <button
+                      onClick={handleRegenerateSteps}
+                      disabled={isRegeneratingSteps}
+                      className="flex items-center gap-2 px-3 py-1.5 text-xs text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all disabled:opacity-50 disabled:cursor-wait"
+                      title="Regenerar pasos con IA (útil si el objetivo cambió)"
+                    >
+                      {isRegeneratingSteps ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-indigo-400/30 border-t-indigo-400 rounded-full animate-spin" />
+                          <span>Regenerando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                          <span>Regenerar pasos</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-3">
                   {/* Sort: pending first, then done (by created_at desc) */}
@@ -3604,6 +3619,46 @@ function ExperimentPageContent() {
           onClose={() => setPedirAyudaCheckin(null)}
           checkin={pedirAyudaCheckin}
           onSuccess={handleStepAssignmentCreated}
+        />
+      )}
+
+      {/* Crear Paso Con Ayuda Modal */}
+      {experiment && (
+        <CrearPasoConAyudaModal
+          isOpen={showCrearPasoModal}
+          onClose={() => setShowCrearPasoModal(false)}
+          experimentId={experiment.id}
+          experimentTitle={experiment.title}
+          onSuccess={(data) => {
+            // Add the new checkin to the list
+            setCheckins((prev) => [data.checkin as ExperimentCheckin, ...prev]);
+            // If there was an assignment, add it to the assignments map
+            if (data.assignment) {
+              setStepAssignmentsByCheckin((prev) => ({
+                ...prev,
+                [data.checkin.id]: [{
+                  id: data.assignment!.id,
+                  checkin_id: data.checkin.id,
+                  assigned_by: "",
+                  helper_name: data.assignment!.helper_name,
+                  helper_contact: "",
+                  contact_type: "whatsapp",
+                  custom_message: null,
+                  status: "pending",
+                  access_token: "",
+                  token_expires_at: "",
+                  response_message: null,
+                  responded_at: null,
+                  notification_sent_at: null,
+                  notification_message_id: null,
+                  created_at: new Date().toISOString(),
+                }],
+              }));
+            }
+            setToastType("vicu-success");
+            setToast(data.assignment ? "Paso creado y delegado" : "Paso creado");
+            setShowCrearPasoModal(false);
+          }}
         />
       )}
 
