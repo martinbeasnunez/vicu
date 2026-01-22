@@ -24,7 +24,9 @@ import AttackPlanSection from "@/components/AttackPlanSection";
 import MessagesBankModal from "@/components/MessagesBankModal";
 import LoadingScreen from "@/components/LoadingScreen";
 import PedirAyudaModal from "@/components/PedirAyudaModal";
+import PedirAyudaStepModal from "@/components/PedirAyudaStepModal";
 import { ActionAssignment } from "@/components/AssignmentBadge";
+import { StepAssignment } from "@/app/api/step-assignments/route";
 import type { CurrentState, EffortLevel, NextStepResponse } from "@/app/api/next-step/route";
 import type { VicuRecommendationData, ExperimentStage } from "@/app/api/generate-recommendation/route";
 
@@ -535,6 +537,10 @@ function ExperimentPageContent() {
   // Pedir ayuda (assignments) state
   const [assignmentsByAction, setAssignmentsByAction] = useState<Record<string, ActionAssignment[]>>({});
   const [pedirAyudaAction, setPedirAyudaAction] = useState<ExperimentAction | null>(null);
+
+  // Pedir ayuda para pasos (step assignments) state
+  const [stepAssignmentsByCheckin, setStepAssignmentsByCheckin] = useState<Record<string, StepAssignment[]>>({});
+  const [pedirAyudaCheckin, setPedirAyudaCheckin] = useState<ExperimentCheckin | null>(null);
 
   // Step detail modal state
   const [selectedStep, setSelectedStep] = useState<ExperimentCheckin | null>(null);
@@ -1717,6 +1723,33 @@ function ExperimentPageContent() {
     }
   }, [actions]);
 
+  // Fetch step assignments for all checkins
+  const fetchStepAssignments = useCallback(async () => {
+    if (checkins.length === 0) return;
+    try {
+      const checkinIds = checkins.map(c => c.id);
+      const { data: assignmentsData, error } = await supabase
+        .from("step_assignments")
+        .select("id, checkin_id, helper_name, status, responded_at")
+        .in("checkin_id", checkinIds);
+      if (error) {
+        console.warn("Could not fetch step assignments:", error.message);
+        return;
+      }
+      if (assignmentsData) {
+        // Group by checkin_id
+        const grouped: Record<string, StepAssignment[]> = {};
+        assignmentsData.forEach((a) => {
+          if (!grouped[a.checkin_id]) grouped[a.checkin_id] = [];
+          grouped[a.checkin_id].push(a as StepAssignment);
+        });
+        setStepAssignmentsByCheckin(grouped);
+      }
+    } catch (err) {
+      console.warn("Error fetching step assignments:", err);
+    }
+  }, [checkins]);
+
   const fetchCheckins = useCallback(async () => {
     try {
       const { data: checkinsData, error } = await supabase
@@ -1775,6 +1808,13 @@ function ExperimentPageContent() {
       fetchAssignments();
     }
   }, [actions, fetchAssignments]);
+
+  // Fetch step assignments when checkins change
+  useEffect(() => {
+    if (checkins.length > 0) {
+      fetchStepAssignments();
+    }
+  }, [checkins, fetchStepAssignments]);
 
   // Check if user has WhatsApp configured - show modal if not
   useEffect(() => {
@@ -1865,6 +1905,29 @@ function ExperimentPageContent() {
           status: assignment.status as "pending" | "completed" | "declined" | "expired",
           responded_at: null,
         },
+      ],
+    }));
+    // Copy the public URL to clipboard
+    navigator.clipboard.writeText(assignment.public_url);
+    setToast(`Link copiado. Envíalo a ${assignment.helper_name}`);
+    setTimeout(() => setToast(null), 4000);
+  };
+
+  // Handler for when a step help request is successfully created
+  const handleStepAssignmentCreated = (assignment: { id: string; helper_name: string; status: string; public_url: string }) => {
+    if (!pedirAyudaCheckin) return;
+    // Add the new assignment to the local state
+    setStepAssignmentsByCheckin((prev) => ({
+      ...prev,
+      [pedirAyudaCheckin.id]: [
+        ...(prev[pedirAyudaCheckin.id] || []),
+        {
+          id: assignment.id,
+          checkin_id: pedirAyudaCheckin.id,
+          helper_name: assignment.helper_name,
+          status: assignment.status as "pending" | "completed" | "declined" | "expired",
+          responded_at: null,
+        } as StepAssignment,
       ],
     }));
     // Copy the public URL to clipboard
@@ -2875,6 +2938,21 @@ function ExperimentPageContent() {
                                   {checkin.effort === "muy_pequeno" ? "~5 min" : checkin.effort === "pequeno" ? "~20 min" : "~1 hora"}
                                 </span>
                               )}
+                              {/* Step assignment badge */}
+                              {stepAssignmentsByCheckin[checkin.id]?.length > 0 && (
+                                <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium flex items-center gap-1 ${
+                                  stepAssignmentsByCheckin[checkin.id].some(a => a.status === "completed")
+                                    ? "bg-emerald-500/20 text-emerald-400"
+                                    : stepAssignmentsByCheckin[checkin.id].some(a => a.status === "pending")
+                                    ? "bg-indigo-500/20 text-indigo-400"
+                                    : "bg-slate-500/20 text-slate-400"
+                                }`}>
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                  </svg>
+                                  {stepAssignmentsByCheckin[checkin.id][0].helper_name.split(" ")[0]}
+                                </span>
+                              )}
                               {/* Visual cue that card is clickable */}
                               <span className="ml-auto text-slate-600 group-hover/card:text-slate-400">
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2883,20 +2961,39 @@ function ExperimentPageContent() {
                               </span>
                             </div>
                           </div>
-                          {/* Delete button - appears on hover */}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setStepToDelete(checkin);
-                            }}
-                            className="flex-shrink-0 p-2 rounded-lg text-slate-600 opacity-0 group-hover/card:opacity-100 hover:text-red-400 hover:bg-red-500/10 transition-all"
-                            title="Eliminar paso"
-                            aria-label="Eliminar paso"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
+                          {/* Action buttons - appear on hover */}
+                          <div className="flex-shrink-0 flex flex-col gap-1">
+                            {/* Pedir ayuda button - only for pending steps */}
+                            {isPending && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPedirAyudaCheckin(checkin);
+                                }}
+                                className="p-2 rounded-lg text-slate-600 opacity-0 group-hover/card:opacity-100 hover:text-indigo-400 hover:bg-indigo-500/10 transition-all"
+                                title="Pedir ayuda"
+                                aria-label="Pedir ayuda con este paso"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                </svg>
+                              </button>
+                            )}
+                            {/* Delete button */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setStepToDelete(checkin);
+                              }}
+                              className="p-2 rounded-lg text-slate-600 opacity-0 group-hover/card:opacity-100 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                              title="Eliminar paso"
+                              aria-label="Eliminar paso"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -3497,6 +3594,16 @@ function ExperimentPageContent() {
           onClose={() => setPedirAyudaAction(null)}
           action={pedirAyudaAction}
           onSuccess={handleAssignmentCreated}
+        />
+      )}
+
+      {/* Pedir Ayuda Step Modal */}
+      {pedirAyudaCheckin && (
+        <PedirAyudaStepModal
+          isOpen={!!pedirAyudaCheckin}
+          onClose={() => setPedirAyudaCheckin(null)}
+          checkin={pedirAyudaCheckin}
+          onSuccess={handleStepAssignmentCreated}
         />
       )}
 
