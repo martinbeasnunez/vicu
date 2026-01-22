@@ -35,6 +35,7 @@ export default function PedirAyudaStepModal({
   const [showSuccess, setShowSuccess] = useState(false);
   const [publicUrl, setPublicUrl] = useState("");
   const [copied, setCopied] = useState(false);
+  const [whatsappSent, setWhatsappSent] = useState(false);
 
   if (!isOpen) return null;
 
@@ -46,13 +47,19 @@ export default function PedirAyudaStepModal({
     setError(null);
 
     try {
+      // Add country code if not present
+      let fullPhone = helperContact.trim();
+      if (!fullPhone.startsWith("51")) {
+        fullPhone = "51" + fullPhone;
+      }
+
       const res = await fetch("/api/step-assignments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           checkin_id: checkin.id,
           helper_name: helperName.trim(),
-          helper_contact: helperContact.trim(),
+          helper_contact: fullPhone,
           contact_type: "whatsapp",
           custom_message: customMessage.trim() || undefined,
         }),
@@ -66,6 +73,7 @@ export default function PedirAyudaStepModal({
       }
 
       setPublicUrl(data.public_url);
+      setWhatsappSent(data.notification_sent === true);
       setShowSuccess(true);
 
       onSuccess({
@@ -94,6 +102,7 @@ export default function PedirAyudaStepModal({
     setShowSuccess(false);
     setPublicUrl("");
     setCopied(false);
+    setWhatsappSent(false);
     onClose();
   };
 
@@ -113,16 +122,36 @@ export default function PedirAyudaStepModal({
         <div className="relative w-full sm:max-w-sm bg-gradient-to-b from-slate-800 to-slate-900 rounded-t-3xl sm:rounded-2xl overflow-hidden shadow-2xl border border-white/10 sm:mx-4 animate-in slide-in-from-bottom duration-300">
           {/* Success content */}
           <div className="p-8 text-center">
-            <div className="w-16 h-16 mx-auto mb-5 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/30">
-              <Check className="w-8 h-8 text-white" />
+            <div className={`w-16 h-16 mx-auto mb-5 rounded-full flex items-center justify-center shadow-lg ${
+              whatsappSent
+                ? "bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-emerald-500/30"
+                : "bg-gradient-to-br from-indigo-400 to-indigo-600 shadow-indigo-500/30"
+            }`}>
+              {whatsappSent ? (
+                <Check className="w-8 h-8 text-white" />
+              ) : (
+                <MessageCircle className="w-8 h-8 text-white" />
+              )}
             </div>
 
             <h3 className="text-xl font-semibold text-white mb-2">
-              ¡Listo!
+              {whatsappSent ? "¡WhatsApp enviado!" : "¡Link creado!"}
             </h3>
             <p className="text-slate-400 text-sm mb-6">
-              Ahora envíale el link a <span className="text-white font-medium">{helperName}</span>
+              {whatsappSent ? (
+                <><span className="text-white font-medium">{helperName}</span> ya recibió el mensaje</>
+              ) : (
+                <>Envíale el link a <span className="text-white font-medium">{helperName}</span></>
+              )}
             </p>
+
+            {/* WhatsApp sent badge */}
+            {whatsappSent && (
+              <div className="mb-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/20 text-emerald-400 text-sm">
+                <Check className="w-4 h-4" />
+                WhatsApp enviado automáticamente
+              </div>
+            )}
 
             {/* Link preview */}
             <div className="bg-slate-800/80 rounded-xl p-4 mb-4 border border-slate-700/50">
@@ -136,7 +165,7 @@ export default function PedirAyudaStepModal({
               className={`w-full py-3.5 px-4 rounded-xl font-medium transition-all flex items-center justify-center gap-2 ${
                 copied
                   ? "bg-emerald-500 text-white"
-                  : "bg-indigo-600 hover:bg-indigo-500 text-white"
+                  : "bg-slate-700 hover:bg-slate-600 text-white"
               }`}
             >
               {copied ? (
@@ -152,16 +181,18 @@ export default function PedirAyudaStepModal({
               )}
             </button>
 
-            {/* WhatsApp shortcut */}
-            <a
-              href={`https://wa.me/${helperContact}?text=${encodeURIComponent(`Hola ${helperName}! Te pido una mano con algo: ${publicUrl}`)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-3 w-full py-3 px-4 rounded-xl font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-all flex items-center justify-center gap-2"
-            >
-              <MessageCircle className="w-5 h-5" />
-              Enviar por WhatsApp
-            </a>
+            {/* WhatsApp shortcut - only show prominently if not auto-sent */}
+            {!whatsappSent && (
+              <a
+                href={`https://wa.me/51${helperContact}?text=${encodeURIComponent(`Hola ${helperName}! Te pido una mano con algo: ${publicUrl}`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 w-full py-3.5 px-4 rounded-xl font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-all flex items-center justify-center gap-2"
+              >
+                <MessageCircle className="w-5 h-5" />
+                Enviar por WhatsApp
+              </a>
+            )}
 
             <button
               onClick={handleClose}
