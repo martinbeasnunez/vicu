@@ -22,6 +22,7 @@ export async function GET(
       .select(`
         id,
         helper_name,
+        assigned_by,
         status,
         custom_message,
         token_expires_at,
@@ -32,7 +33,8 @@ export async function GET(
           step_title,
           step_description,
           experiments!inner(
-            title
+            title,
+            user_id
           )
         )
       `)
@@ -73,11 +75,21 @@ export async function GET(
       experimentTitle: checkinData.experiments?.title || checkinData.experiments?.[0]?.title || "Objetivo",
     };
 
+    // Get owner's name
+    const { data: profile } = await supabaseServer
+      .from("profiles")
+      .select("full_name")
+      .eq("id", assignment.assigned_by)
+      .single();
+
+    const ownerName = profile?.full_name || "Alguien";
+
     return NextResponse.json({
       success: true,
       assignment: {
         id: assignment.id,
         helper_name: assignment.helper_name,
+        owner_name: ownerName,
         status: assignment.status,
         custom_message: assignment.custom_message,
         responded_at: assignment.responded_at,

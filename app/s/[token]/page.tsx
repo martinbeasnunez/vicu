@@ -6,6 +6,7 @@ import { CheckCircle, XCircle, Clock, AlertCircle, Loader2 } from "lucide-react"
 interface StepAssignmentData {
   id: string;
   helper_name: string;
+  owner_name: string;
   status: "pending" | "completed" | "declined" | "expired";
   custom_message: string | null;
   responded_at: string | null;
@@ -200,9 +201,9 @@ export default function PublicStepAssignmentPage({
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-6">
-          <div className="inline-flex items-center gap-2 bg-indigo-500/10 text-indigo-300 px-3 py-1.5 rounded-full text-sm mb-4">
+          <div className="inline-flex items-center gap-2 bg-indigo-500/10 text-indigo-300 px-4 py-2 rounded-full text-sm mb-4">
             <span>🤝</span>
-            <span>Te pidieron una mano</span>
+            <span><strong>{assignment?.owner_name}</strong> te pidió una mano</span>
           </div>
         </div>
 
