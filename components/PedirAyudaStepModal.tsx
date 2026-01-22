@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { X, Loader2, MessageCircle, Copy, Check, Sparkles } from "lucide-react";
+import CountryCodeSelect from "@/components/CountryCodeSelect";
+import { formatPhoneWithCountry, DEFAULT_COUNTRY_CODE } from "@/lib/country-codes";
 
 interface ExperimentCheckin {
   id: string;
@@ -31,6 +33,7 @@ export default function PedirAyudaStepModal({
   onSuccess,
 }: PedirAyudaStepModalProps) {
   const [helperName, setHelperName] = useState("");
+  const [countryCode, setCountryCode] = useState(DEFAULT_COUNTRY_CODE);
   const [helperContact, setHelperContact] = useState("");
   const [customMessage, setCustomMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -50,11 +53,7 @@ export default function PedirAyudaStepModal({
     setError(null);
 
     try {
-      // Add country code if not present
-      let fullPhone = helperContact.trim();
-      if (!fullPhone.startsWith("51")) {
-        fullPhone = "51" + fullPhone;
-      }
+      const fullPhone = formatPhoneWithCountry(countryCode, helperContact);
 
       const res = await fetch("/api/step-assignments", {
         method: "POST",
@@ -103,6 +102,7 @@ export default function PedirAyudaStepModal({
 
   const handleClose = () => {
     setHelperName("");
+    setCountryCode(DEFAULT_COUNTRY_CODE);
     setHelperContact("");
     setCustomMessage("");
     setShowSuccess(false);
@@ -110,11 +110,6 @@ export default function PedirAyudaStepModal({
     setCopied(false);
     setWhatsappSent(false);
     onClose();
-  };
-
-  const formatPhoneDisplay = (phone: string) => {
-    const digits = phone.replace(/\D/g, "");
-    return digits;
   };
 
   // Success state
@@ -190,7 +185,7 @@ export default function PedirAyudaStepModal({
             {/* WhatsApp shortcut - only show prominently if not auto-sent */}
             {!whatsappSent && (
               <a
-                href={`https://wa.me/51${helperContact}?text=${encodeURIComponent(`Hola ${helperName}! Te pido una mano con algo: ${publicUrl}`)}`}
+                href={`https://wa.me/${formatPhoneWithCountry(countryCode, helperContact)}?text=${encodeURIComponent(`Hola ${helperName}! Te pido una mano con algo: ${publicUrl}`)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="mt-3 w-full py-3.5 px-4 rounded-xl font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-all flex items-center justify-center gap-2"
@@ -290,13 +285,14 @@ export default function PedirAyudaStepModal({
               Su WhatsApp
             </label>
             <div className="flex gap-2">
-              <div className="bg-slate-800/80 border border-slate-700/50 rounded-xl px-4 py-3.5 text-slate-400 flex items-center font-medium">
-                +51
-              </div>
+              <CountryCodeSelect
+                value={countryCode}
+                onChange={setCountryCode}
+              />
               <input
                 type="tel"
                 value={helperContact}
-                onChange={(e) => setHelperContact(formatPhoneDisplay(e.target.value))}
+                onChange={(e) => setHelperContact(e.target.value.replace(/\D/g, ""))}
                 placeholder="999 888 777"
                 className="flex-1 bg-slate-800/80 border border-slate-700/50 rounded-xl px-4 py-3.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all"
                 required
