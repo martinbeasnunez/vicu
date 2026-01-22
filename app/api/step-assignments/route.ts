@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const publicUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://vicu.app"}/s/${accessToken}`;
+    const publicUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://vicu.vercel.app"}/s/${accessToken}`;
     let notificationSent = false;
     let notificationError: string | undefined;
 
