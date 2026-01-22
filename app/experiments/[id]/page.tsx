@@ -543,6 +543,7 @@ function ExperimentPageContent() {
   const [stepAssignmentsByCheckin, setStepAssignmentsByCheckin] = useState<Record<string, StepAssignment[]>>({});
   const [pedirAyudaCheckin, setPedirAyudaCheckin] = useState<ExperimentCheckin | null>(null);
   const [showCrearPasoModal, setShowCrearPasoModal] = useState(false);
+  const [selectedAssignmentDetail, setSelectedAssignmentDetail] = useState<StepAssignment | null>(null);
 
   // Step detail modal state
   const [selectedStep, setSelectedStep] = useState<ExperimentCheckin | null>(null);
@@ -2953,21 +2954,53 @@ function ExperimentPageContent() {
                                   {checkin.effort === "muy_pequeno" ? "~5 min" : checkin.effort === "pequeno" ? "~20 min" : "~1 hora"}
                                 </span>
                               )}
-                              {/* Step assignment badge */}
-                              {stepAssignmentsByCheckin[checkin.id]?.length > 0 && (
-                                <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium flex items-center gap-1 ${
-                                  stepAssignmentsByCheckin[checkin.id].some(a => a.status === "completed")
-                                    ? "bg-emerald-500/20 text-emerald-400"
-                                    : stepAssignmentsByCheckin[checkin.id].some(a => a.status === "pending")
-                                    ? "bg-indigo-500/20 text-indigo-400"
-                                    : "bg-slate-500/20 text-slate-400"
-                                }`}>
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                                  </svg>
-                                  {stepAssignmentsByCheckin[checkin.id][0].helper_name.split(" ")[0]}
-                                </span>
-                              )}
+                              {/* Step assignment badge - clickable with status info */}
+                              {stepAssignmentsByCheckin[checkin.id]?.length > 0 && (() => {
+                                const assignment = stepAssignmentsByCheckin[checkin.id][0];
+                                const wasNotified = !!assignment.notification_sent_at;
+                                const statusLabel = assignment.status === "completed"
+                                  ? "✓ Completó"
+                                  : assignment.status === "declined"
+                                  ? "✗ Declinó"
+                                  : assignment.status === "expired"
+                                  ? "Expiró"
+                                  : wasNotified
+                                  ? "WhatsApp enviado"
+                                  : "Pendiente";
+                                return (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedAssignmentDetail(assignment);
+                                    }}
+                                    className={`px-2 py-0.5 rounded-full text-[11px] font-medium flex items-center gap-1 hover:ring-2 hover:ring-white/20 transition-all ${
+                                      assignment.status === "completed"
+                                        ? "bg-emerald-500/20 text-emerald-400"
+                                        : assignment.status === "pending"
+                                        ? wasNotified
+                                          ? "bg-cyan-500/20 text-cyan-400"
+                                          : "bg-indigo-500/20 text-indigo-400"
+                                        : "bg-slate-500/20 text-slate-400"
+                                    }`}
+                                    title={`${assignment.helper_name}: ${statusLabel}`}
+                                  >
+                                    {assignment.status === "completed" ? (
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                      </svg>
+                                    ) : wasNotified ? (
+                                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+                                      </svg>
+                                    ) : (
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                      </svg>
+                                    )}
+                                    {assignment.helper_name.split(" ")[0]}
+                                  </button>
+                                );
+                              })()}
                               {/* Visual cue that card is clickable */}
                               <span className="ml-auto text-slate-600 group-hover/card:text-slate-400">
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3660,6 +3693,190 @@ function ExperimentPageContent() {
             setShowCrearPasoModal(false);
           }}
         />
+      )}
+
+      {/* Assignment Detail Modal */}
+      {selectedAssignmentDetail && (
+        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/80 backdrop-blur-md"
+            onClick={() => setSelectedAssignmentDetail(null)}
+          />
+          <div className="relative w-full sm:max-w-sm bg-gradient-to-b from-slate-800 to-slate-900 rounded-t-3xl sm:rounded-2xl overflow-hidden shadow-2xl border border-white/10 sm:mx-4 animate-in slide-in-from-bottom duration-300">
+            <div className="sm:hidden w-10 h-1 bg-slate-600 rounded-full mx-auto mt-3" />
+            <div className="p-6">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold text-white">Delegación</h3>
+                <button
+                  onClick={() => setSelectedAssignmentDetail(null)}
+                  className="p-2 rounded-xl text-slate-500 hover:text-white hover:bg-slate-700/50 transition-all"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Helper info */}
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xl font-bold shadow-lg">
+                  {selectedAssignmentDetail.helper_name.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <p className="text-white font-semibold text-lg">{selectedAssignmentDetail.helper_name}</p>
+                  <p className="text-slate-400 text-sm">{selectedAssignmentDetail.helper_contact}</p>
+                </div>
+              </div>
+
+              {/* Status */}
+              <div className="space-y-3 mb-6">
+                {/* WhatsApp status */}
+                <div className={`flex items-center gap-3 p-3 rounded-xl ${
+                  selectedAssignmentDetail.notification_sent_at
+                    ? "bg-emerald-500/10 border border-emerald-500/30"
+                    : "bg-amber-500/10 border border-amber-500/30"
+                }`}>
+                  {selectedAssignmentDetail.notification_sent_at ? (
+                    <>
+                      <svg className="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+                      </svg>
+                      <div>
+                        <p className="text-emerald-400 font-medium text-sm">WhatsApp enviado</p>
+                        <p className="text-slate-500 text-xs">
+                          {new Date(selectedAssignmentDetail.notification_sent_at).toLocaleDateString("es", {
+                            day: "numeric",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      <div>
+                        <p className="text-amber-400 font-medium text-sm">WhatsApp no enviado</p>
+                        <p className="text-slate-500 text-xs">Envía el link manualmente</p>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Response status */}
+                <div className={`flex items-center gap-3 p-3 rounded-xl ${
+                  selectedAssignmentDetail.status === "completed"
+                    ? "bg-emerald-500/10 border border-emerald-500/30"
+                    : selectedAssignmentDetail.status === "declined"
+                    ? "bg-red-500/10 border border-red-500/30"
+                    : selectedAssignmentDetail.status === "expired"
+                    ? "bg-slate-500/10 border border-slate-500/30"
+                    : "bg-indigo-500/10 border border-indigo-500/30"
+                }`}>
+                  {selectedAssignmentDetail.status === "completed" ? (
+                    <>
+                      <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div>
+                        <p className="text-emerald-400 font-medium text-sm">¡Completado!</p>
+                        <p className="text-slate-500 text-xs">
+                          {selectedAssignmentDetail.responded_at && new Date(selectedAssignmentDetail.responded_at).toLocaleDateString("es", {
+                            day: "numeric",
+                            month: "short",
+                          })}
+                        </p>
+                      </div>
+                    </>
+                  ) : selectedAssignmentDetail.status === "declined" ? (
+                    <>
+                      <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div>
+                        <p className="text-red-400 font-medium text-sm">No puede ayudar</p>
+                        <p className="text-slate-500 text-xs">Busca otra persona</p>
+                      </div>
+                    </>
+                  ) : selectedAssignmentDetail.status === "expired" ? (
+                    <>
+                      <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div>
+                        <p className="text-slate-400 font-medium text-sm">Expirado</p>
+                        <p className="text-slate-500 text-xs">El link ya no es válido</p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div>
+                        <p className="text-indigo-400 font-medium text-sm">Esperando respuesta</p>
+                        <p className="text-slate-500 text-xs">Aún no ha respondido</p>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Response message if any */}
+              {selectedAssignmentDetail.response_message && (
+                <div className="mb-6 p-3 rounded-xl bg-slate-800/50 border border-slate-700/50">
+                  <p className="text-xs text-slate-500 mb-1">Mensaje de {selectedAssignmentDetail.helper_name.split(" ")[0]}:</p>
+                  <p className="text-white text-sm">{selectedAssignmentDetail.response_message}</p>
+                </div>
+              )}
+
+              {/* Public URL */}
+              <div className="p-3 rounded-xl bg-slate-800/50 border border-slate-700/50 mb-4">
+                <p className="text-xs text-slate-500 mb-1">Link para {selectedAssignmentDetail.helper_name.split(" ")[0]}:</p>
+                <p className="text-indigo-400 text-sm font-mono truncate">
+                  {`${process.env.NEXT_PUBLIC_APP_URL || "https://vicu.vercel.app"}/s/${selectedAssignmentDetail.access_token}`}
+                </p>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    const url = `${process.env.NEXT_PUBLIC_APP_URL || "https://vicu.vercel.app"}/s/${selectedAssignmentDetail.access_token}`;
+                    navigator.clipboard.writeText(url);
+                    setToast("Link copiado");
+                    setToastType("vicu-success");
+                  }}
+                  className="flex-1 py-3 px-4 rounded-xl font-medium bg-slate-700 hover:bg-slate-600 text-white transition-all flex items-center justify-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                  </svg>
+                  Copiar link
+                </button>
+                {!selectedAssignmentDetail.notification_sent_at && (
+                  <a
+                    href={`https://wa.me/${selectedAssignmentDetail.helper_contact}?text=${encodeURIComponent(
+                      `Hola ${selectedAssignmentDetail.helper_name}! Te pido una mano: ${process.env.NEXT_PUBLIC_APP_URL || "https://vicu.vercel.app"}/s/${selectedAssignmentDetail.access_token}`
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 py-3 px-4 rounded-xl font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-all flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+                    </svg>
+                    Enviar WhatsApp
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Step Detail Modal - Rediseñado */}
