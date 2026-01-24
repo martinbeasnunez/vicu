@@ -54,10 +54,51 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Format phone number
+    // Format phone number - detect if country code already present
     let phone = phone_number.trim().replace(/\s+/g, "");
-    if (!phone.startsWith("+")) {
-      phone = "+51" + phone.replace(/^0+/, "");
+
+    // Remove leading + if present for analysis
+    const cleanPhone = phone.replace(/^\+/, "");
+
+    // Known country codes (2-4 digits) - check if number already starts with one
+    const knownCountryCodes = [
+      "51",   // Peru
+      "57",   // Colombia
+      "52",   // Mexico
+      "54",   // Argentina
+      "56",   // Chile
+      "55",   // Brazil
+      "593",  // Ecuador
+      "58",   // Venezuela
+      "591",  // Bolivia
+      "595",  // Paraguay
+      "598",  // Uruguay
+      "507",  // Panama
+      "506",  // Costa Rica
+      "502",  // Guatemala
+      "503",  // El Salvador
+      "504",  // Honduras
+      "505",  // Nicaragua
+      "34",   // Spain
+      "1",    // USA/Canada
+      "44",   // UK
+      "33",   // France
+      "49",   // Germany
+      "39",   // Italy
+      "351",  // Portugal
+      "1809", // Dominican Republic
+      "1787", // Puerto Rico
+    ];
+
+    // Check if number already has a country code
+    const hasCountryCode = knownCountryCodes.some(code => cleanPhone.startsWith(code));
+
+    if (hasCountryCode) {
+      // Number already has country code, just ensure + prefix
+      phone = "+" + cleanPhone;
+    } else if (!phone.startsWith("+")) {
+      // No country code detected, add Peru (+51) as default
+      phone = "+51" + cleanPhone.replace(/^0+/, "");
     }
 
     // Upsert the config using server client (bypasses RLS)
