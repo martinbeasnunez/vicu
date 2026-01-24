@@ -126,11 +126,19 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Also return all phone numbers for debugging
+  const allPhones = (configs || []).map(c => ({
+    user_id: c.user_id,
+    phone: c.phone_number,
+    length: c.phone_number?.replace(/^\+/, "").length || 0,
+  }));
+
   return NextResponse.json({
     dry_run: dryRun,
     total_configs: configs?.length || 0,
     fixes_needed: fixes.length,
     fixes,
+    all_phones: allPhones,
     message: dryRun
       ? "Dry run - no changes made. Remove ?dry_run=true to apply fixes."
       : `Applied ${fixes.length} fixes.`,
