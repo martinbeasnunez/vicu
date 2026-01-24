@@ -434,14 +434,15 @@ export async function sendAssignmentNotification(
 }
 
 /**
- * Send WhatsApp message using vicu_action template
- * Template format: {{1}} objectives | {{2}} action | {{3}} response options
+ * Send WhatsApp message using vicu_reminder template
+ * Template format: 🦙{{1}} with quick reply buttons (Listo/Mañana/Otra)
+ *
+ * This is the APPROVED template for daily reminders.
+ * The message should be a complete, engaging prompt for the user.
  */
-export async function sendVicuActionTemplate(
+export async function sendVicuReminderTemplate(
   to: string,
-  objectiveTitle: string,
-  actionText: string,
-  streakInfo?: string
+  message: string
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const { apiKey, phoneNumberId } = getKapsoConfig();
 
@@ -451,21 +452,13 @@ export async function sendVicuActionTemplate(
 
   const cleanPhone = to.replace(/[\s\-+]/g, "");
 
-  // Build the message parts for template
-  // {{1}} = objective with context (emoji + title + streak/days info)
-  // {{2}} = today's action
-  // {{3}} = response options
-
-  const objectiveWithContext = streakInfo
-    ? `${objectiveTitle} ${streakInfo}`
-    : objectiveTitle;
-
+  // Sanitize message for WhatsApp template
   const sanitize = (text: string) => text
     .replace(/\n/g, " ")
     .replace(/\t/g, " ")
     .replace(/\s{2,}/g, " ")
     .trim()
-    .substring(0, 200);
+    .substring(0, 900); // Template allows more characters
 
   const payload: KapsoSendMessageRequest = {
     messaging_product: "whatsapp",
@@ -473,7 +466,7 @@ export async function sendVicuActionTemplate(
     to: cleanPhone,
     type: "template",
     template: {
-      name: "vicu_action",
+      name: "vicu_reminder",
       language: {
         code: "es",
       },
@@ -483,11 +476,7 @@ export async function sendVicuActionTemplate(
           parameters: [
             {
               type: "text",
-              text: sanitize(objectiveWithContext),
-            },
-            {
-              type: "text",
-              text: sanitize(actionText),
+              text: sanitize(message),
             },
           ],
         },
@@ -507,19 +496,37 @@ export async function sendVicuActionTemplate(
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("[Kapso] vicu_action template failed:", response.status, errorText);
+      console.error("[Kapso] vicu_reminder template failed:", response.status, errorText);
       return { success: false, error: `HTTP ${response.status}: ${errorText}` };
     }
 
     const data: KapsoSendMessageResponse = await response.json();
     const messageId = data.messages?.[0]?.id;
 
-    console.log("[Kapso] vicu_action template sent successfully:", messageId);
+    console.log("[Kapso] vicu_reminder template sent successfully:", messageId);
     return { success: true, messageId };
   } catch (error) {
-    console.error("[Kapso] Error sending vicu_action template:", error);
+    console.error("[Kapso] Error sending vicu_reminder template:", error);
     return { success: false, error: String(error) };
   }
+}
+
+/**
+ * @deprecated Use sendVicuReminderTemplate instead
+ * Kept for backwards compatibility
+ */
+export async function sendVicuActionTemplate(
+  to: string,
+  objectiveTitle: string,
+  actionText: string,
+  streakInfo?: string
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  // Combine into single message for vicu_reminder template
+  const message = streakInfo
+    ? `${objectiveTitle} ${streakInfo} - ${actionText}`
+    : `${objectiveTitle} - ${actionText}`;
+
+  return sendVicuReminderTemplate(to, message);
 }
 
 /**

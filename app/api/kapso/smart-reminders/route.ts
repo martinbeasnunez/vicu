@@ -21,7 +21,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase-server";
-import { sendVicuActionTemplate, isKapsoConfigured, WhatsAppConfig } from "@/lib/kapso";
+import { sendVicuReminderTemplate, isKapsoConfigured, WhatsAppConfig } from "@/lib/kapso";
 import {
   getAllActionableObjectives,
   decideSmartAction,
@@ -485,7 +485,7 @@ async function generatePersonalizedMessage(
   slot: SlotType,
   profile: UserEngagementProfile,
   respondedToday: boolean
-): Promise<{ objectiveText: string; actionText: string; style: MessageStyle; focus: ObjectiveFocus }> {
+): Promise<{ fullMessage: string; objectiveText: string; actionText: string; style: MessageStyle; focus: ObjectiveFocus }> {
   // Select message style based on context and history
   const selectedStyle = selectMessageStyle(profile, slot, objective, respondedToday);
 
@@ -550,13 +550,13 @@ async function generatePersonalizedMessage(
           content: `Eres Vicu, un coach de objetivos por WhatsApp. Genera mensajes ÚNICOS y personalizados.
 
 REGLAS CRÍTICAS:
-- Máximo 50 caracteres para el objetivo (parámetro 1)
-- Máximo 150 caracteres para la acción (parámetro 2) - asegúrate de que la oración esté COMPLETA
-- Sin emojis (el template ya los tiene)
+- Genera UN SOLO mensaje completo de máximo 200 caracteres
+- Sin emojis (el template ya tiene 🦙 al inicio)
 - NUNCA repetir frases de mensajes anteriores
 - Tono conversacional, como un amigo cercano
-- NO terminar con "Listo", "Responde", ni llamados a la acción (el template ya tiene botones)
-- La acción debe ser RELEVANTE para la hora actual
+- NO terminar con "Listo", "Responde", ni llamados a la acción (el template ya tiene botones: Listo/Mañana/Otra)
+- El mensaje debe ser una pregunta motivadora o afirmación que invite a actuar
+- Sé ESPECÍFICO sobre la acción, no genérico
 
 ESTILO A USAR: ${selectedStyle.toUpperCase()}
 ${styleInstructions[selectedStyle]}
@@ -577,10 +577,16 @@ CONTEXTO DEL USUARIO:
 MENSAJES ANTERIORES (NO REPETIR):
 ${recentMessagesContext || "Sin historial previo"}
 
+EJEMPLOS DE BUENOS MENSAJES:
+- "¿Qué pasaría si hoy dedicas 5 minutos a practicar portugués? Un pequeño paso te acerca a tu meta."
+- "Tu racha de 7 días está increíble. ¿Listo para escribir 100 palabras de tu libro hoy?"
+- "Hoy podrías avanzar en conseguir esa intro al club. ¿Qué te parece enviar un mensaje?"
+
 FORMATO DE RESPUESTA (JSON):
 {
+  "message": "mensaje completo motivador (máx 200 chars)",
   "objective": "título corto del objetivo (máx 50 chars)",
-  "action": "acción COMPLETA apropiada para la hora, SIN 'Listo' al final (máx 150 chars)"
+  "action": "acción específica mencionada (máx 100 chars)"
 }`
         },
         {
@@ -589,19 +595,20 @@ FORMATO DE RESPUESTA (JSON):
         }
       ],
       temperature: 0.9, // Higher temperature for more creativity
-      max_tokens: 200,
+      max_tokens: 250,
       response_format: { type: "json_object" },
     });
 
     const response = JSON.parse(completion.choices[0]?.message?.content || "{}");
 
     // Clean up: remove "Listo" or similar at the end if AI added it
-    let cleanAction = response.action || microAction;
-    cleanAction = cleanAction.replace(/\s*(listo|responde|¿listo\??)\s*$/i, "").trim();
+    let cleanMessage = response.message || `¿Qué pasaría si hoy avanzas en ${objective.title}?`;
+    cleanMessage = cleanMessage.replace(/\s*(listo|responde|¿listo\??)\s*$/i, "").trim();
 
     return {
+      fullMessage: cleanMessage.slice(0, 200),
       objectiveText: (response.objective || objective.title).slice(0, 50),
-      actionText: cleanAction.slice(0, 150),
+      actionText: (response.action || microAction).slice(0, 100),
       style: selectedStyle,
       focus: selectedFocus,
     };
@@ -609,37 +616,46 @@ FORMATO DE RESPUESTA (JSON):
     console.error("[Smart Reminders] AI generation failed:", error);
 
     // Smart fallback without "Listo" (template has buttons)
-    const fallbackMessages: Record<MessageStyle, { objective: string; action: string }> = {
+    const fallbackMessages: Record<MessageStyle, { message: string; objective: string; action: string }> = {
       motivational: {
+        message: `¿Qué pasaría si hoy dedicas 5 minutos a ${objective.title.toLowerCase()}? Un pequeño paso te acerca a tu meta.`,
         objective: objective.title,
-        action: `Hoy es un gran día para avanzar en esto`,
+        action: microAction,
       },
       tactical: {
+        message: `Hoy podrías avanzar en ${objective.title.toLowerCase()} con un paso simple: ${microAction.slice(0, 50)}.`,
         objective: objective.title,
-        action: `Paso simple: ${microAction.slice(0, 50)}`,
+        action: microAction,
       },
       reflective: {
+        message: `¿Qué pasaría si hoy avanzas un poco en ${objective.title.toLowerCase()}? Piénsalo.`,
         objective: objective.title,
-        action: `¿Qué pasaría si hoy avanzas un poco?`,
+        action: microAction,
       },
       celebratory: {
-        objective: objective.streak_days >= 3 ? `${objective.title} (racha ${objective.streak_days}d!)` : objective.title,
-        action: `Vas muy bien, sigue así con: ${microAction.slice(0, 30)}`,
+        message: objective.streak_days >= 3
+          ? `Tu racha de ${objective.streak_days} días en ${objective.title.toLowerCase()} está increíble. ¿Seguimos?`
+          : `Vas muy bien con ${objective.title.toLowerCase()}. ¿Un paso más hoy?`,
+        objective: objective.title,
+        action: microAction,
       },
       gentle: {
+        message: `Sin presión, pero cuando puedas: ${microAction.slice(0, 60)}. Tú decides cuándo.`,
         objective: objective.title,
-        action: `Sin presión, cuando puedas: ${microAction.slice(0, 35)}`,
+        action: microAction,
       },
       curious: {
+        message: `¿Cómo vas con ${objective.title.toLowerCase()}? Me da curiosidad saber si avanzaste.`,
         objective: objective.title,
-        action: `¿Cómo vas con esto? Me da curiosidad saber`,
+        action: microAction,
       },
     };
 
     const fallback = fallbackMessages[selectedStyle];
     return {
+      fullMessage: fallback.message.slice(0, 200),
       objectiveText: fallback.objective.slice(0, 50),
-      actionText: fallback.action.slice(0, 150),
+      actionText: fallback.action.slice(0, 100),
       style: selectedStyle,
       focus: selectedFocus,
     };
@@ -751,7 +767,22 @@ async function getDayContext(userId: string): Promise<DayContext> {
 // Main Handler - AI-Powered Coach System
 // =============================================================================
 
+// Support both GET (cron-job.org) and POST (Vercel crons)
+export async function GET(request: NextRequest) {
+  // Check if this is a debug request (has user_id param)
+  const { searchParams } = new URL(request.url);
+  if (searchParams.get("user_id") || searchParams.get("debug")) {
+    return handleDebugRequest(request);
+  }
+  // Otherwise, run the reminders
+  return handleReminders(request);
+}
+
 export async function POST(request: NextRequest) {
+  return handleReminders(request);
+}
+
+async function handleReminders(request: NextRequest) {
   try {
     if (!isKapsoConfigured()) {
       return NextResponse.json({
@@ -891,7 +922,7 @@ export async function POST(request: NextRequest) {
       const smartDecision = await decideSmartAction(selectedObjective, slot);
 
       // Generate AI-personalized message with style and focus
-      const { objectiveText, actionText, style, focus } = await generatePersonalizedMessage(
+      const { fullMessage, objectiveText, actionText, style, focus } = await generatePersonalizedMessage(
         {
           title: selectedObjective.title,
           streak_days: selectedObjective.streak_days,
@@ -912,11 +943,10 @@ export async function POST(request: NextRequest) {
         smartDecision.isAiGenerated
       );
 
-      // Send via vicu_action template
-      const sendResult = await sendVicuActionTemplate(
+      // Send via vicu_reminder template (single {{1}} parameter with full AI-generated message)
+      const sendResult = await sendVicuReminderTemplate(
         whatsappConfig.phone_number,
-        objectiveText,
-        actionText
+        fullMessage
       );
 
       if (!sendResult.success) {
@@ -974,7 +1004,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET(request: NextRequest) {
+async function handleDebugRequest(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get("user_id");
 

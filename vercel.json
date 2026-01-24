@@ -1,20 +1,3 @@
 {
-  "crons": [
-    {
-      "path": "/api/kapso/smart-reminders",
-      "schedule": "0 13 * * *"
-    },
-    {
-      "path": "/api/kapso/smart-reminders",
-      "schedule": "0 19 * * *"
-    },
-    {
-      "path": "/api/kapso/smart-reminders",
-      "schedule": "0 1 * * *"
-    },
-    {
-      "path": "/api/kapso/assignment-reminders",
-      "schedule": "0 15 * * *"
-    }
-  ]
+  "crons": []
 }
