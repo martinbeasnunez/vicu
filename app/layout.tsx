@@ -18,28 +18,19 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Vicu - Logra tus metas, un día a la vez",
-  description: "Tu compañero para lograr metas con pequeños pasos diarios",
+  title: "Vicu — pausado",
+  description: "Vicu se pausó en abril 2026. Gracias a quienes lo usaron.",
   openGraph: {
-    title: "Vicu - Logra tus metas, un día a la vez",
-    description: "Tu compañero para lograr metas con pequeños pasos diarios",
+    title: "Vicu — pausado",
+    description: "Vicu se pausó en abril 2026. Gracias a quienes lo usaron.",
     url: "https://vicu.vercel.app",
     siteName: "Vicu",
-    images: [
-      {
-        url: "https://vicu.vercel.app/og-image.png",
-        width: 1200,
-        height: 630,
-        alt: "Vicu - Logra tus metas, un día a la vez",
-      },
-    ],
     type: "website",
   },
   twitter: {
-    card: "summary_large_image",
-    title: "Vicu - Logra tus metas, un día a la vez",
-    description: "Tu compañero para lograr metas con pequeños pasos diarios",
-    images: ["https://vicu.vercel.app/og-image.png"],
+    card: "summary",
+    title: "Vicu — pausado",
+    description: "Vicu se pausó en abril 2026. Gracias a quienes lo usaron.",
   },
   icons: {
     icon: [
