@@ -122,10 +122,17 @@ const KAPSO_API_BASE = "https://api.kapso.ai/meta/whatsapp/v24.0";
 const DEFAULT_PHONE_NUMBER_ID = "996277176894864";
 
 function getKapsoConfig() {
-  const apiKey = process.env.KAPSO_API_KEY;
   const phoneNumberId = process.env.KAPSO_PHONE_NUMBER_ID || DEFAULT_PHONE_NUMBER_ID;
   const webhookSecret = process.env.KAPSO_WEBHOOK_SECRET;
 
+  // Vicu está pausado desde 2026-04-20. Todas las funciones send* hacen `if (!apiKey) return …`
+  // al inicio, así que omitir apiKey aquí mata todos los envíos en un solo punto.
+  // Para reactivar: setear VICU_WHATSAPP_ENABLED=true en env.
+  if (process.env.VICU_WHATSAPP_ENABLED !== "true") {
+    return { apiKey: undefined, phoneNumberId, webhookSecret };
+  }
+
+  const apiKey = process.env.KAPSO_API_KEY;
   return { apiKey, phoneNumberId, webhookSecret };
 }
 
